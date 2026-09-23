@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gnw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: gnw
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gnw -d gnw"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET to at least 32 characters}
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?set OWNER_PASSWORD}
+      ALLOW_SELF_REGISTRATION: ${ALLOW_SELF_REGISTRATION:-false}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      VIDEO_PROVIDER_URL: ${VIDEO_PROVIDER_URL:-}
+      VIDEO_PROVIDER_API_KEY: ${VIDEO_PROVIDER_API_KEY:-}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      ARTIFACT_DIR: /data/artifacts
+      GNW_GRANT_ISSUER: ${GNW_GRANT_ISSUER:?set grant issuer}
+      GNW_GRANT_PRIVATE_KEY_PEM: ${GNW_GRANT_PRIVATE_KEY_PEM:?set grant private key}
+      GNW_GRANT_PUBLIC_KEY_PEM: ${GNW_GRANT_PUBLIC_KEY_PEM:?set grant public key}
+      GNW_REQUIRE_SIGNED_GRANTS: "true"
+      GNW_ALLOWED_EGRESS_HOSTS: ${GNW_ALLOWED_EGRESS_HOSTS:-}
+    ports:
+      - "8787:8787"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+      - /var/tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    volumes:
+      - app-data:/data
+
+volumes:
+  db-data:
+  app-data:

@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gnw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: gnw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U gnw -d gnw"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./deploy/postgres/tls:/tls:ro
+    command: >-
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/tls/server.crt
+      -c ssl_key_file=/tls/server.key
+      -c ssl_ca_file=/tls/ca.crt
+
+  app-a:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &app-env
+      NODE_ENV: production
+      PORT: 8787
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?set OWNER_PASSWORD}
+      ALLOW_SELF_REGISTRATION: ${ALLOW_SELF_REGISTRATION:-false}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      VIDEO_PROVIDER_URL: ${VIDEO_PROVIDER_URL:-}
+      VIDEO_PROVIDER_API_KEY: ${VIDEO_PROVIDER_API_KEY:-}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      ARTIFACT_DIR: /data/artifacts
+      GNW_GRANT_ISSUER: ${GNW_GRANT_ISSUER:?set GNW_GRANT_ISSUER}
+      GNW_GRANT_PRIVATE_KEY_PEM: ${GNW_GRANT_PRIVATE_KEY_PEM:?set GNW_GRANT_PRIVATE_KEY_PEM}
+      GNW_GRANT_PUBLIC_KEY_PEM: ${GNW_GRANT_PUBLIC_KEY_PEM:?set GNW_GRANT_PUBLIC_KEY_PEM}
+      GNW_REQUIRE_SIGNED_GRANTS: "true"
+      GNW_ALLOWED_EGRESS_HOSTS: ${GNW_ALLOWED_EGRESS_HOSTS:-}
+    volumes:
+      - app-a-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+      - /var/tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 1g
+
+  app-b:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    volumes:
+      - app-b-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+      - /var/tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 1g
+
+volumes:
+  db-data:
+  app-a-data:
+  app-b-data:
