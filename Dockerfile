@@ -1,21 +1,44 @@
-FROM node:22-bookworm-slim AS build
+# syntax=docker/dockerfile:1.7
+FROM node:22-alpine AS base
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run typecheck && npm run build
+RUN apk add --no-cache tini
 
-FROM node:22-bookworm-slim AS runtime
+# ── deps ──────────────────────────────────────────────────────────────────────
+FROM base AS deps
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --prefer-offline
+
+# ── build ─────────────────────────────────────────────────────────────────────
+FROM deps AS builder
+COPY tsconfig.json vite.config.ts ./
+COPY src ./src
+COPY public ./public 2>/dev/null || true
+RUN npm run build:server && npm run build:client
+
+# ── production deps only ──────────────────────────────────────────────────────
+FROM base AS prod-deps
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --prefer-offline
+
+# ── runtime ───────────────────────────────────────────────────────────────────
+FROM base AS runtime
 ENV NODE_ENV=production
-ENV PORT=8787
-WORKDIR /app
-COPY --from=build /app/package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/src ./src
-COPY --from=build /app/scripts ./scripts
-RUN mkdir -p /data/artifacts /tmp /var/tmp && chown -R node:node /app /data /tmp /var/tmp
-USER node
-EXPOSE 8787
-HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6 CMD node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node","dist/server/index.js"]
+ENV PORT=3000
+
+# Non-root user
+RUN addgroup -S gnw && adduser -S gnw -G gnw
+
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder   /app/dist         ./dist
+COPY package.json ./
+
+RUN chown -R gnw:gnw /app
+USER gnw
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/health || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/server/app.js"]
