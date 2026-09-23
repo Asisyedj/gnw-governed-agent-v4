@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gnw
+  labels:
+    app.kubernetes.io/name: gnw-governed-agent
+    environment: production
