@@ -10,24 +10,37 @@ permissions:
   contents: read
 
 jobs:
+  # ── 1. Build, typecheck, lint, test ──────────────────────────────────────
   build-and-test:
-    name: Build & Test (Node ${{ matrix.node }})
+    name: Build & Test
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        node: ["22"]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB:       gnw_test
+          POSTGRES_USER:     gnw
+          POSTGRES_PASSWORD: gnw_test_pw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd  "pg_isready -U gnw"
+          --health-interval 10s
+          --health-timeout  5s
+          --health-retries  5
+
+    env:
+      NODE_ENV:      test
+      DATABASE_URL:  postgresql://gnw:gnw_test_pw@localhost:5432/gnw_test
+      COOKIE_SECRET: ci-test-cookie-secret-minimum-32-chars-ok
+      LOG_LEVEL:     silent
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-      - name: Setup Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm }
 
       - name: Verify npm cache integrity
         run: npm cache verify
@@ -39,10 +52,13 @@ jobs:
         run: npm run typecheck
 
       - name: Lint
-        run: npm run lint --if-present
+        run: npm run lint
 
-      - name: Test
-        run: npm test -- --ci --passWithNoTests
+      - name: Run migrations
+        run: npm run db:migrate
+
+      - name: Unit tests + coverage
+        run: npm run test:coverage
 
       - name: Build server
         run: npm run build:server
@@ -50,31 +66,56 @@ jobs:
       - name: Build client
         run: npm run build:client
 
-      - name: Dependency audit (high+critical)
-        run: npm audit --audit-level=high --json > npm-audit.json || true
-
-      - name: Collect build evidence
-        run: |
-          mkdir -p evidence
-          echo "{ \"schema\": \"GNW.BuildEvidence.v1\", \"node\": \"$(node --version)\", \"npm\": \"$(npm --version)\", \"sha\": \"$(git rev-parse HEAD)\", \"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" }" > evidence/build.json
-
-      - name: Upload evidence artifacts
+      - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: build-evidence-${{ github.sha }}
-          path: |
-            evidence/
-            npm-audit.json
-          retention-days: 90
+          name: coverage-${{ github.sha }}
+          path: coverage/
+          retention-days: 30
 
+  # ── 2. Secret scanning ────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          extra_args: --only-verified
+
+  # ── 3. Dependency review (PRs only) ───────────────────────────────────────
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with: { fail-on-severity: high }
+
+  # ── 4. Build evidence record ──────────────────────────────────────────────
+  evidence:
+    name: Build Evidence
+    runs-on: ubuntu-24.04
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm }
+      - run: npm ci
+      - name: Collect evidence
+        run: |
+          mkdir -p evidence
+          node --version > evidence/node-version.txt
+          npm --version  > evidence/npm-version.txt
+          npm audit --json > evidence/npm-audit.json || true
+          echo "{ \"schema\": \"GNW.BuildEvidence.v1\", \"candidate\": \"gnw-2026-09-23-003\", \"sha\": \"$(git rev-parse HEAD)\", \"ref\": \"${{ github.ref }}\", \"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"node\": \"$(node --version)\", \"npm\": \"$(npm --version)\" }" > evidence/build.json
+      - uses: actions/upload-artifact@v4
         with:
-          fail-on-severity: high
+          name: build-evidence-${{ github.sha }}
+          path: evidence/
+          retention-days: 90
