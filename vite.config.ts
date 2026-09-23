@@ -1,26 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { fileURLToPath, URL } from "node:url";
+import path from "node:path";
 
 export default defineConfig({
   plugins: [react()],
   root: "src/client",
-  base: "/",
-  publicDir: false,
-  resolve: {
-    alias: {
-      "@shared": fileURLToPath(new URL("./src/shared", import.meta.url)),
+  publicDir: "../../public",
+  build: {
+    outDir: "../../dist/client",
+    emptyOutDir: true,
+    sourcemap: true,
+    rollupOptions: {
+      input: path.resolve(import.meta.dirname, "src/client/index.html"),
     },
   },
   server: {
-    port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8787",
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
     },
   },
-  build: {
-    outDir: "../../dist/public",
-    emptyOutDir: true,
-    sourcemap: false,
+  resolve: {
+    alias: { "@": path.resolve(import.meta.dirname, "src") },
   },
 });

@@ -1,0 +1,80 @@
+name: ci
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        node: ["22"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Verify npm cache integrity
+        run: npm cache verify
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Test
+        run: npm test -- --ci --passWithNoTests
+
+      - name: Build server
+        run: npm run build:server
+
+      - name: Build client
+        run: npm run build:client
+
+      - name: Dependency audit (high+critical)
+        run: npm audit --audit-level=high --json > npm-audit.json || true
+
+      - name: Collect build evidence
+        run: |
+          mkdir -p evidence
+          echo "{ \"schema\": \"GNW.BuildEvidence.v1\", \"node\": \"$(node --version)\", \"npm\": \"$(npm --version)\", \"sha\": \"$(git rev-parse HEAD)\", \"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" }" > evidence/build.json
+
+      - name: Upload evidence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-evidence-${{ github.sha }}
+          path: |
+            evidence/
+            npm-audit.json
+          retention-days: 90
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
