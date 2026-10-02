@@ -4,9 +4,9 @@ import { execFileSync } from "node:child_process";
 const required=[
   "package.json","package-lock.json",
   "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql",
-  "docs/PRODUCTION_CLOSURE.md",
+  "docs/PRODUCTION_CLOSURE.md","docs/CONTINUOUS_SECURITY_PROGRAM.md",
   "src/server/db/schema.ts","src/server/db/index.ts",
-  "src/server/governance.ts","src/server/action-envelope.ts",
+  "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts",
   "src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts",
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts",
   "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md"
@@ -41,6 +41,12 @@ if(authzIndex<0||handlerIndex<0||authzIndex>handlerIndex) failures.push("executi
 if(!exec.includes("persistCapabilityLease")) failures.push("execution:capability-lease-persistence-missing");
 if(!exec.includes("consumeCapabilityLease")) failures.push("execution:capability-lease-consumption-missing");
 if(!exec.includes("governance_digest_mismatch")) failures.push("execution:envelope-governance-binding-missing");
+if(!exec.includes("teeAttestationRequired")) failures.push("execution:tee-attestation-gate-missing");
+
+const attestation=read("src/server/attestation.ts");
+for(const token of ["GNW-TEE-ATTESTATION-V1","cryptoVerify","expectedMeasurement","maxAgeMs"]){
+  if(!attestation.includes(token)) failures.push(`attestation:control-missing:${token}`);
+}
 
 const audit=read("src/server/audit.ts");
 if(!audit.includes("setInterlock")) failures.push("audit:required-write-does-not-trip-interlock");
@@ -53,12 +59,22 @@ if(!policy.includes("OWASP GenAI LLM Top 10 2026")) failures.push("policy:owasp-
 if(!policy.includes("Agent Control Standard")) failures.push("policy:acs-baseline-missing");
 if(!policy.includes("gpt-5.6-sol")) failures.push("policy:deep-research-model-baseline-missing");
 
+const continuous=read("docs/CONTINUOUS_SECURITY_PROGRAM.md");
+for(const token of ["Daily","Weekly","Authorized staging DAST baseline","runtime attestation","Threshold / MPC roadmap"]){
+  if(!continuous.includes(token)) failures.push(`security-program:missing:${token}`);
+}
+
 const llm=read("src/server/llm.ts");
 if(!llm.includes("governedFetch")||!llm.includes("assertEgressUrl")) failures.push("llm:production-egress-not-governed");
 
 const secrets=read("src/server/lib/secretsCheck.ts");
 for(const token of ["SESSION_SECRET","EXECUTOR_SECRET","GNW_REQUIRE_SIGNED_GRANTS","GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GNW_LEASE_PRIVATE_KEY_PEM","GNW_EGRESS_ALLOW_LIST"]){
   if(!secrets.includes(token)) failures.push(`secrets:production-validation-missing:${token}`);
+}
+
+const envExample=read(".env.example");
+for(const token of ["GNW_REQUIRE_TEE_ATTESTATION","GNW_TEE_ATTESTATION_ISSUER","GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM","GNW_TEE_ATTESTATION_MEASUREMENT"]){
+  if(!envExample.includes(token)) failures.push(`env:attestation-setting-missing:${token}`);
 }
 
 for(const file of ["drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql"]){
@@ -78,6 +94,17 @@ if(!ci.includes("npm run verify:production")) failures.push("ci:production-gate-
 if(!ci.includes("npm audit --audit-level=high")) failures.push("ci:dependency-audit-missing");
 if(!ci.includes("gnw_migrator")) failures.push("ci:dedicated-migrator-missing");
 if(!ci.includes("TRUST_PROXY") && ci.includes("CORS_ORIGIN")) failures.push("ci:proxy-origin-policy-incomplete");
+
+for(const workflow of [".github/workflows/continuous-security.yml",".github/workflows/red-team-regression.yml",".github/workflows/staging-security-test.yml"]){
+  if(!existsSync(workflow)) failures.push(`ci:security-workflow-missing:${workflow}`);
+}
+const continuousWorkflow=read(".github/workflows/continuous-security.yml");
+if(!continuousWorkflow.includes('cron: "17 2 * * *"')) failures.push("ci:daily-assurance-schedule-missing");
+const redTeamWorkflow=read(".github/workflows/red-team-regression.yml");
+if(!redTeamWorkflow.includes('cron: "41 4 * * 6"')) failures.push("ci:weekly-red-team-schedule-missing");
+const stagingWorkflow=read(".github/workflows/staging-security-test.yml");
+if(!stagingWorkflow.includes("zap-baseline.py")) failures.push("ci:staging-dast-baseline-missing");
+if(!stagingWorkflow.includes("security-testing")) failures.push("ci:active-scan-protected-environment-missing");
 
 const release=read(".github/workflows/release.yml");
 if(release.includes("softprops/action-gh-release")) failures.push("release:unsupported-release-action");
