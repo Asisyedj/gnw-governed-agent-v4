@@ -1,5 +1,5 @@
 import { eq, and, desc, asc, sql, lt } from "drizzle-orm";
-import type { Db } from "./db/index.js";
+import { withTenant, type Db } from "./db/index.js";
 import { schema } from "./db/index.js";
 import type { Interlock } from "./governance.js";
 import { randomUUID } from "node:crypto";
