@@ -61,10 +61,15 @@ jobs:
           provenance: true
           sbom: true
 
+      - name: Canonicalize image reference
+        id: image
+        shell: bash
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}@${{ steps.push.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
       - name: Scan image for HIGH/CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@bfa4b33a029b9aa80ddb784b45574c30e072c59e
         with:
-          image-ref: ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+          image-ref: ${{ steps.image.outputs.ref }}
           format: table
           exit-code: "1"
           ignore-unfixed: true
