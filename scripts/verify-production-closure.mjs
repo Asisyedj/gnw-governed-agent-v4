@@ -22,6 +22,7 @@ for(const file of ["drizzle/0001_production_rls.sql","drizzle/0002_governance_ha
  const sql=readFileSync(file,"utf8");
  for(const token of ["ENABLE ROW LEVEL SECURITY","FORCE ROW LEVEL SECURITY","current_setting('app.tenant_id'"]){if(!sql.includes(token))failures.push(`rls:${file}:${token}`);}
 }
+if(existsSync("k8s/deployment.yaml")){ const deployment=readFileSync("k8s/deployment.yaml","utf8"); if(deployment.includes("REPLACE_WITH_"))failures.push("deployment:unresolved-placeholder"); }
 if(existsSync(".github/workflows/ci.yml")){
  const ci=readFileSync(".github/workflows/ci.yml","utf8");
  if(/continue-on-error:\s*true/.test(ci))failures.push("ci:fail-open");
