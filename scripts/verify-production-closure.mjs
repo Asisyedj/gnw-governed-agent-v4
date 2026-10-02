@@ -9,7 +9,10 @@ const required=[
   "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts","src/server/trust-anchor.ts",
   "src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts",
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts","src/server/verified-data.ts","src/tests/unit/verified-data.test.ts",
-  "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md"
+  "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md",
+  "compliance/applicability.json","compliance/control-matrix.json","compliance/release-evidence.schema.json",
+  "scripts/verify-compliance-matrix.mjs","scripts/verify-release-evidence.mjs","scripts/verify-cryptographic-closure.mjs",
+  "docs/PAKISTAN_COMPLIANCE_RELEASE.md"
 ];
 
 const failures=[];
@@ -58,6 +61,7 @@ if(!ci.includes("contents: read")) failures.push("ci:repository-permission-not-r
 if(ci.includes("npm install --package-lock-only")) failures.push("ci:lockfile-mutated-in-ci");
 if(ci.includes("git push")) failures.push("ci:source-mutation-present");
 if(!ci.includes("npm run verify:rls")) failures.push("ci:rls-gate-missing");
+if(!ci.includes("npm run verify:compliance")) failures.push("ci:compliance-matrix-gate-missing");
 if(!ci.includes("npm run verify:production")) failures.push("ci:production-gate-missing");
 if(!ci.includes("npm audit --audit-level=high")) failures.push("ci:dependency-audit-missing");
 if(!ci.includes("gnw_migrator")) failures.push("ci:dedicated-migrator-missing");
@@ -77,14 +81,18 @@ if(!pentestWorkflow.includes("confirm_authorization")) failures.push("ci:pentest
 if(!pentestWorkflow.includes("STAGING_BASE_URL")) failures.push("ci:pentest-target-secret-missing");
 if(!pentestWorkflow.includes("zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25")) failures.push("ci:pentest-action-not-pinned");
 const release=read(".github/workflows/release.yml");
+if(!release.includes("npm run verify:release:evidence")) failures.push("release:cryptographic-regulatory-evidence-gate-missing");
 if(release.includes("softprops/action-gh-release")) failures.push("release:unsupported-release-action");
 if(release.includes("npm install --package-lock-only")) failures.push("release:lockfile-mutated");
 if(!release.includes("npm run verify:production")||!release.includes("npm run verify:rls")) failures.push("release:closure-gates-missing");
-const docker=read(".github/workflows/docker-publish.yml");
+const docker=read(".github/workflows/docker-publish-compliant.yml");
 if(docker.includes("branches: [main]")) failures.push("docker:production-publish-on-branch");
 if(docker.includes("npm install --package-lock-only")) failures.push("docker:lockfile-mutated");
 if(!docker.includes("provenance: true")||!docker.includes("sbom: true")) failures.push("docker:attestation-metadata-missing");
 if(!docker.includes("trivy-action")) failures.push("docker:vulnerability-scan-missing");
+if(!docker.includes("npm run verify:release:evidence")) failures.push("docker:release-evidence-gate-missing");
+if(!docker.includes("npm run verify:compliance")) failures.push("docker:compliance-matrix-gate-missing");
+if(!docker.includes("npm run verify:crypto")) failures.push("docker:crypto-closure-gate-missing");
 const workflowDir=".github/workflows";
 if(existsSync(workflowDir)){
  for(const name of readdirSync(workflowDir)){
