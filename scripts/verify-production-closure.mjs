@@ -25,7 +25,7 @@ for(const file of ["drizzle/0001_production_rls.sql","drizzle/0002_governance_ha
 if(existsSync("k8s/deployment.yaml")){
  const deployment=readFileSync("k8s/deployment.yaml","utf8");
  if(deployment.includes("REPLACE_WITH_"))failures.push("deployment:unresolved-placeholder");
- if(!/image:\s+ghcr\\.io\\/asisyedj\\/gnw-governed-agent-v4@sha256:[0-9a-f]{64}/.test(deployment))failures.push("deployment:image-not-immutable");
+ if(!/image:\s+ghcr\.io\/asisyedj\/gnw-governed-agent-v4@sha256:[0-9a-f]{64}/.test(deployment))failures.push("deployment:image-not-immutable");
 }
 if(existsSync(".github/workflows/ci.yml")){
  const ci=readFileSync(".github/workflows/ci.yml","utf8");
