@@ -24,6 +24,8 @@ jobs:
         run: npm ci
       - name: Validate Pakistan applicability and control map
         run: npm run verify:compliance
+      - name: Verify canonical Git release metadata
+        run: npm run verify:git-release-metadata
       - name: Independent cryptographic closure vectors
         run: npm run verify:crypto
       - name: Production closure static gate
