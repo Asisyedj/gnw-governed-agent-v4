@@ -57,8 +57,18 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Run migrations
+      - name: Run migrations with dedicated migrator role
+        env:
+          DATABASE_URL: postgresql://gnw_migrator:gnw_migrator_pw@localhost:5432/gnw_test
         run: npm run db:migrate
+      - name: Grant runtime database privileges
+        env:
+          PGPASSWORD: gnw_admin_pw
+        run: |
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gnw_app;"
       - name: Verify production closure static gate
         run: npm run verify:production
       - name: Database RLS verification
