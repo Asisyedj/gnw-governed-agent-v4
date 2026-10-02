@@ -206,3 +206,22 @@ CREATE POLICY gnw_capability_leases_tenant ON capability_leases
 
 -- RLS must fail closed if application code forgets to establish tenant context.
 REVOKE ALL ON budget_reservations, capability_leases FROM PUBLIC;
+
+-- Security-critical evidence is append-only for the runtime role.
+CREATE OR REPLACE FUNCTION gnw_audit_append_only()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_log is append-only';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS audit_log_append_only ON audit_log;
+CREATE TRIGGER audit_log_append_only
+BEFORE UPDATE OR DELETE ON audit_log
+FOR EACH ROW EXECUTE FUNCTION gnw_audit_append_only();
+
+REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC;
+REVOKE UPDATE, DELETE ON nonces FROM PUBLIC;
+REVOKE UPDATE, DELETE ON interlocks FROM PUBLIC;
