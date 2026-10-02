@@ -9,7 +9,10 @@ const required=[
   "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts","src/server/trust-anchor.ts",
   "src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts",
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts","src/server/verified-data.ts","src/tests/unit/verified-data.test.ts",
-  "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md"
+  "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md",
+  "compliance/applicability.json","compliance/control-matrix.json","compliance/release-evidence.schema.json",
+  "scripts/verify-compliance-matrix.mjs","scripts/verify-release-evidence.mjs","scripts/verify-cryptographic-closure.mjs",
+  "docs/PAKISTAN_COMPLIANCE_RELEASE.md"
 ];
 
 const failures=[];
@@ -58,6 +61,8 @@ if(!ci.includes("contents: read")) failures.push("ci:repository-permission-not-r
 if(ci.includes("npm install --package-lock-only")) failures.push("ci:lockfile-mutated-in-ci");
 if(ci.includes("git push")) failures.push("ci:source-mutation-present");
 if(!ci.includes("npm run verify:rls")) failures.push("ci:rls-gate-missing");
+if(!ci.includes("npm run verify:compliance")) failures.push("ci:compliance-matrix-gate-missing");
+if(!ci.includes("npm run verify:crypto")) failures.push("ci:cryptographic-closure-gate-missing");
 if(!ci.includes("npm run verify:production")) failures.push("ci:production-gate-missing");
 if(!ci.includes("npm audit --audit-level=high")) failures.push("ci:dependency-audit-missing");
 if(!ci.includes("gnw_migrator")) failures.push("ci:dedicated-migrator-missing");
