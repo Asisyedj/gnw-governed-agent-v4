@@ -87,7 +87,8 @@ describe("production control primitives",()=>{
    expect(verifyExecutorToken(token,"secret","r",1700000000000,d+"x",1700000000000)).toBe(false);
    expect(verifyExecutorToken(token,"secret","r",1700000000000,d,1700000061000)).toBe(false);
    const env={executorUrl:"http://executor.local",executorSecret:"s",isProduction:true} as any;
-   await expect(callExecutor(env,["echo","x"])).rejects.toThrow("executor_https_required");
+   await expect(callExecutor(env,["echo","x"],{actionDigest:"a".repeat(64)})).rejects.toThrow("executor_https_required");
+   await expect(callExecutor({...env,executorUrl:"https://executor.local"},["echo","x"])).rejects.toThrow("executor_action_digest_required");
    expect(generateNonce()).toHaveLength(32);
  });
  it("renders metrics and records HTTP observations",()=>{
