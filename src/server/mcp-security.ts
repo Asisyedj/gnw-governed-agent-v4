@@ -1,9 +1,9 @@
-import type { Request } from "express";
-import { ENV } from "./env.ts";
+import type { FastifyRequest } from "fastify";
+import { ENV } from "./env.js";
 
-export function isMcpRequestAllowed(req: Request): boolean {
+export function isMcpRequestAllowed(req: FastifyRequest): boolean {
   const origin = req.headers.origin ?? "";
-  if (!origin) return true; // server-to-server
+  if (!origin) return Boolean(ENV.deepResearchMcpUrl && ENV.deepResearchMcpLabel);
   if (ENV.corsOrigin && origin === ENV.corsOrigin) return true;
   const host = req.headers.host ?? "";
   try {
