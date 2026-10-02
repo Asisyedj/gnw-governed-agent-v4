@@ -46,6 +46,10 @@ jobs:
         run: npm cache verify
       - name: Clean install from committed lockfile
         run: npm ci
+      - name: Validate Pakistan compliance matrix
+        run: npm run verify:compliance
+      - name: Independent cryptographic closure vectors
+        run: npm run verify:cryptographic-closure
       - name: Provision dedicated database roles
         env:
           PGPASSWORD: gnw_admin_pw
@@ -141,6 +145,24 @@ jobs:
           exit 1
       - name: Dependency audit
         run: npm audit --audit-level=high
+      - name: Collect compliance gate evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p compliance-evidence
+          git rev-parse HEAD > compliance-evidence/commit-sha.txt
+          sha256sum compliance/applicability.json > compliance-evidence/applicability.sha256
+          sha256sum compliance/control-matrix.json > compliance-evidence/control-matrix.sha256
+          npm run verify:compliance > compliance-evidence/matrix-verification.txt 2>&1 || true
+          npm run verify:cryptographic-closure > compliance-evidence/cryptographic-closure.txt 2>&1 || true
+      - name: Upload compliance gate evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compliance-evidence-${{ github.sha }}
+          path: compliance-evidence/
+          retention-days: 180
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
