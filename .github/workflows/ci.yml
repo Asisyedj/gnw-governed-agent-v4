@@ -72,8 +72,14 @@ jobs:
         run: docker build --pull -t gnw-ci:${GITHUB_SHA} .
       - name: Smoke test production container
         run: |
+          set -euo pipefail
+          openssl genpkey -algorithm Ed25519 -out /tmp/gnw-grant-key.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/gnw-grant-key.pem -pubout -out /tmp/gnw-grant-pub.pem >/dev/null 2>&1
+          EXECUTOR_SMOKE_SECRET="$(openssl rand -hex 32)"
+          GRANT_PRIVATE_KEY="$(awk '{printf "%s\\n",$0}' /tmp/gnw-grant-key.pem)"
+          GRANT_PUBLIC_KEY="$(awk '{printf "%s\\n",$0}' /tmp/gnw-grant-pub.pem)"
           docker rm -f gnw-ci-smoke >/dev/null 2>&1 || true
-          docker run -d --network host --name gnw-ci-smoke             -e NODE_ENV=production             -e DATABASE_URL="$DATABASE_URL"             -e COOKIE_SECRET="$COOKIE_SECRET"             -e LOG_LEVEL=silent             -e PORT=3000             gnw-ci:${GITHUB_SHA} >/tmp/gnw-ci-smoke.log 2>&1
+          docker run -d --network host --name gnw-ci-smoke             -e NODE_ENV=production             -e DATABASE_URL="$DATABASE_URL"             -e COOKIE_SECRET="$COOKIE_SECRET"             -e LOG_LEVEL=silent             -e PORT=3000             -e EXECUTOR_SECRET="$EXECUTOR_SMOKE_SECRET"             -e GNW_GRANT_PRIVATE_KEY_PEM="$GRANT_PRIVATE_KEY"             -e GNW_GRANT_PUBLIC_KEY_PEM="$GRANT_PUBLIC_KEY"             -e GNW_LEASE_PRIVATE_KEY_PEM="$GRANT_PRIVATE_KEY"             -e GNW_REQUIRE_SIGNED_GRANTS=true             gnw-ci:${GITHUB_SHA} >/tmp/gnw-ci-smoke.log 2>&1
           for i in $(seq 1 30); do
             if wget -qO- http://127.0.0.1:3000/api/health >/tmp/gnw-health.json 2>/dev/null &&                wget -qO- http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json 2>/dev/null; then
               break
