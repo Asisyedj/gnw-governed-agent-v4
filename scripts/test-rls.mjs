@@ -34,7 +34,8 @@ try {
   const rlsRows = await q('SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=\'public\' AND c.relname = ANY($1::text[])',[tables]);
   if (rlsRows.length !== tables.length) throw new Error('RLS table set incomplete');
   for (const row of rlsRows) if (!row.relrowsecurity || !row.relforcerowsecurity) throw new Error('RLS not forced on ' + row.relname);
-  const policies = await q('SELECT tablename,policyname FROM pg_policies WHERE schemaname=\'public\' AND policyname LIKE \'gnw_%\'');
-  if (policies.length < 8) throw new Error('expected tenant RLS policies missing');
+  const policies = await q('SELECT tablename,policyname FROM pg_policies WHERE schemaname=\'public\' AND tablename = ANY($1::text[])',[tables]);
+  const byTable = new Set(policies.map(row => row.tablename));
+  if (byTable.size !== tables.length) throw new Error('expected tenant RLS policies missing');
   console.log(JSON.stringify({ ok:true, tenantCount:2, policyCount:policies.length, rlsTables:rlsRows.length }));
 } finally { await pool.end(); }
