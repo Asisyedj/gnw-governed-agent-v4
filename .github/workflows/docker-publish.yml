@@ -77,7 +77,26 @@ jobs:
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
           COOKIE_SECRET="$(printf "x%.0s" {1..64})"
           docker pull "$IMAGE"
-          docker run -d --rm --name gnw-production-smoke             -e NODE_ENV=production             -e DATABASE_URL=postgresql://127.0.0.1:5432/gnw             -e COOKIE_SECRET="$COOKIE_SECRET"             -p 18080:3000             "$IMAGE"
+          docker run -d --rm --name gnw-production-smoke \
+            -e NODE_ENV=production \
+            -e DATABASE_URL="postgresql://gnw_app:smoke@127.0.0.1:5432/gnw?sslmode=verify-full" \
+            -e COOKIE_SECRET="$COOKIE_SECRET" \
+            -e SESSION_SECRET="$COOKIE_SECRET" \
+            -e EXECUTOR_URL=https://executor.example.internal \
+            -e EXECUTOR_SECRET="$COOKIE_SECRET" \
+            -e GNW_REQUIRE_SIGNED_GRANTS=true \
+            -e GNW_GRANT_ISSUER=gnw-smoke \
+            -e GNW_GRANT_PRIVATE_KEY_PEM=smoke-private-key \
+            -e GNW_GRANT_PUBLIC_KEY_PEM=smoke-public-key \
+            -e GNW_LEASE_PRIVATE_KEY_PEM=smoke-lease-key \
+            -e GNW_EGRESS_ALLOW_LIST=api.openai.com \
+            -e LLM_BASE_URL=https://api.openai.com/v1 \
+            -e LLM_API_KEY=smoke-key \
+            -e STORAGE_DRIVER=local \
+            -e ARTIFACT_DIR=/tmp/gnw-artifacts \
+            -e GNW_SHARED_STORAGE_CONFIRMED=true \
+            -p 18080:3000 \
+            "$IMAGE"
           cleanup() {
             docker logs gnw-production-smoke || true
             docker stop gnw-production-smoke >/dev/null 2>&1 || true
