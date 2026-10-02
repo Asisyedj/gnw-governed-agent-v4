@@ -29,6 +29,11 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
     if (!session) return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated" });
     const id = Number((req.params as { id: string }).id);
     if (Number.isNaN(id)) return reply.status(400).send({ error: "Invalid task ID" });
+    const user = await findUserById(app.db, session.userId, session.tenantId);
+    if (!user) return reply.status(401).send({ error: "Unauthenticated" });
+    if (!(["owner", "admin", "operator"] as string[]).includes(user.role)) {
+      return reply.status(403).send({ error: "Insufficient role to cancel tasks.", code: "forbidden" });
+    }
     const task = await findTaskById(app.db, id, session.tenantId);
     if (!task) return reply.status(404).send({ error: "Task not found" });
     const steps = await listTaskSteps(app.db, id, session.tenantId);
