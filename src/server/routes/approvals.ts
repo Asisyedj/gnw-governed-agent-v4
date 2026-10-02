@@ -12,7 +12,6 @@ const reviewSchema = z.object({
 });
 
 export const approvalRoutes: FastifyPluginAsync = async (app) => {
-  // List pending approvals
   app.get("/", async (req, reply) => {
     const session = await resolveSession(app.db, req.cookies as Record<string, string>);
     if (!session) return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated" });
@@ -20,7 +19,6 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(approvals);
   });
 
-  // Review approval
   app.patch("/:id", async (req, reply) => {
     const session = await resolveSession(app.db, req.cookies as Record<string, string>);
     if (!session) return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated" });
@@ -43,7 +41,17 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
     if (!parsed.success) return reply.status(400).send({ error: "Invalid input" });
 
     const updated = await reviewApproval(app.db, id, session.tenantId, session.userId, parsed.data.status, parsed.data.reason);
-    await insertAuditLog(app.db, { eventType: `approval.${parsed.data.status}`, actorId: session.userId, tenantId: session.tenantId, taskId: approval.taskId ?? undefined, resourceType: "approval", resourceId: String(id), outcome: "success", detail: { reason: parsed.data.reason }, ipAddress: req.ip });
+    await insertAuditLog(app.db, {
+      eventType: `approval.${parsed.data.status}`,
+      actorId: session.userId,
+      tenantId: session.tenantId,
+      ...(approval.taskId !== null && approval.taskId !== undefined ? { taskId: approval.taskId } : {}),
+      resourceType: "approval",
+      resourceId: String(id),
+      outcome: "success",
+      ...(parsed.data.reason !== undefined ? { detail: { reason: parsed.data.reason } } : {}),
+      ipAddress: req.ip,
+    });
     return reply.send({ ok: true, approval: updated });
   });
 };
