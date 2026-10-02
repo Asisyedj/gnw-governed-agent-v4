@@ -70,7 +70,8 @@ export async function governedFetch(raw: string, init: RequestInit = {}, maxResp
 
   const resolved = await dns.lookup(url.hostname, { all: true, verbatim: true });
   if (!resolved.length || resolved.some(entry => isUnsafeResolvedAddress(entry.address))) throw new Error("unsafe_dns_destination");
-  const target = resolved[0]?.address;\n  if (!target) throw new Error("unsafe_dns_destination");
+  const target = resolved[0]?.address;
+  if (!target) throw new Error("unsafe_dns_destination");
   const method = String(init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
   headers.set("host", url.host);
