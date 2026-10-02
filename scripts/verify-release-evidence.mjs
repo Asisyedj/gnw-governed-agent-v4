@@ -60,6 +60,11 @@ if(evidence){
   try{
     const app=JSON.parse(applicabilityRaw);
     const m=JSON.parse(matrixRaw);
+    for(const [key,value] of Object.entries(app.determinations??{})){
+      if(["LEGAL_CLASSIFICATION_REQUIRED","UNDETERMINED","PENDING"].includes(value.status)){
+        fail.push("applicability-blocked:"+key+":"+value.status);
+      }
+    }
     for(const c of m.controls){
       if(c.requiredWhen.includes("always")) required.push(c.id);
       for(const token of c.requiredWhen){
@@ -83,6 +88,8 @@ if(evidence){
   const ia=evidence.independentAudit;
   if(!ia||ia.required!==true||ia.status!=="PASS"||!hex.test(ia.reportSha256??"")||(ia.blockingFindings??1)!==0) fail.push("independent-audit");
   if(!Array.isArray(evidence.approvals)||evidence.approvals.length<2) fail.push("approvals:two-required");
+  const approvalIds=(evidence.approvals??[]).map(x=>String(x.approverId??"")).filter(Boolean);
+  if(new Set(approvalIds).size<2) fail.push("approvals:distinct-approvers-required");
 
   const sealInput={
     schema:evidence.schema,
