@@ -9,6 +9,7 @@ if (!migrationUrl) throw new Error("MIGRATION_DATABASE_URL is required");
 if (!appUser || !appPassword) throw new Error("GNW_APP_DB_USER and GNW_APP_DB_PASSWORD are required");
 
 const ident = value => '"' + value.replace(/"/g, '""') + '"';
+const literal = value => "'" + value.replace(/'/g, "''") + "'";
 const pool = new Pool({
   connectionString: migrationUrl,
   ssl: process.env.GNW_POSTGRES_SSL_REQUIRED === "true" ? { rejectUnauthorized: true } : false,
@@ -19,9 +20,9 @@ try {
   const dbName = (await client.query("select current_database() as name")).rows[0]?.name;
   const roleExists = await client.query("select 1 from pg_roles where rolname = $1", [appUser]);
   if (!roleExists.rowCount) {
-    await client.query(`CREATE ROLE ${ident(appUser)} LOGIN PASSWORD $1 NOSUPERUSER NOBYPASSRLS`, [appPassword]);
+    await client.query(`CREATE ROLE ${ident(appUser)} LOGIN PASSWORD ${literal(appPassword)} NOSUPERUSER NOBYPASSRLS`);
   } else {
-    await client.query(`ALTER ROLE ${ident(appUser)} LOGIN PASSWORD $1 NOSUPERUSER NOBYPASSRLS`, [appPassword]);
+    await client.query(`ALTER ROLE ${ident(appUser)} LOGIN PASSWORD ${literal(appPassword)} NOSUPERUSER NOBYPASSRLS`);
   }
   await client.query(`GRANT CONNECT ON DATABASE ${ident(dbName)} TO ${ident(appUser)}`);
   await client.query(`GRANT USAGE ON SCHEMA public TO ${ident(appUser)}`);
