@@ -1,0 +1,206 @@
+{
+  "schema": "GNW.PK.ControlMatrix.v1",
+  "version": "2026.10.03",
+  "controls": [
+    {
+      "id": "APP-001",
+      "regime": "Applicability",
+      "title": "Applicability determination is versioned and complete",
+      "requiredWhen": ["always"],
+      "automation": ["node scripts/verify-compliance-matrix.mjs"],
+      "evidence": "applicability-digest",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/uploads/2026/03/PISF-Merged-Version.pdf"
+    },
+    {
+      "id": "PPRA-001",
+      "regime": "PPRA",
+      "title": "Current procurement rule/SBD basis is recorded",
+      "requiredWhen": ["PPRA_2026"],
+      "automation": ["release-evidence"],
+      "evidence": "procurement-reference",
+      "blocking": true,
+      "source": "https://epms.ppra.gov.pk/public/procurement-rules"
+    },
+    {
+      "id": "PPRA-002",
+      "regime": "PPRA",
+      "title": "Security specifications, evaluation criteria and applicable standards are preserved",
+      "requiredWhen": ["PPRA_2026"],
+      "automation": ["release-evidence"],
+      "evidence": "procurement-security-clauses",
+      "blocking": true,
+      "source": "https://epms.ppra.gov.pk/public/procurement-rules"
+    },
+    {
+      "id": "SBP-TG-001",
+      "regime": "SBP",
+      "title": "Technology governance and risk assessment evidence covers the exact release scope",
+      "requiredWhen": ["SBP_TECH_GOVERNANCE"],
+      "automation": ["release-evidence"],
+      "evidence": "signed-risk-assessment",
+      "blocking": true,
+      "source": "https://www.sbp.org.pk/circulars/bprd-circular-no-05-of-2017"
+    },
+    {
+      "id": "SBP-OUT-001",
+      "regime": "SBP",
+      "title": "Outsourcing risk/materiality, supplier due diligence and contractual controls are evidenced",
+      "requiredWhen": ["SBP_OUTSOURCING"],
+      "automation": ["release-evidence"],
+      "evidence": "outsourcing-assessment",
+      "blocking": true,
+      "source": "https://www.sbp.org.pk/circulars/bprd-circular-no-06-of-2017"
+    },
+    {
+      "id": "SBP-CLOUD-001",
+      "regime": "SBP",
+      "title": "Cloud outsourcing approval, risk controls and exit/portability evidence are current",
+      "requiredWhen": ["SBP_CLOUD"],
+      "automation": ["release-evidence"],
+      "evidence": "cloud-approval-and-assessment",
+      "blocking": true,
+      "source": "https://archive.sbp.org.pk/bprd/2023/C1.htm"
+    },
+    {
+      "id": "PISF-GOV-001",
+      "regime": "PISF",
+      "title": "Governance, roles, policy and oversight controls are current",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["node scripts/verify-compliance-matrix.mjs"],
+      "evidence": "signed-governance-attestation",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "PISF-IAM-001",
+      "regime": "PISF",
+      "title": "Identity, access and privileged-access controls are tested",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["npm run test", "npm run verify:rls"],
+      "evidence": "iam-test-report",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "PISF-SSDLC-001",
+      "regime": "PISF",
+      "title": "Secure SDLC, security testing and dependency controls pass",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["npm run typecheck", "npm run lint", "npm test", "npm audit --audit-level=high"],
+      "evidence": "ci-security-results",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "PISF-DATA-001",
+      "regime": "PISF",
+      "title": "Tenant isolation, data protection and privacy controls pass",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["npm run verify:rls", "npm run test"],
+      "evidence": "rls-and-data-protection-results",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "PISF-IR-001",
+      "regime": "PISF",
+      "title": "Incident response and recovery evidence is current",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["release-evidence"],
+      "evidence": "incident-response-test",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "PISF-SC-001",
+      "regime": "PISF",
+      "title": "Supply-chain security, provenance and dependency evidence is sealed",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["npm ci", "npm audit --audit-level=high"],
+      "evidence": "sbom-and-provenance",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "PISF-AUDIT-001",
+      "regime": "PISF",
+      "title": "Audit evidence is retained and linked to the exact release SHA",
+      "requiredWhen": ["PISF_2026"],
+      "automation": ["release-evidence"],
+      "evidence": "audit-evidence-reference",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/grc-policies.asp"
+    },
+    {
+      "id": "CRYPTO-APP-001",
+      "regime": "PSS",
+      "title": "PSS cryptographic applicability is formally determined before a production claim",
+      "requiredWhen": ["PSS_CRYPTO"],
+      "automation": ["node scripts/verify-compliance-matrix.mjs"],
+      "evidence": "legal-classification",
+      "blocking": true,
+      "source": "https://cabinet.gov.pk/Detail/NzdhZDdkODUtZmYzZS00OGVhLThiNmEtZmRmYWQ1NDQ4NDQy"
+    },
+    {
+      "id": "CRYPTO-HSM-001",
+      "regime": "Cryptographic Assurance",
+      "title": "Production signing/key custody is bound to approved non-exportable HSM material",
+      "requiredWhen": ["always"],
+      "automation": ["release-evidence"],
+      "evidence": "hsm-key-custody-attestation",
+      "blocking": true,
+      "source": "https://cabinet.gov.pk/SiteImage/Downloads/Crypto-GuideBook.pdf"
+    },
+    {
+      "id": "TEE-001",
+      "regime": "TEE",
+      "title": "Real hardware-backed runtime attestation validates issuer, freshness and expected measurement",
+      "requiredWhen": ["always"],
+      "automation": ["node scripts/verify-release-evidence.mjs"],
+      "evidence": "signed-runtime-attestation",
+      "blocking": true,
+      "source": "https://docs.aws.amazon.com/enclaves/latest/user/set-up-attestation.html"
+    },
+    {
+      "id": "TEE-002",
+      "regime": "TEE",
+      "title": "Attestation is cryptographically bound to the exact release and is not simulator evidence",
+      "requiredWhen": ["always"],
+      "automation": ["node scripts/verify-release-evidence.mjs"],
+      "evidence": "attestation-action-binding",
+      "blocking": true,
+      "source": "https://docs.aws.amazon.com/kms/latest/developerguide/conditions-nitro-enclave.html"
+    },
+    {
+      "id": "NCERT-001",
+      "regime": "nCERT",
+      "title": "Independent audit engagement/report is from the applicable nCERT registration/scope",
+      "requiredWhen": ["NCERT_AUDIT"],
+      "automation": ["release-evidence"],
+      "evidence": "auditor-registration-and-report-hash",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/framework-for-audit-activities.asp"
+    },
+    {
+      "id": "NCERT-002",
+      "regime": "nCERT",
+      "title": "Open blocking audit findings are zero or formally closed/accepted under the approved lifecycle",
+      "requiredWhen": ["NCERT_AUDIT"],
+      "automation": ["release-evidence"],
+      "evidence": "audit-closure-record",
+      "blocking": true,
+      "source": "https://pkcert.gov.pk/framework-for-audit-activities.asp"
+    },
+    {
+      "id": "REL-001",
+      "regime": "GNW Release",
+      "title": "Release evidence is cryptographically sealed to exact tag, commit and artifact manifest",
+      "requiredWhen": ["always"],
+      "automation": ["node scripts/verify-release-evidence.mjs"],
+      "evidence": "ed25519-release-seal",
+      "blocking": true,
+      "source": "internal-GNW-release-policy"
+    }
+  ]
+}
