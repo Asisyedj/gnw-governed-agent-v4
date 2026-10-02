@@ -62,7 +62,7 @@ describe("runtime attestation",()=>{
  it("rejects duplicate, tampered and below-threshold trust-anchor votes",()=>{
    const nonce="e".repeat(32);
    const participants=Object.fromEntries(thresholdKeys.map((k,i)=>[`p${i+1}`,k.publicKey]));
-   const one={participantId:"p1",signature:sign(null,Buffer.from(thresholdPayload(nonce)),thresholdKeys[0].privateKey).toString("hex")};
+   const one={participantId:"p1",signature:sign(null,Buffer.from(thresholdPayload(nonce)),thresholdKeys[0]!.privateKey).toString("hex")};
    expect(verifyThresholdAttestation(actionDigest,measurement,nonce,[one,one],{threshold:2,participants,requireTee:true})).toBe(false);
    expect(verifyThresholdAttestation(actionDigest,measurement,nonce,[{...one,signature:"00"}],{threshold:2,participants,requireTee:true})).toBe(false);
  });
