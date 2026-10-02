@@ -25,7 +25,14 @@ const appRaw=read("compliance/applicability.json"),matrixRaw=read("compliance/co
 const appDigest=sha(appRaw),matrixDigest=sha(matrixRaw);
 
 function verifyTee(e){
+  let source;
+  try{source=JSON.parse(env.GNW_TEE_ATTESTATION_EVIDENCE_JSON??"");}catch{fail.push("tee:source-evidence-invalid-json");}
   if(!e||e.mode!=="REAL_HARDWARE"){fail.push("tee:not-real-hardware");return;}
+  if(source&&typeof source==="object"){
+    for(const [a,b,label] of [["subject",evidence.gitCommitSha,"subject"],["issuer",e.issuer,"issuer"],["measurement",e.measurement,"measurement"],["nonce",e.nonce,"nonce"],["issuedAt",e.issuedAt,"issuedAt"],["expiresAt",e.expiresAt,"expiresAt"],["signature",e.signature,"signature"]]){
+      if(String(source[a]??"")!==String(b??"")) fail.push("tee:source-binding-"+label);
+    }
+  }
   if(e.issuer!==expectedIssuer)fail.push("tee:issuer");
   if(String(e.measurement??"").toLowerCase()!==expectedMeasurement)fail.push("tee:measurement");
   if(!hex64.test(e.measurement??"")||!hexNonce.test(e.nonce??""))fail.push("tee:format");
@@ -56,6 +63,7 @@ function verifyMpc(e){
   }
   if(valid<threshold)fail.push("mpc:threshold-verification");
   if(evidence.mpcTrustAnchor?.subject!==ev.subject||String(evidence.mpcTrustAnchor?.measurement??"").toLowerCase()!==String(ev.measurement??"").toLowerCase()||evidence.mpcTrustAnchor?.nonce!==ev.nonce)fail.push("mpc:evidence-binding");
+  if(JSON.stringify(evidence.mpcTrustAnchor?.signatures??[])!==JSON.stringify(ev.signatures??[]))fail.push("mpc:signature-set-binding");
 }
 if(evidence){
   if(evidence.schema!=="GNW.ProductionReleaseEvidence.v1")fail.push("schema");
