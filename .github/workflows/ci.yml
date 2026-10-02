@@ -86,6 +86,46 @@ jobs:
         run: npm run test:coverage
       - name: Build
         run: npm run build
+      - name: Production container build
+        run: docker build --pull -t gnw-production-smoke:${GITHUB_SHA} .
+      - name: Production container runtime smoke test
+        shell: bash
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://gnw_app:gnw_app_pw@127.0.0.1:5432/gnw_test
+          COOKIE_SECRET: ci-smoke-cookie-secret-012345678901234567890123456789
+          SESSION_SECRET: ci-smoke-session-secret-012345678901234567890123456789
+          EXECUTOR_URL: https://127.0.0.1:8788
+          EXECUTOR_SECRET: ci-smoke-executor-secret-012345678901234567890123456789
+          GNW_REQUIRE_SIGNED_GRANTS: "true"
+          GNW_GRANT_ISSUER: ci-smoke
+          GNW_GRANT_PRIVATE_KEY_PEM: ci-smoke-private-key
+          GNW_GRANT_PUBLIC_KEY_PEM: ci-smoke-public-key
+          GNW_LEASE_PRIVATE_KEY_PEM: ci-smoke-lease-private-key
+          GNW_EGRESS_ALLOW_LIST: api.openai.com
+          LLM_BASE_URL: https://api.openai.com/v1
+          LLM_API_KEY: ci-smoke-api-key
+          STORAGE_DRIVER: local
+          GNW_SHARED_STORAGE_CONFIRMED: "true"
+          GNW_POSTGRES_SSL_REQUIRED: "false"
+          TRUST_PROXY: "false"
+          PORT: "3000"
+          LOG_LEVEL: silent
+        run: |
+          set -euo pipefail
+          docker rm -f gnw-production-smoke >/dev/null 2>&1 || true
+          docker run -d --network host --name gnw-production-smoke             -e NODE_ENV             -e DATABASE_URL             -e COOKIE_SECRET             -e SESSION_SECRET             -e EXECUTOR_URL             -e EXECUTOR_SECRET             -e GNW_REQUIRE_SIGNED_GRANTS             -e GNW_GRANT_ISSUER             -e GNW_GRANT_PRIVATE_KEY_PEM             -e GNW_GRANT_PUBLIC_KEY_PEM             -e GNW_LEASE_PRIVATE_KEY_PEM             -e GNW_EGRESS_ALLOW_LIST             -e LLM_BASE_URL             -e LLM_API_KEY             -e STORAGE_DRIVER             -e GNW_SHARED_STORAGE_CONFIRMED             -e GNW_POSTGRES_SSL_REQUIRED             -e TRUST_PROXY             -e PORT             -e LOG_LEVEL             gnw-production-smoke:${GITHUB_SHA}
+          trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true' EXIT
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/api/health >/tmp/gnw-health.json &&                curl -fsS http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json; then
+              grep -q '"ok":true' /tmp/gnw-health.json
+              grep -q '"ok":true' /tmp/gnw-ready.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "production container failed health/readiness smoke test"
+          exit 1
       - name: Dependency audit
         run: npm audit --audit-level=high
       - name: Upload coverage
