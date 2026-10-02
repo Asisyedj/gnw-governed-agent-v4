@@ -69,10 +69,10 @@ jobs:
           sbom: true
 
       - name: Production container smoke test
-        env:
-          IMAGE_TAG: ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}
         run: |
           set -eu
+          IMAGE_REPOSITORY="${GITHUB_REPOSITORY,,}"
+          IMAGE_TAG="ghcr://${IMAGE_REPOSITORY}:sha-${GITHUB_SHA::7}"
           COOKIE_SECRET="$(printf "x%.0s" $(seq 1 64))"
           docker pull "$IMAGE_TAG"
           docker run -d --rm --name gnw-production-smoke \
