@@ -86,7 +86,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@b27a081f655e9d4b60d04c3fcc5cbcaead454f6a
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@97c5b2343ab7c6442e68cfd6b01a8cbf57e5708d
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
       - name: Log in to GHCR
         uses: docker/login-action@678a46a45e920924c7b07d6209b4d02a3031d403
         with:
