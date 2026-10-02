@@ -61,12 +61,13 @@ if(!ci.includes("contents: read")) failures.push("ci:repository-permission-not-r
 if(ci.includes("npm install --package-lock-only")) failures.push("ci:lockfile-mutated-in-ci");
 if(ci.includes("git push")) failures.push("ci:source-mutation-present");
 if(!ci.includes("npm run verify:rls")) failures.push("ci:rls-gate-missing");
-if(!ci.includes("npm run verify:compliance")) failures.push("ci:compliance-matrix-gate-missing");
 if(!ci.includes("npm run verify:production")) failures.push("ci:production-gate-missing");
 if(!ci.includes("npm audit --audit-level=high")) failures.push("ci:dependency-audit-missing");
 if(!ci.includes("gnw_migrator")) failures.push("ci:dedicated-migrator-missing");
 if(!ci.includes("TRUST_PROXY") && ci.includes("CORS_ORIGIN")) failures.push("ci:proxy-origin-policy-incomplete");
-for(const workflow of [".github/workflows/continuous-security.yml",".github/workflows/red-team-regression.yml",".github/workflows/staging-security-test.yml",".github/workflows/security-watch.yml",".github/workflows/external-pentest-baseline.yml"]){if(!existsSync(workflow)) failures.push(`ci:security-workflow-missing:${workflow}`);}
+for(const workflow of [".github/workflows/compliance-gate.yml",".github/workflows/continuous-security.yml",".github/workflows/red-team-regression.yml",".github/workflows/staging-security-test.yml",".github/workflows/security-watch.yml",".github/workflows/external-pentest-baseline.yml"]){if(!existsSync(workflow)) failures.push(`ci:security-workflow-missing:${workflow}`);}
+const complianceWorkflow=read(".github/workflows/compliance-gate.yml");
+if(!complianceWorkflow.includes("npm run verify:compliance")||!complianceWorkflow.includes("npm run verify:crypto")||!complianceWorkflow.includes("npm run verify:production")) failures.push("ci:dedicated-compliance-gate-incomplete");
 const continuousWorkflow=read(".github/workflows/continuous-security.yml");
 if(!continuousWorkflow.includes('cron: "17 2 * * *"')) failures.push("ci:daily-assurance-schedule-missing");
 const redTeamWorkflow=read(".github/workflows/red-team-regression.yml");
