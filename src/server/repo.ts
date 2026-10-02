@@ -68,6 +68,40 @@ export async function insertAuditLog(db: Db, entry: { eventType: string; actorId
 export async function listAuditLog(db: Db, tenantId: number, limit = 100, offset = 0) { return withTenant(db, tenantId, tx => tx.query.auditLog.findMany({ where: eq(auditLog.tenantId,tenantId), orderBy: desc(auditLog.createdAt), limit, offset })); }
 
 export async function createCapabilityLease(db: Db, input: { leaseId: string; requestId: string; actionDigest: string; subject: string; taskId: number; tenantId: number; actorUserId: number; capability: string; destination?: string | null; interlockGeneration: number; issuer: string; signature: string; issuedAt: Date; expiresAt: Date }) { return withTenant(db, input.tenantId, async tx => { const values = { leaseId: input.leaseId, requestId: input.requestId, actionDigest: input.actionDigest, subject: input.subject, taskId: input.taskId, tenantId: input.tenantId, actorUserId: input.actorUserId, capability: input.capability, destination: input.destination ?? null, interlockGeneration: input.interlockGeneration, issuer: input.issuer, signature: input.signature, issuedAt: input.issuedAt, expiresAt: input.expiresAt }; const [row] = await tx.insert(capabilityLeases).values(values).returning(); return row!; }); }
-export async function consumeCapabilityLease(db: Db, input: { leaseId: string; tenantId: number; taskId: number; actorUserId: number; actionDigest: string; interlockGeneration: number }) { return withTenant(db, input.tenantId, async tx => { const [row] = await tx.update(capabilityLeases).set({ consumedAt: new Date() }).where(and(eq(capabilityLeases.leaseId,input.leaseId),eq(capabilityLeases.tenantId,input.tenantId),eq(capabilityLeases.taskId,input.taskId),eq(capabilityLeases.actorUserId,input.actorUserId),eq(capabilityLeases.actionDigest,input.actionDigest),eq(capabilityLeases.interlockGeneration,input.interlockGeneration),sql`${capabilityLeases.consumedAt} IS NULL`,sql`${capabilityLeases.revokedAt} IS NULL`,sql`${capabilityLeases.expiresAt} > NOW()`)).returning(); return Boolean(row); }); }
+export async function consumeCapabilityLease(db: Db, input: { leaseId: string; tenantId: number; taskId: number; actorUserId: number; actionDigest: string; interlockGeneration: number; signature: string; publicKeyPem: string }) {
+ return withTenant(db, input.tenantId, async tx => {
+  const [lease] = await tx.select().from(capabilityLeases).where(and(
+   eq(capabilityLeases.leaseId,input.leaseId),
+   eq(capabilityLeases.tenantId,input.tenantId),
+   eq(capabilityLeases.taskId,input.taskId),
+   eq(capabilityLeases.actorUserId,input.actorUserId),
+   eq(capabilityLeases.actionDigest,input.actionDigest),
+   eq(capabilityLeases.interlockGeneration,input.interlockGeneration),
+   sql`${capabilityLeases.consumedAt} IS NULL`,
+   sql`${capabilityLeases.revokedAt} IS NULL`,
+   sql`${capabilityLeases.expiresAt} > NOW()`
+  )).for("update");
+  if(!lease || lease.signature!==input.signature || !input.publicKeyPem) return false;
+  if(!verifyCapabilityLeaseSignature({
+   leaseId:lease.leaseId,requestId:lease.requestId,actionDigest:lease.actionDigest,subject:lease.subject,
+   tenant:String(lease.tenantId),taskId:lease.taskId,actorUserId:lease.actorUserId,capability:lease.capability,
+   destination:lease.destination??null,issuedAt:lease.issuedAt.getTime(),expiresAt:lease.expiresAt.getTime(),
+   interlockGeneration:lease.interlockGeneration,issuer:lease.issuer,signature:lease.signature
+  },input.publicKeyPem)) return false;
+  const [row] = await tx.update(capabilityLeases).set({ consumedAt: new Date() }).where(and(
+   eq(capabilityLeases.leaseId,input.leaseId),
+   eq(capabilityLeases.tenantId,input.tenantId),
+   eq(capabilityLeases.taskId,input.taskId),
+   eq(capabilityLeases.actorUserId,input.actorUserId),
+   eq(capabilityLeases.actionDigest,input.actionDigest),
+   eq(capabilityLeases.interlockGeneration,input.interlockGeneration),
+   eq(capabilityLeases.signature,input.signature),
+   sql`${capabilityLeases.consumedAt} IS NULL`,
+   sql`${capabilityLeases.revokedAt} IS NULL`,
+   sql`${capabilityLeases.expiresAt} > NOW()`
+  )).returning();
+  return Boolean(row);
+ });
+}
 export async function createArtifact(db: Db, input: { tenantId: number; taskId?: number; stepId?: number; storageKey: string; filename: string; contentType: string; size: number; sha256: string }) { return withTenant(db, input.tenantId, async tx => { const [row] = await tx.insert(artifacts).values({ tenantId:input.tenantId, taskId:input.taskId??null, stepId:input.stepId??null, storageKey:input.storageKey, filename:input.filename, contentType:input.contentType, size:input.size, sha256:input.sha256 }).returning(); return row!; }); }
 export async function listArtifacts(db: Db, taskId: number, tenantId: number) { return withTenant(db, tenantId, tx => tx.query.artifacts.findMany({ where: and(eq(artifacts.taskId,taskId),eq(artifacts.tenantId,tenantId)) })); }
