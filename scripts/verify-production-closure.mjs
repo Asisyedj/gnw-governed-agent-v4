@@ -8,7 +8,7 @@ const required=[
   "src/server/db/schema.ts","src/server/db/index.ts",
   "src/server/governance.ts","src/server/action-envelope.ts",
   "src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts",
-  "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts",
+  "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts","src/server/verified-data.ts","src/tests/unit/verified-data.test.ts",
   "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md"
 ];
 
