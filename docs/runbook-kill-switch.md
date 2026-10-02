@@ -1,56 +1,68 @@
 # Runbook: Kill Switch Activation & Recovery
 
 ## Purpose
-The kill switch immediately suspends ALL governed agent actions across all tenants.  
-It is a last-resort safety control — not a maintenance mode.
 
----
+The kill switch suspends governed agent actions. It is a safety control for suspected misuse, compromise, cascading failure or unsafe behavior.
 
-## Activation
+## Activation through API
 
-### Via API (requires `admin` or `owner` role)
-```bash
-curl -X POST https://<GNW_HOST>/api/interlock/kill-switch \
+Requires an authenticated owner/admin session:
+
+~~~bash
+curl -X POST "https://<GNW_HOST>/api/interlock/kill-switch" \
   -H "Content-Type: application/json" \
   -H "Cookie: session=<your-session-cookie>" \
-  -d '{"enabled": true, "reason": "Anomalous agent behaviour detected"}'
-```
+  -d '{"enabled":true,"reason":"Anomalous agent behaviour detected"}'
+~~~
 
-### Via kubectl (emergency — bypasses API)
-```bash
-kubectl exec -n gnw deploy/gnw-app -- \
-  node -e "require('./dist/server/scripts/killSwitch.js').activate()"
-```
+Record the returned interlock generation and preserve the corresponding audit event.
 
----
+## Emergency activation when the API is unavailable
 
-## What Happens
-- All POST/PUT/PATCH/DELETE requests to governed endpoints return **503 kill_switch**.
-- Every blocked request is written to `audit_log` with `event_type: kill_switch_block`.
-- Health and interlock endpoints remain available.
-- Read-only GET requests are NOT blocked.
+Use the controlled database administration path. Do not UPDATE or DELETE interlock history.
 
----
+~~~sql
+BEGIN;
+SELECT pg_advisory_xact_lock(hashtext('gnw:interlock-generation'));
+
+INSERT INTO interlocks(kill_switch,circuit_open,generation,reason,updated_by_user_id)
+SELECT TRUE,
+       TRUE,
+       COALESCE(MAX(generation),0) + 1,
+       'Emergency kill switch: API unavailable',
+       NULL
+FROM interlocks;
+
+COMMIT;
+~~~
+
+Run this only through the approved DBA emergency procedure with independent authorization. The application runtime role must not have permission to perform this action.
+
+## What happens
+
+- New governed write actions are refused while the kill switch/circuit breaker is engaged.
+- Required security events are written to the audit log.
+- Health and interlock status remain available so operators can inspect and recover the control plane.
+- Existing in-flight work is not retroactively guaranteed to stop; the executor/provider must enforce its own timeout/cancellation boundary.
 
 ## Recovery
 
-1. **Investigate** — review `audit_log` for the triggering event.
-2. **Confirm** with at least two authorized operators that it is safe to re-enable.
-3. **Deactivate**:
-```bash
-curl -X POST https://<GNW_HOST>/api/interlock/kill-switch \
+1. Preserve the triggering evidence and incident timeline.
+2. Confirm with the incident commander and a second authorized reviewer that recovery is permitted.
+3. Re-enable through the API when available:
+
+~~~bash
+curl -X POST "https://<GNW_HOST>/api/interlock/kill-switch" \
   -H "Content-Type: application/json" \
   -H "Cookie: session=<your-session-cookie>" \
-  -d '{"enabled": false, "reason": "Investigation complete — safe to resume"}'
-```
-4. **Verify** — confirm that `killSwitch: false` is returned by `GET /api/interlock`.
-5. **Document** the incident in your incident management system.
+  -d '{"enabled":false,"reason":"Incident containment complete; resume approved"}'
+~~~
 
----
+4. Verify GET /api/interlock shows the new generation and the intended state.
+5. Verify a new capability lease is required after the interlock generation changes.
+6. Run the smoke-test/health checks before resuming normal operations.
+7. Document the incident and attach audit/runtime evidence.
 
-## Escalation
-If the API is unreachable, restart the pod with the `FORCE_KILL_SWITCH=true` env var  
-or restore the DB row directly:
-```sql
-UPDATE interlocks SET kill_switch = false, updated_at = now() WHERE id = 1;
-```
+## Important
+
+Do not use unsupported environment flags or directly UPDATE/DELETE the interlocks table. Interlock state is append-only and generation changes invalidate previously issued capability leases.
