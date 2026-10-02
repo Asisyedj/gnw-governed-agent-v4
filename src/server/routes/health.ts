@@ -1,21 +1,27 @@
-import type { FastifyPluginAsync } from "fastify";
-import type { Db } from "../db/index.js";
-import { getInterlock } from "../repo.js";
+import type { FastifyPluginAsync } from 'fastify';
+import type { Db } from '../db/index.js';
+import { getInterlock } from '../repo.js';
 
-declare module "fastify" {
+declare module 'fastify' {
   interface FastifyInstance { db: Db; }
 }
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/health", async (_req, reply) => {
-    return reply.send({ ok: true, ts: new Date().toISOString() });
+  app.get('/health', async (_req, reply) => {
+    return reply.send({
+      status: 'ok',
+      ok: true,
+      version: process.env.APP_VERSION ?? '1.0.0',
+      ts: new Date().toISOString(),
+    });
   });
 
-  app.get("/ready", async (_req, reply) => {
+  app.get('/ready', async (_req, reply) => {
     try {
       const lock = await getInterlock(app.db);
       const degraded = lock.killSwitch || lock.circuitOpen;
       return reply.status(degraded ? 503 : 200).send({
+        status: degraded ? 'degraded' : 'ok',
         ok: !degraded,
         killSwitch: lock.killSwitch,
         circuitOpen: lock.circuitOpen,
@@ -24,7 +30,11 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (err) {
       app.log.error(err);
-      return reply.status(503).send({ ok: false, error: "DB unavailable" });
+      return reply.status(503).send({
+        status: 'degraded',
+        ok: false,
+        error: 'DB unavailable',
+      });
     }
   });
 };
