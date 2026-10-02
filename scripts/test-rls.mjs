@@ -26,7 +26,7 @@ try {
     if (!insertDenied) throw new Error('cross-tenant INSERT was allowed');
     await b.query('ROLLBACK');
     await b.query('BEGIN');
-    await b.query('SELECT set_config('app.tenant_id',$1,true)', [String(t2)]);
+    await b.query('SELECT set_config(\'app.tenant_id\',$1,true)', [String(t2)]);
     await b.query('INSERT INTO users(tenant_id,email,password_hash,role) VALUES($1,$2,$3,$4)',[t2,'b@example.test','x','owner']);
     await b.query('COMMIT');
   } finally { a.release(); b.release(); }
