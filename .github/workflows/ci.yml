@@ -46,6 +46,8 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Harden test database role
+        run: PGPASSWORD=gnw_test_pw psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE gnw NOSUPERUSER NOBYPASSRLS;"
       - name: Run migrations
         run: npm run db:migrate
       - name: Verify production closure static gate
