@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "GNW Governed Agent — production control plane",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch src/server/app.ts",
@@ -54,6 +56,7 @@
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
-    "vitest": "^2.0.5"
+    "vitest": "^2.0.5",
+    "globals": "^15.12.0"
   }
 }
