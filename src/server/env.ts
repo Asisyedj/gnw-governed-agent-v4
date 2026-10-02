@@ -12,7 +12,7 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   allowSelfRegistration:bool(source.ALLOW_SELF_REGISTRATION,false),
   llmBaseUrl:(source.LLM_BASE_URL??"https://api.openai.com/v1").replace(/\/$/,""),llmApiKey:source.LLM_API_KEY??"",llmModel:source.LLM_MODEL??"gpt-4o-mini",
   deepResearchBaseUrl:(source.GNW_DEEP_RESEARCH_BASE_URL??source.LLM_BASE_URL??"https://api.openai.com/v1").replace(/\/$/,""),
-  deepResearchApiKey:source.GNW_DEEP_RESEARCH_API_KEY??source.LLM_API_KEY??"",deepResearchModel:source.GNW_DEEP_RESEARCH_MODEL??"o3-deep-research",
+  deepResearchApiKey:source.GNW_DEEP_RESEARCH_API_KEY??source.LLM_API_KEY??"",deepResearchModel:source.GNW_DEEP_RESEARCH_MODEL??"gpt-5.6-sol",
   deepResearchMaxToolCalls:int(source.GNW_DEEP_RESEARCH_MAX_TOOL_CALLS,50),deepResearchTimeoutMs:int(source.GNW_DEEP_RESEARCH_TIMEOUT_MS,3600000),
   deepResearchUseCodeInterpreter:bool(source.GNW_DEEP_RESEARCH_USE_CODE_INTERPRETER,isProduction?false:true),
   deepResearchAllowedDomains:(source.GNW_DEEP_RESEARCH_ALLOWED_DOMAINS??"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean),
