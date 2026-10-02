@@ -11,7 +11,7 @@ export type PilotConfig = {
 
 const PILOTS: PilotConfig[] = [
   { id: "council_shadow", label: "Council Shadow Mode", enabled: false, rolloutPct: 0, description: "Run council evaluation in shadow mode without blocking" },
-  { id: "deep_research_v2", label: "Deep Research v2", enabled: true, rolloutPct: 100, description: "Use o3-deep-research model for extended research tasks" },
+  { id: "deep_research_v2", label: "Deep Research v2", enabled: false, rolloutPct: 0, description: "Disabled until the Responses API integration is runtime-verified against the current approved deep-research model" },
   { id: "speculative_execution", label: "Speculative Execution", enabled: false, rolloutPct: 0, description: "Pre-execute likely next steps in parallel" },
   { id: "merkle_chain_v2", label: "Merkle Chain v2", enabled: true, rolloutPct: 100, description: "Enhanced trajectory integrity with Merkle chaining" },
 ];
