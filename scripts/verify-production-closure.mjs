@@ -13,7 +13,7 @@ if(!schema.includes('from "drizzle-orm/pg-core"'))failures.push("schema:not-post
 if(schema.includes("sqliteTable("))failures.push("schema:sqlite-runtime-mismatch");
 const db=existsSync("src/server/db/index.ts")?readFileSync("src/server/db/index.ts","utf8"):"";
 if(!db.includes("set_config('app.tenant_id'"))failures.push("db:tenant-context-missing");
-if(!db.includes("db.transaction"))failures.push("db:tenant-context-not-transactional");
+if(!/\.transaction\(async tx/.test(db))failures.push("db:tenant-context-not-transactional");
 const exec=existsSync("src/server/execution.ts")?readFileSync("src/server/execution.ts","utf8"):"";
 if(!exec.includes("governance.authorize"))failures.push("execution:governance-not-enforced");
 if(exec.indexOf("governance.authorize")>exec.indexOf("handler()"))failures.push("execution:handler-before-governance");
