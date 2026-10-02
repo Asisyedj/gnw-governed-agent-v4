@@ -30,7 +30,7 @@ class LocalStorageDriver implements StorageDriver {
     const target = resolve(root, key);
     const rel = relative(root, target);
     if (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel)) {
-      throw new Error("storage_path_escape");
+      throw new Error("invalid_storage_key");
     }
     return target;
   }
