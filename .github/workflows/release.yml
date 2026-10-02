@@ -113,6 +113,9 @@ jobs:
         run: |
           test -s sbom.json
           test -s dist/SHA256SUMS.txt
+
+      - name: Verify production release evidence seal
+        run: npm run verify:release:evidence
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
