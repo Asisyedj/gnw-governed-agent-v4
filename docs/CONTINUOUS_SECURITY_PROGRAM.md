@@ -20,7 +20,7 @@ GNW uses continuous control verification rather than treating a one-time penetra
 | Access review | Monthly | IAM/RBAC review record | Blocking for privileged-role drift |
 | Incident/kill-switch drill | Quarterly | drill evidence | Blocking if recovery objective is missed |
 
-OWASP WSTG recommends security testing across development, deployment, and maintenance rather than relying only on a final penetration test. citeturn1search0turn1search2
+OWASP Web Security Testing Guide (WSTG) is the methodology baseline for lifecycle security testing.
 
 ## Red-team simulation scope
 
@@ -38,11 +38,11 @@ Production restricted actions fail closed if the attestation verifier configurat
 
 The repository now contains a generic signed runtime-attestation verification boundary. This is deliberately not described as a hardware quote verifier: actual hardware-backed trust requires a deployed confidential-computing verifier for the selected platform (for example a confidential VM/TEE with remote attestation) and a measured workload identity policy.
 
-The deployment target must verify the workload measurement before releasing sensitive credentials or restricted data. NIST's current confidential-computing work describes attestation as a mechanism for verifying that code and configuration match expected measurements before trusting a TEE workload. citeturn2search3turn2search24
+The deployment target must verify the workload measurement before releasing sensitive credentials or restricted data. NIST's confidential-computing guidance treats attestation as evidence that a workload's measured code/configuration matches the expected trusted state.
 
 ## Threshold / MPC roadmap
 
-GNW should not implement ad-hoc MPC or threshold cryptography in application code. For root signing keys, emergency release authority, or high-value credential unsealing, use an independently reviewed threshold scheme or HSM/KMS integration. NIST describes threshold cryptography as distributing secret-key trust across multiple parties so that the key need not be reconstructed during the cryptographic operation. citeturn3search0turn3search1
+GNW should not implement ad-hoc MPC or threshold cryptography in application code. For root signing keys, emergency release authority, or high-value credential unsealing, use an independently reviewed threshold scheme or HSM/KMS integration. NIST's threshold-cryptography program describes distributing secret-key trust across multiple parties so the secret need not be reconstructed during the cryptographic operation.
 
 Target architecture:
 
@@ -61,7 +61,7 @@ GNW already uses SHA-256 digests, signed grants, signed capability leases, actio
 
 ## Security scorecard
 
-The live scorecard consists of OSSF Scorecard SARIF plus GNW's continuous-security evidence. OSSF Scorecard evaluates supply-chain and repository controls including branch protection, dangerous workflows, code review, pinned dependencies, token permissions, CI testing and SAST. citeturn5search1
+The live scorecard consists of OSSF Scorecard SARIF plus GNW's continuous-security evidence. OSSF Scorecard evaluates supply-chain and repository controls including branch protection, dangerous workflows, code review, pinned dependencies, token permissions, CI testing and SAST.
 
 Security findings are tracked by severity and control owner. A score is a measurement of current evidence, not a guarantee of security.
 
