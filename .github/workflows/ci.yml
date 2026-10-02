@@ -32,6 +32,8 @@ jobs:
       MIGRATION_DATABASE_URL: postgresql://gnw_admin:gnw_admin_pw@localhost:5432/gnw_test
       COOKIE_SECRET: ci-test-cookie-secret-minimum-32-chars-ok
       LOG_LEVEL: silent
+      GNW_APP_DB_USER: gnw_app
+      GNW_APP_DB_PASSWORD: gnw_app_pw
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
