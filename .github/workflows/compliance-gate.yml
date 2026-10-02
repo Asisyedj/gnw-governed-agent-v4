@@ -1,0 +1,45 @@
+name: compliance-gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compliance:
+    name: Compliance, Crypto & Closure
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - name: Clean install
+        run: npm ci
+      - name: Validate Pakistan compliance applicability and control map
+        run: npm run verify:compliance
+      - name: Independent cryptographic closure vectors
+        run: npm run verify:crypto
+      - name: Production closure static gate
+        run: npm run verify:production
+      - name: Evidence manifest
+        shell: bash
+        run: |
+          mkdir -p compliance-evidence
+          git rev-parse HEAD > compliance-evidence/commit-sha.txt
+          sha256sum compliance/applicability.json > compliance-evidence/applicability.sha256
+          sha256sum compliance/control-matrix.json > compliance-evidence/control-matrix.sha256
+          npm run verify:compliance > compliance-evidence/compliance.txt
+          npm run verify:crypto > compliance-evidence/crypto.txt
+          npm run verify:production > compliance-evidence/closure.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compliance-gate-${{ github.sha }}
+          path: compliance-evidence/
+          retention-days: 180
