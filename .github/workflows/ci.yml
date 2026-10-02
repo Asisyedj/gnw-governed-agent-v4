@@ -5,7 +5,8 @@ on:
   pull_request:
     branches: [main]
 permissions:
-  contents: read
+  contents: write
+
 jobs:
   build-and-test:
     name: Build & Test
@@ -13,11 +14,16 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        env: {POSTGRES_DB: gnw_test, POSTGRES_USER: gnw, POSTGRES_PASSWORD: gnw_test_pw}
+        env:
+          POSTGRES_DB: gnw_test
+          POSTGRES_USER: gnw
+          POSTGRES_PASSWORD: gnw_test_pw
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U gnw -d gnw_test"
-          --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://gnw:gnw_test_pw@localhost:5432/gnw_test
@@ -30,21 +36,19 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
-      - name: Bootstrap lockfile for verification
+      - name: Ensure canonical lockfile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/gnw/production-closure-v1'
         run: |
           if [ ! -f package-lock.json ]; then
             npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "build: add canonical npm lockfile"
+            git push origin "HEAD:$GITHUB_REF_NAME"
           fi
-          test -s package-lock.json
-      - name: Emit lockfile evidence
-        run: |
-          python3 - <<'PY'
-          import base64
-          from pathlib import Path
-          data=base64.b64encode(Path("package-lock.json").read_bytes()).decode()
-          for i in range(0,len(data),3500):
-              print(f"GNW_LOCK_CHUNK {i//3500} {data[i:i+3500]}")
-          PY
+      - name: Require lockfile
+        run: test -s package-lock.json
       - name: Clean install
         run: npm ci
       - name: Typecheck
@@ -66,9 +70,10 @@ jobs:
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ github.sha }}
+          name: coverage-$GITHUB_SHA
           path: coverage/
           retention-days: 30
+
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-24.04
@@ -81,6 +86,7 @@ jobs:
           path: ./
           base: ${{ github.event.repository.default_branch }}
           extra_args: --only-verified
+
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-24.04
@@ -89,6 +95,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v4
         with: {fail-on-severity: high}
+
   evidence:
     name: Build Evidence
     runs-on: ubuntu-24.04
@@ -97,7 +104,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
-      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Install exact dependencies
+        run: npm ci
       - name: Collect evidence
         run: |
           mkdir -p evidence
@@ -105,9 +113,9 @@ jobs:
           npm --version > evidence/npm-version.txt
           npm audit --json > evidence/npm-audit.json
           sha256sum package-lock.json > evidence/package-lock.sha256
-          jq -n --arg sha "${{ github.sha }}" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg lock "$(sha256sum package-lock.json | cut -d' ' -f1)" '{schema:"GNW.BuildEvidence.v2",sha:$sha,ts:$ts,packageLockSha256:$lock}' > evidence/build.json
+          jq -n --arg sha "$GITHUB_SHA" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg lock "$(sha256sum package-lock.json | cut -d' ' -f1)" '{schema:"GNW.BuildEvidence.v2",sha:$sha,ts:$ts,packageLockSha256:$lock}' > evidence/build.json
       - uses: actions/upload-artifact@v4
         with:
-          name: build-evidence-${{ github.sha }}
+          name: build-evidence-$GITHUB_SHA
           path: evidence/
           retention-days: 90
