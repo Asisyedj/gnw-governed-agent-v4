@@ -22,7 +22,11 @@ for(const file of ["drizzle/0001_production_rls.sql","drizzle/0002_governance_ha
  const sql=readFileSync(file,"utf8");
  for(const token of ["ENABLE ROW LEVEL SECURITY","FORCE ROW LEVEL SECURITY","current_setting('app.tenant_id'"]){if(!sql.includes(token))failures.push(`rls:${file}:${token}`);}
 }
-if(existsSync("k8s/deployment.yaml")){ const deployment=readFileSync("k8s/deployment.yaml","utf8"); if(deployment.includes("REPLACE_WITH_"))failures.push("deployment:unresolved-placeholder"); }
+if(existsSync("k8s/deployment.yaml")){
+ const deployment=readFileSync("k8s/deployment.yaml","utf8");
+ if(deployment.includes("REPLACE_WITH_"))failures.push("deployment:unresolved-placeholder");
+ if(!/image:\s+ghcr\\.io\\/asisyedj\\/gnw-governed-agent-v4@sha256:[0-9a-f]{64}/.test(deployment))failures.push("deployment:image-not-immutable");
+}
 if(existsSync(".github/workflows/ci.yml")){
  const ci=readFileSync(".github/workflows/ci.yml","utf8");
  if(/continue-on-error:\s*true/.test(ci))failures.push("ci:fail-open");
@@ -30,4 +34,5 @@ if(existsSync(".github/workflows/ci.yml")){
 }
 try{execFileSync("git",["diff","--check"],{stdio:"inherit"});}catch{failures.push("git:diff-check");}
 if(failures.length){console.error("GNW production closure: DENY");for(const failure of failures)console.error(` - ${failure}`);process.exit(1);}
+const cryptoTest=execFileSync("node",["scripts/verify-cryptographic-closure.mjs"],{encoding:"utf8"}); if(cryptoTest.trim())console.log(cryptoTest.trim());
 console.log("GNW production closure: static gate PASS");
