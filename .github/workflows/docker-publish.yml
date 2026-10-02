@@ -2,7 +2,6 @@ name: docker-publish
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
 
 permissions:
@@ -13,43 +12,36 @@ permissions:
 
 jobs:
   build-push:
-    name: Build & Push Container
+    name: Build, Scan & Attest Container
     runs-on: ubuntu-24.04
-    outputs:
-      digest: ${{ steps.push.outputs.digest }}
-      image:  ${{ steps.meta.outputs.tags }}
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { fetch-depth: 0 }
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Generate reproducible npm lockfile
-        run: npm install --package-lock-only
+      - name: Verify clean checkout
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)"
+          git diff --check
+          test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@792ab493f0fa5c8c55920b93a26cefd49a3fa82a
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@b27a081f655e9d4b60d04c3fcc5cbcaead454f6a
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@97c5b2343ab7c6442e68cfd6b01a8cbf57e5708d
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@678a46a45e920924c7b07d6209b4d02a3031d403
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -57,36 +49,41 @@ jobs:
 
       - name: Build & Push
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@cdfd6263be87f1ad1df48e3edcc81e4f41e57daa
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to:   type=gha,mode=max
+          cache-to: type=gha,mode=max
           provenance: true
           sbom: true
 
+      - name: Scan image for HIGH/CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@bfa4b33a029b9aa80ddb784b45574c30e072c59e
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
       - name: Production container smoke test
+        shell: bash
         run: |
-          set -eu
-          IMAGE_REPOSITORY="${GITHUB_REPOSITORY,,}"
-          IMAGE_TAG="ghcr.io/${IMAGE_REPOSITORY}:sha-${GITHUB_SHA::7}"
-          COOKIE_SECRET="$(printf "x%.0s" $(seq 1 64))"
-          docker pull "$IMAGE_TAG"
-          docker run -d --rm --name gnw-production-smoke \
-            -e NODE_ENV=production \
-            -e DATABASE_URL=postgresql://127.0.0.1:5432/gnw \
-            -e COOKIE_SECRET="$COOKIE_SECRET" \
-            -p 18080:3000 \
-            "$IMAGE_TAG"
+          set -euo pipefail
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
+          COOKIE_SECRET="$(printf "x%.0s" {1..64})"
+          docker pull "$IMAGE"
+          docker run -d --rm --name gnw-production-smoke             -e NODE_ENV=production             -e DATABASE_URL=postgresql://127.0.0.1:5432/gnw             -e COOKIE_SECRET="$COOKIE_SECRET"             -p 18080:3000             "$IMAGE"
           cleanup() {
             docker logs gnw-production-smoke || true
             docker stop gnw-production-smoke >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
-          for _ in $(seq 1 30); do
+          for _ in {1..30}; do
             if curl -fsS http://127.0.0.1:18080/api/health >/tmp/gnw-health.json; then
               grep -q '"ok":true' /tmp/gnw-health.json
               exit 0
@@ -95,9 +92,10 @@ jobs:
           done
           echo "production container health check did not become ready"
           exit 1
+
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@9d57eef8c06cd9d6b433effeeb7a6a77b3ff94ad
         with:
-          subject-name:   ghcr.io/${{ github.repository }}
+          subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
