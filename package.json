@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "GNW Governed Agent — production control plane",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch src/server/app.ts",
@@ -28,7 +30,7 @@
     "@fastify/rate-limit": "^10.2.0",
     "@fastify/static": "^10.1.5",
     "bcryptjs": "^2.4.3",
-    "drizzle-orm": "^0.32.1",
+    "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
     "pg": "^8.12.0",
     "zod": "^3.23.8"
@@ -43,7 +45,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^5.0.3",
     "concurrently": "^9.0.1",
     "eslint": "^9.9.0",
     "pino-pretty": "^11.2.2",
@@ -52,6 +54,6 @@
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vite": "^6.4.3",
-    "vitest": "^2.1.9"
+    "vitest": "^5.0.3"
   }
 }
