@@ -1,4 +1,3 @@
-import type { Db } from "./db/index.js";
 import type { Env } from "./env.js";
 import { governedFetch } from "./security.js";
 
