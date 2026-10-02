@@ -5,10 +5,11 @@ function trustAnchor(v:string|undefined){
  if(!v)return undefined;
  try{
   const parsed=JSON.parse(v) as {threshold?:unknown;participants?:unknown;requireTee?:unknown};
-  if(!Number.isInteger(parsed.threshold)||parsed.threshold<1||!parsed.participants||typeof parsed.participants!=="object"||Array.isArray(parsed.participants))return undefined;
+  const threshold=Number(parsed.threshold);
+  if(!Number.isInteger(threshold)||threshold<1||!parsed.participants||typeof parsed.participants!=="object"||Array.isArray(parsed.participants))return undefined;
   const participants=Object.fromEntries(Object.entries(parsed.participants).filter(([k,p])=>typeof k==="string"&&typeof p==="string"&&k&&p));
-  if(Object.keys(participants).length<Number(parsed.threshold))return undefined;
-  return {threshold:Number(parsed.threshold),participants,requireTee:parsed.requireTee===undefined?true:Boolean(parsed.requireTee)} as const;
+  if(Object.keys(participants).length<threshold)return undefined;
+  return {threshold,participants,requireTee:parsed.requireTee===undefined?true:Boolean(parsed.requireTee)} as const;
  }catch{return undefined;}
 }
 export function loadEnv(source:NodeJS.ProcessEnv=process.env){
