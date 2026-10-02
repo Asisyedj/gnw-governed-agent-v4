@@ -14,7 +14,7 @@ const now=Date.now();
 const baseRequest=():GovernanceRequest=>({
   requestId:"req-1",subject:"1",tenant:"1",role:"operator",purpose:"test",classification:"public",
   operation:"search",resource:"knowledge",agent:"research",tool:"knowledge.search",scope:"knowledge.search",
-  budgetTokens:1000,budgetBytes:10000,issuedAt:now-1000,expiresAt:now+300000,nonce:"grant-1",taskId:1,
+  budgetTokens:1000,budgetBytes:10000,issuedAt:now-1000,expiresAt:now+300000,nonce:"grant-1",taskId:1,envelopeDigest:"0".repeat(64),
 });
 
 describe("production control primitives",()=>{
@@ -115,7 +115,9 @@ describe("governed execution boundary",()=>{
      taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-1",grantId:"g",
      governanceRequest:baseRequest(),
    } as any;
-   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now},handler);
+   const envelope={taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now};
+   (ctx.governanceRequest as GovernanceRequest).envelopeDigest=digestEnvelope(envelope);
+   const result=await executeWithGovernance(ctx,envelope,handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
  });
