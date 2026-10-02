@@ -1,6 +1,3 @@
-import type { Db } from "./db/index.js";
-import type { Env } from "./env.js";
-
 export type PilotConfig = {
   id: string;
   label: string;
