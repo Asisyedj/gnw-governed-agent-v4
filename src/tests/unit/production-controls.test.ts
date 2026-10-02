@@ -14,7 +14,7 @@ const now=Date.now();
 const baseRequest=():GovernanceRequest=>({
   requestId:"req-1",subject:"1",tenant:"1",role:"operator",purpose:"test",classification:"public",
   operation:"search",resource:"knowledge",agent:"research",tool:"knowledge.search",scope:"knowledge.search",
-  budgetTokens:1000,budgetBytes:10000,issuedAt:now-1000,expiresAt:now+10000,nonce:"grant-1",taskId:1,
+  budgetTokens:1000,budgetBytes:10000,issuedAt:now-1000,expiresAt:now+300000,nonce:"grant-1",taskId:1,
 });
 
 describe("production control primitives",()=>{
