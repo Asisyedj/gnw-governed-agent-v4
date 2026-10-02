@@ -26,7 +26,8 @@ export class LlmClient {
       const json = await resp.json() as { choices: Array<{ message: { content: string } }>; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number } };
       const content = json.choices[0]?.message?.content ?? "";
       const usage = json.usage ? { promptTokens: json.usage.prompt_tokens, completionTokens: json.usage.completion_tokens, totalTokens: json.usage.total_tokens } : undefined;
-      return { content, usage };
+      if (usage) return { content, usage };
+      return { content };
     } finally {
       clearTimeout(timeout);
     }
