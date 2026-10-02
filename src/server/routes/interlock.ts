@@ -9,6 +9,7 @@ declare module "fastify" { interface FastifyInstance { db: Db; } }
 const patchSchema = z.object({
   killSwitch: z.boolean().optional(),
   circuitOpen: z.boolean().optional(),
+  reason: z.string().trim().max(1000).optional(),
 }).refine(d => d.killSwitch !== undefined || d.circuitOpen !== undefined, { message: "Provide at least one field" });
 
 export const interlockRoutes: FastifyPluginAsync = async (app) => {
@@ -23,9 +24,9 @@ export const interlockRoutes: FastifyPluginAsync = async (app) => {
     const user = await findUserById(app.db, session.userId, session.tenantId);
     if (!user) return reply.status(401).send({ error: "Unauthenticated" });
     if (!(["owner", "admin"] as string[]).includes(user.role)) return reply.status(403).send({ error: "Only owner/admin can modify interlock.", code: "forbidden" });
-    const body = z.object({ enabled: z.boolean() }).safeParse(req.body);
+    const body = z.object({ enabled: z.boolean(), reason: z.string().trim().max(1000).optional() }).safeParse(req.body);
     if (!body.success) return reply.status(400).send({ error: "Invalid input" });
-    const updated = await setInterlock(app.db, { killSwitch: body.data.enabled }, session.userId);
+    const updated = await setInterlock(app.db, { killSwitch: body.data.enabled, reason: body.data.reason }, session.userId);
     await insertAuditLog(app.db, { eventType: body.data.enabled ? "kill_switch.engage" : "kill_switch.release", actorId: session.userId, tenantId: session.tenantId, outcome: "success", detail: { generation: updated.generation }, ipAddress: req.ip });
     return reply.send({ ok: true, interlock: updated });
   });
@@ -46,6 +47,7 @@ export const interlockRoutes: FastifyPluginAsync = async (app) => {
     const patch: { killSwitch?: boolean; circuitOpen?: boolean } = {};
     if (parsed.data.killSwitch !== undefined) patch.killSwitch = parsed.data.killSwitch;
     if (parsed.data.circuitOpen !== undefined) patch.circuitOpen = parsed.data.circuitOpen;
+    if (parsed.data.reason !== undefined) (patch as { reason?: string }).reason = parsed.data.reason;
     const updated = await setInterlock(app.db, patch, session.userId);
     await insertAuditLog(app.db, {
       eventType: "interlock.update",
