@@ -43,6 +43,10 @@ jobs:
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
       - name: Install from committed lockfile
         run: npm ci
+      - name: Validate Pakistan compliance matrix
+        run: npm run verify:compliance
+      - name: Independent cryptographic closure vectors
+        run: npm run verify:cryptographic-closure
       - name: Production environment preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -109,6 +113,16 @@ jobs:
         run: |
           test -s sbom.json
           test -s dist/SHA256SUMS.txt
+
+      - name: Verify production release evidence and TEE attestation
+        env:
+          GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
+          GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+        run: npm run verify:release:evidence
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
