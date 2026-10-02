@@ -12,3 +12,34 @@ export function checkTaskInvariants(task:{id:number;status:string;tenantId:numbe
 export function checkStepInvariants(step:{id:number;taskId:number;stepIndex:number;agentRole:string;toolName:string;operation:string;inputDigest:string;outputDigest:string|null;chainHash:string;prevChainHash:string|null}){const v:InvariantViolation[]=[];if(!step.id||step.id<=0)v.push({code:"step_id_invalid"});if(!step.taskId||step.taskId<=0)v.push({code:"step_task_missing"});if(!Number.isInteger(step.stepIndex)||step.stepIndex<0)v.push({code:"step_index_invalid"});if(!step.agentRole)v.push({code:"step_agent_missing"});if(!step.toolName)v.push({code:"step_tool_missing"});if(!/^[0-9a-f]{64}$/.test(step.inputDigest))v.push({code:"step_input_digest_invalid"});if(step.outputDigest!==null&&!/^[0-9a-f]{64}$/.test(step.outputDigest))v.push({code:"step_output_digest_invalid"});if(!/^[0-9a-f]{64}$/.test(step.chainHash))v.push({code:"step_chain_hash_invalid"});return v;}
 export function digestToolInput(tool:string,operation:string,params:Record<string,unknown>):string{return sha256(`tool-input:${tool}:${operation}:${canonicalize(params)}`);}
 export function digestToolOutput(tool:string,operation:string,result:unknown):string{return sha256(`tool-output:${tool}:${operation}:${canonicalize(result)}`);}
+export {
+  asEvidenceId,
+  asRequestId,
+  asSha256,
+  asTaskId,
+  asTenantId,
+  immutable,
+  buildVerifiedRagInput,
+  verifyDataStage,
+  verifyIngestion,
+  verifyEvidenceRecord,
+  verifyGroundedAnswer,
+  verifyInvariantSet,
+  verifyRetrieval,
+} from "./verified-data.js";
+export type {
+  DataStage,
+  IngestedChunk,
+  IngestedDocument,
+  DeepReadonly,
+  EvidenceId,
+  EvidenceRecord,
+  GroundedAnswer,
+  RequestId,
+  RetrievedEvidenceSet,
+  Sha256Digest,
+  TaskId,
+  TenantId,
+  VerificationReport,
+} from "./verified-data.js";
+
