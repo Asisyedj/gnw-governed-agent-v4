@@ -104,6 +104,7 @@ vi.mock("../../server/repo.js",()=>({
  claimNonce:vi.fn(async()=>true),
  getInterlock:vi.fn(async()=>({killSwitch:false,circuitOpen:false,generation:0})),
  reserveBudget:vi.fn(async()=>true),
+ createCapabilityLease:vi.fn(async()=>undefined),
 }));
 describe("governed execution boundary",()=>{
  it("runs handler only after governance admission",async()=>{
@@ -111,7 +112,7 @@ describe("governed execution boundary",()=>{
    const handler=vi.fn(async()=>({ok:true}));
    const ctx={
      db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
-     taskId:1,tenantId:1,actorId:1,requestId:"req-1",grantId:"g",
+     taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-1",grantId:"g",
      governanceRequest:baseRequest(),
    } as any;
    const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now},handler);
