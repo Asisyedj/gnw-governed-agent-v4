@@ -20,8 +20,9 @@ function hashToken(token:string){return createHash("sha256").update(token).diges
 function setCookieToken(reply:unknown,token:string){
   (reply as {setCookie:(n:string,v:string,o:unknown)=>void}).setCookie("session",token,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:SESSION_TTL_MS/1000});
 }
-const loginSchema=z.object({email:z.string().email(),password:z.string().min(1)});
-const registerSchema=z.object({email:z.string().email(),password:z.string().min(12)});
+const tenantSlugSchema=z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/);
+const loginSchema=z.object({email:z.string().email(),password:z.string().min(1),tenantSlug:tenantSlugSchema.optional()});
+const registerSchema=z.object({email:z.string().email(),password:z.string().min(12),tenantSlug:tenantSlugSchema.optional()});
 
 export const authRoutes:FastifyPluginAsync=async(app)=>{
   app.get("/bootstrap",async(_req,reply)=>{
@@ -35,15 +36,17 @@ export const authRoutes:FastifyPluginAsync=async(app)=>{
     const parsed=registerSchema.safeParse(req.body);
     if(!parsed.success)return reply.status(400).send({error:"Invalid input",code:"invalid_input"});
     const {email,password}=parsed.data;
+    const tenantSlug=parsed.data.tenantSlug??DEFAULT_TENANT_SLUG;
     const passwordHash=await bcrypt.hash(password,SALT_ROUNDS);
 
     let result:{tenantId:number;userId:number;role:"owner"|"viewer"};
     try{
       result=await app.db.transaction(async tx=>{
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('gnw:default-bootstrap-registration'))`);
-        let tenant=await tx.query.tenants.findFirst({where:eq(tenants.slug,DEFAULT_TENANT_SLUG)});
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"gnw:bootstrap:" + tenantSlug}))`);
+        let tenant=await tx.query.tenants.findFirst({where:eq(tenants.slug,tenantSlug)});
         if(!tenant){
-          const [created]=await tx.insert(tenants).values({slug:DEFAULT_TENANT_SLUG,displayName:"Default Workspace"}).returning();
+          const displayName=tenantSlug===DEFAULT_TENANT_SLUG?"Default Workspace":tenantSlug.replace(/-/g," ");
+          const [created]=await tx.insert(tenants).values({slug:tenantSlug,displayName}).returning();
           tenant=created!;
         }
         await tx.execute(sql`select set_config('app.tenant_id', ${String(tenant.id)}, true)`);
@@ -78,7 +81,7 @@ export const authRoutes:FastifyPluginAsync=async(app)=>{
     const parsed=loginSchema.safeParse(req.body);
     if(!parsed.success)return reply.status(400).send({error:"Invalid input",code:"invalid_input"});
     const {email,password}=parsed.data;
-    const tenant=await findTenantBySlug(app.db,DEFAULT_TENANT_SLUG);
+    const tenant=await findTenantBySlug(app.db,parsed.data.tenantSlug??DEFAULT_TENANT_SLUG);
     if(!tenant)return reply.status(401).send({error:"Invalid credentials.",code:"invalid_credentials"});
     const user=await findUserByEmail(app.db,tenant.id,email);
     if(!user){await bcrypt.hash(password,SALT_ROUNDS);return reply.status(401).send({error:"Invalid credentials.",code:"invalid_credentials"});}
