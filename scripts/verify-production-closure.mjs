@@ -25,7 +25,7 @@ if(!/node_modules/.test(read("package-lock.json"))) failures.push("lockfile:inva
 const schema=read("src/server/db/schema.ts");
 if(!schema.includes('from "drizzle-orm/pg-core"')) failures.push("schema:not-postgresql");
 if(schema.includes("sqliteTable(")) failures.push("schema:sqlite-runtime-mismatch");
-for(const token of ["users_id_tenant_uq","tasks_id_tenant_uq","task_steps_id_tenant_uq","sessions_user_same_tenant_fk","tasks_creator_same_tenant_fk","task_steps_task_same_tenant_fk","approvals_task_same_tenant_fk","budget_task_same_tenant_fk","artifacts_task_same_tenant_fk","capability_task_same_tenant_fk"]){
+for(const token of ["users_id_tenant_uq","tasks_id_tenant_uq","task_steps_id_tenant_uq","sessions_user_same_tenant_fk","tasks_creator_same_tenant_fk","task_steps_task_same_tenant_fk","approvals_task_same_tenant_fk","budget_task_same_tenant_fk","artifacts_task_same_tenant_fk","capability_task_same_tenant_fk","capability_actor_same_tenant_fk"]){
   if(!schema.includes(token)) failures.push(`schema:tenant-integrity-missing:${token}`);
 }
 
@@ -39,6 +39,7 @@ const authzIndex=exec.indexOf("governance.authorize");
 const handlerIndex=exec.indexOf("handler()");
 if(authzIndex<0||handlerIndex<0||authzIndex>handlerIndex) failures.push("execution:handler-before-governance");
 if(!exec.includes("persistCapabilityLease")) failures.push("execution:capability-lease-persistence-missing");
+if(!exec.includes("consumeCapabilityLease")) failures.push("execution:capability-lease-consumption-missing");
 
 const audit=read("src/server/audit.ts");
 if(!audit.includes("setInterlock")) failures.push("audit:required-write-does-not-trip-interlock");
@@ -66,6 +67,7 @@ if(ci.includes("git push")) failures.push("ci:source-mutation-present");
 if(!ci.includes("npm run verify:rls")) failures.push("ci:rls-gate-missing");
 if(!ci.includes("npm run verify:production")) failures.push("ci:production-gate-missing");
 if(!ci.includes("npm audit --audit-level=high")) failures.push("ci:dependency-audit-missing");
+if(!ci.includes("gnw_migrator")) failures.push("ci:dedicated-migrator-missing");
 
 const release=read(".github/workflows/release.yml");
 if(release.includes("softprops/action-gh-release")) failures.push("release:unsupported-release-action");
