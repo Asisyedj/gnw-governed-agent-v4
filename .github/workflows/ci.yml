@@ -112,7 +112,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
-      - run: npm ci
+      - name: Verify committed lockfile install
+        run: test -f package-lock.json && npm ci
       - name: Collect evidence
         run: |
           mkdir -p evidence
