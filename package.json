@@ -27,7 +27,8 @@
     "verify:invariants": "vitest run src/tests/unit/verified-data.test.ts",
     "verify:crypto": "node scripts/verify-cryptographic-closure.mjs",
     "verify:compliance": "node scripts/verify-compliance-matrix.mjs",
-    "verify:release:evidence": "node scripts/verify-release-evidence.mjs"
+    "verify:release:evidence": "node scripts/verify-release-evidence.mjs",
+    "verify:git-release-metadata": "node scripts/verify-git-release-metadata.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

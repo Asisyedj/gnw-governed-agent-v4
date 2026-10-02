@@ -11,7 +11,7 @@ const required=[
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts","src/server/verified-data.ts","src/tests/unit/verified-data.test.ts",
   "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md",
   "compliance/applicability.json","compliance/control-matrix.json","compliance/release-evidence.schema.json",
-  "scripts/verify-compliance-matrix.mjs","scripts/verify-release-evidence.mjs","scripts/verify-cryptographic-closure.mjs",
+  "scripts/verify-compliance-matrix.mjs","scripts/verify-release-evidence.mjs","scripts/verify-cryptographic-closure.mjs","scripts/verify-git-release-metadata.mjs",
   "docs/PAKISTAN_COMPLIANCE_RELEASE.md"
 ];
 

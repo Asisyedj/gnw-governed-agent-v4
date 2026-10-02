@@ -46,6 +46,8 @@ jobs:
         run: npm cache verify
       - name: Clean install from committed lockfile
         run: npm ci
+      - name: Verify canonical Git release metadata
+        run: npm run verify:git-release-metadata
       - name: Provision dedicated database roles
         env:
           PGPASSWORD: gnw_admin_pw
