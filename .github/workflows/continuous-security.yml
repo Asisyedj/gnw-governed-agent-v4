@@ -64,6 +64,8 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE UPDATE, DELETE ON audit_log, nonces, interlocks FROM gnw_app;"
       - name: Continuous production closure gate
         run: npm run verify:production
+      - name: Cryptographic closure gate
+        run: npm run verify:crypto
       - name: RLS regression gate
         run: npm run verify:rls
       - name: Adversarial governance regression suite
@@ -84,17 +86,3 @@ jobs:
           path: security-evidence/
           retention-days: 90
 
-  scorecard:
-    name: OSSF Scorecard Refresh
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with: { persist-credentials: false, fetch-depth: 0 }
-      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc
-        with:
-          results_file: scorecard-results.sarif
-          results_format: sarif
-          publish_results: true
-      - uses: github/codeql-action/upload-sarif@b6d38e563b1e0a61fa4ebfaab8128732f5ed1bd4
-        with:
-          sarif_file: scorecard-results.sarif
