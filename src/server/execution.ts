@@ -18,6 +18,6 @@ export async function executeWithGovernance(ctx:ExecutionContext,envelope:Action
   const output=await handler();
   await audit(ctx.db,{eventType:"tool.result",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest},requestId:ctx.requestId},{required:true});
   return{success:true,output,durationMs:Date.now()-start};
- }catch(e){const m=e instanceof Error?e.message:String(e);try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch{}return{success:false,error:m,durationMs:Date.now()-start};}
+ }catch(e){const m=e instanceof Error?e.message:String(e);try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch { /* original execution failure is preserved */ }return{success:false,error:m,durationMs:Date.now()-start};}
 }
 export async function safeEgressFetch(url:string,init:RequestInit,allowedHosts:readonly string[],maxBytes:number){assertEgressUrl(url,allowedHosts);return governedFetch(url,init,maxBytes);}
