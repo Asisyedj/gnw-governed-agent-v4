@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 
 const required=[
   "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql","docs/PRODUCTION_CLOSURE.md",
-  "src/server/db/schema.ts","src/server/db/index.ts","src/server/governance.ts","src/server/action-envelope.ts","src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts"
+  "src/server/db/schema.ts","src/server/db/index.ts","src/server/governance.ts","src/server/action-envelope.ts","src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts","scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts"
 ];
 const failures=[];
 for(const file of required)if(!existsSync(file))failures.push(`missing:${file}`);
@@ -13,7 +13,8 @@ if(!schema.includes('from "drizzle-orm/pg-core"'))failures.push("schema:not-post
 if(schema.includes("sqliteTable("))failures.push("schema:sqlite-runtime-mismatch");
 const db=existsSync("src/server/db/index.ts")?readFileSync("src/server/db/index.ts","utf8"):"";
 if(!db.includes("set_config('app.tenant_id'"))failures.push("db:tenant-context-missing");
-if(!db.includes("db.transaction"))failures.push("db:tenant-context-not-transactional");
+// Accept valid formatting variants such as transaction(async tx => and transaction(async (tx) =>.
+if(!/\.transaction\s*\(\s*async\s*\(?\s*tx\s*\)?\s*=>/.test(db))failures.push("db:tenant-context-not-transactional");
 const exec=existsSync("src/server/execution.ts")?readFileSync("src/server/execution.ts","utf8"):"";
 if(!exec.includes("governance.authorize"))failures.push("execution:governance-not-enforced");
 if(exec.indexOf("governance.authorize")>exec.indexOf("handler()"))failures.push("execution:handler-before-governance");
