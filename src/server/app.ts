@@ -84,6 +84,26 @@ export async function buildApp() {
   // ── Cookies ───────────────────────────────────────────────────────────────
   await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET! });
 
+  // ── Browser cross-site request protection ─────────────────────────────────
+  app.addHook("preHandler", async (req, reply) => {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+      const fetchSite = req.headers["sec-fetch-site"];
+      if (fetchSite === "cross-site") {
+        return reply.status(403).send({ error: "Cross-site request refused.", code: "csrf_protected" });
+      }
+      const origin = req.headers.origin;
+      if (origin) {
+        const configuredOrigin = process.env.CORS_ORIGIN ?? "same-origin";
+        const expectedOrigin = configuredOrigin === "same-origin"
+          ? req.protocol + "://" + req.hostname
+          : configuredOrigin;
+        if (origin !== expectedOrigin) {
+          return reply.status(403).send({ error: "Origin not allowed.", code: "origin_not_allowed" });
+        }
+      }
+    }
+  });
+
   // ── DB decoration ─────────────────────────────────────────────────────────
   app.decorate("db", db);
 

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -31,7 +31,7 @@ services:
     environment: &app-env
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://${GNW_APP_DB_USER:?set GNW_APP_DB_USER}:${GNW_APP_DB_PASSWORD:?set GNW_APP_DB_PASSWORD}@db:5432/gnw?sslmode=require
+      DATABASE_URL: postgresql://${GNW_APP_DB_USER:?set GNW_APP_DB_USER}:${GNW_APP_DB_PASSWORD:?set GNW_APP_DB_PASSWORD}@db:5432/gnw?sslmode=verify-full
       COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
       GNW_POSTGRES_SSL_REQUIRED: "true"
       NODE_EXTRA_CA_CERTS: /tls/ca.crt
@@ -48,6 +48,7 @@ services:
       VIDEO_PROVIDER_API_KEY: ${VIDEO_PROVIDER_API_KEY:-}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       ARTIFACT_DIR: /data/artifacts
+      GNW_SHARED_STORAGE_CONFIRMED: ${GNW_SHARED_STORAGE_CONFIRMED:-false}
       GNW_GRANT_ISSUER: ${GNW_GRANT_ISSUER:?set GNW_GRANT_ISSUER}
       GNW_GRANT_PRIVATE_KEY_PEM: ${GNW_GRANT_PRIVATE_KEY_PEM:?set GNW_GRANT_PRIVATE_KEY_PEM}
       GNW_GRANT_PUBLIC_KEY_PEM: ${GNW_GRANT_PUBLIC_KEY_PEM:?set GNW_GRANT_PUBLIC_KEY_PEM}

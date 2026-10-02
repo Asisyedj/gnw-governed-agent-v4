@@ -14,7 +14,7 @@ const now=Date.now();
 const baseRequest=():GovernanceRequest=>({
   requestId:"req-1",subject:"1",tenant:"1",role:"operator",purpose:"test",classification:"public",
   operation:"search",resource:"knowledge",agent:"research",tool:"knowledge.search",scope:"knowledge.search",
-  budgetTokens:1000,budgetBytes:10000,issuedAt:now-1000,expiresAt:now+300000,nonce:"grant-1",taskId:1,
+  budgetTokens:1000,budgetBytes:10000,issuedAt:now-1000,expiresAt:now+300000,nonce:"grant-1",taskId:1,envelopeDigest:"0".repeat(64),
 });
 
 describe("production control primitives",()=>{
@@ -104,6 +104,7 @@ vi.mock("../../server/repo.js",()=>({
  claimNonce:vi.fn(async()=>true),
  getInterlock:vi.fn(async()=>({killSwitch:false,circuitOpen:false,generation:0})),
  reserveBudget:vi.fn(async()=>true),
+ createCapabilityLease:vi.fn(async()=>undefined),
 }));
 describe("governed execution boundary",()=>{
  it("runs handler only after governance admission",async()=>{
@@ -111,11 +112,29 @@ describe("governed execution boundary",()=>{
    const handler=vi.fn(async()=>({ok:true}));
    const ctx={
      db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
-     taskId:1,tenantId:1,actorId:1,requestId:"req-1",grantId:"g",
+     taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-1",grantId:"g",
      governanceRequest:baseRequest(),
    } as any;
-   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now},handler);
+   const envelope={taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now};
+   (ctx.governanceRequest as GovernanceRequest).envelopeDigest=digestEnvelope(envelope);
+   const result=await executeWithGovernance(ctx,envelope,handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
+ });
+
+ it("refuses an envelope changed after the governance request was created",async()=>{
+   const {executeWithGovernance}=await import("../../server/execution.js");
+   const handler=vi.fn(async()=>({ok:true}));
+   const envelope={taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{q:"original"},grantId:"g",nonce:"grant-2",issuedAt:now};
+   const ctx={
+     db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
+     taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-1",grantId:"g",
+     governanceRequest:{...baseRequest(),nonce:"grant-2",envelopeDigest:digestEnvelope(envelope)},
+   } as any;
+   const tampered={...envelope,parameters:{q:"tampered"}};
+   const result=await executeWithGovernance(ctx,tampered,handler);
+   expect(result.success).toBe(false);
+   expect(result.error).toContain("governance_digest_mismatch");
+   expect(handler).not.toHaveBeenCalled();
  });
 });

@@ -3,48 +3,66 @@
 ## Overview
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Client (Browser)                  │
-│              React + TypeScript SPA                 │
-└────────────────────────┬────────────────────────────┘
-                         │ HTTPS
-┌────────────────────────▼────────────────────────────┐
-│              Fastify API Server (Node 22)            │
-│  ┌──────────┐ ┌───────────┐ ┌──────────────────────┐│
-│  │  Auth    │ │  Tasks    │ │  Approvals           ││
-│  │  /login  │ │  /tasks   │ │  /approvals          ││
-│  │  /logout │ │  steps    │ │  approve/deny        ││
-│  └──────────┘ └───────────┘ └──────────────────────┘│
-│  ┌──────────────────────────────────────────────────┐│
-│  │         Interlock (Kill Switch + Circuit)        ││
-│  │         preHandler hook — blocks all writes      ││
-│  └──────────────────────────────────────────────────┘│
-│  ┌──────────────────────────────────────────────────┐│
-│  │              Audit Log (append-only)             ││
-│  └──────────────────────────────────────────────────┘│
-└────────────────────────┬────────────────────────────┘
-                         │ TLS verify-full
-┌────────────────────────▼────────────────────────────┐
-│              PostgreSQL 16 (RLS enabled)             │
-│  tenants / users / sessions / tasks / task_steps    │
-│  approvals / nonces / interlocks / audit_log        │
-└─────────────────────────────────────────────────────┘
+Client
+  |
+ HTTPS
+  v
+Fastify control plane
+  |
+  +-- authentication / RBAC
+  +-- tenant context
+  +-- interlock
+  +-- governance + action digest
+  +-- human approval
+  +-- capability lease
+  +-- budget reservation
+  +-- audit / trajectory evidence
+  |
+  +-------------------+---------------------+
+  |                   |                     |
+PostgreSQL       governed egress       executor sandbox
+  |                   |                     |
+FORCE RLS        LLM/provider          authenticated tool execution
+tenant FKs        allowlist/SSRF        isolated resources
 ```
 
-## Security Controls
+## Security boundaries
 
-| Control | Implementation |
-|---|---|
-| Authentication | Session cookie (signed, HttpOnly, Secure, SameSite=Strict) |
-| Authorization | Role hierarchy: viewer → operator → admin → owner |
-| Kill Switch | DB-backed, preHandler checks every write |
-| Circuit Breaker | DB-backed, same preHandler |
-| SSRF Protection | `assertSafeUrl()` before any outbound HTTP |
-| Rate Limiting | 300/min global, 20/15min auth endpoints |
-| Security Headers | Helmet with strict CSP, HSTS |
-| Secrets Validation | Startup fail-fast check |
-| Audit Log | Append-only, every significant event |
-| Secret Scanning | TruffleHog in CI |
-| Supply Chain | SBOM + provenance attestation on every container push |
-| Container Security | Non-root, read-only root FS, no capabilities, seccomp |
-| Network Policy | Kubernetes NetworkPolicy — whitelist only |
+The model is not the authorization boundary. A model may propose an action, but the control plane must independently validate identity, tenant, scope, purpose, classification, action digest, approval, budget, capability lease and interlock state before a side effect.
+
+## Data isolation
+
+Every tenant-owned resource is protected with PostgreSQL RLS and transaction-local tenant context. Child resources additionally carry tenant identity and use composite foreign keys to prevent a row from referencing a parent from another tenant.
+
+## Execution
+
+```
+Action request
+ -> envelope validation
+ -> governance
+ -> approval when required
+ -> nonce/replay check
+ -> budget reservation
+ -> capability lease
+ -> required pre-invocation audit
+ -> side effect
+ -> required result audit
+ -> trajectory evidence
+```
+A required audit persistence failure trips the circuit breaker and prevents continued governed execution.
+
+## Egress
+
+Production LLM egress uses HTTPS, an explicit host allowlist, DNS resolution and private-address blocking, with redirects handled manually and response size bounded. Executor URLs are deployment-controlled and must use HTTPS in production.
+
+## Container and Kubernetes
+
+Production containers run non-root with a read-only root filesystem, no privilege escalation, all Linux capabilities dropped and RuntimeDefault seccomp. Kubernetes namespace policy is configured for the Restricted Pod Security Standard; NetworkPolicy limits ingress and database/DNS paths.
+
+## Storage
+
+Artifact storage must be shared across replicas and must reject path traversal. Production startup fails closed unless the selected shared-storage model is explicitly confirmed. Object storage integration should remain private and access-controlled.
+
+## Assurance
+
+Technical evidence is retained per release SHA and mapped to ISO/IEC 27001, ISO/IEC 42001, SOC 2, NIST AI RMF and OWASP agentic security guidance. The mappings support audit readiness; they are not certifications.

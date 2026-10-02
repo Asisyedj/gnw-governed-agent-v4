@@ -1,12 +1,13 @@
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat, unlink, readdir } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Env } from "./env.js";
 
 export type StorageObject = {
-  key: string; url: string;
-  contentType: string; size: number;
+  key: string;
+  url: string;
+  contentType: string;
+  size: number;
   uploadedAt: Date;
 };
 
@@ -21,43 +22,77 @@ export interface StorageDriver {
 class LocalStorageDriver implements StorageDriver {
   constructor(private readonly dir: string, private readonly baseUrl: string) {}
 
+  private safePath(key: string): string {
+    if (!key || key.length > 1024 || key.includes("\\") || isAbsolute(key)) {
+      throw new Error("invalid_storage_key");
+    }
+    const root = resolve(this.dir);
+    const target = resolve(root, key);
+    const rel = relative(root, target);
+    if (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel)) {
+      throw new Error("invalid_storage_key");
+    }
+    return target;
+  }
+
   async put(key: string, data: Buffer | Uint8Array, contentType: string): Promise<StorageObject> {
-    const filePath = join(this.dir, key);
-    await mkdir(join(this.dir, key.split("/").slice(0, -1).join("/")), { recursive: true });
-    await import("node:fs/promises").then(fs => fs.writeFile(filePath, data));
+    const filePath = this.safePath(key);
+    await mkdir(resolve(filePath, ".."), { recursive: true });
+    const tmpPath = filePath + "." + randomUUID() + ".tmp";
+    await writeFile(tmpPath, data, { flag: "wx" });
+    await rename(tmpPath, filePath);
     const info = await stat(filePath);
     return { key, url: this.url(key), contentType, size: info.size, uploadedAt: info.mtime };
   }
 
   async get(key: string): Promise<Buffer> {
-    const fs = await import("node:fs/promises");
-    return fs.readFile(join(this.dir, key));
+    return readFile(this.safePath(key));
   }
 
-  async delete(key: string): Promise<void> { await unlink(join(this.dir, key)).catch(() => {}); }
+  async delete(key: string): Promise<void> {
+    await unlink(this.safePath(key)).catch(() => {});
+  }
 
-  url(key: string): string { return `${this.baseUrl}/artifacts/${key}`; }
+  url(key: string): string {
+    return this.baseUrl.replace(/\/$/, "") + "/artifacts/" +
+      key.split("/").map(encodeURIComponent).join("/");
+  }
 
   async list(prefix = ""): Promise<StorageObject[]> {
-    const fs = await import("node:fs/promises");
-    const entries = await fs.readdir(this.dir, { withFileTypes: true, recursive: true }).catch(() => []);
+    const root = resolve(this.dir);
+    const entries = await readdir(root, { withFileTypes: true, recursive: true }).catch(() => []);
     const result: StorageObject[] = [];
     for (const entry of entries) {
       if (!entry.isFile()) continue;
-      const key = join(entry.path ?? "", entry.name).replace(this.dir, "").replace(/^\//, "");
-      if (!key.startsWith(prefix)) continue;
-      const info = await stat(join(this.dir, key)).catch(() => null);
+      const parent = String((entry as { parentPath?: string; path?: string }).parentPath ??
+        (entry as { path?: string }).path ?? root);
+      const abs = resolve(parent, entry.name);
+      const key = relative(root, abs).split(sep).join("/");
+      if (!key || !key.startsWith(prefix)) continue;
+      const info = await stat(abs).catch(() => null);
       if (!info) continue;
-      result.push({ key, url: this.url(key), contentType: "application/octet-stream", size: info.size, uploadedAt: info.mtime });
+      result.push({
+        key,
+        url: this.url(key),
+        contentType: "application/octet-stream",
+        size: info.size,
+        uploadedAt: info.mtime,
+      });
     }
     return result;
   }
 }
 
 export function createStorage(env: Env): StorageDriver {
-  return new LocalStorageDriver(env.artifactDir, `http://localhost:${env.port}`);
+  if (env.storageDriver !== "local") throw new Error("unsupported_storage_driver");
+  if (env.isProduction && !env.sharedStorageConfirmed) {
+    throw new Error("shared_storage_required");
+  }
+  return new LocalStorageDriver(env.artifactDir, "http://localhost:" + env.port);
 }
 
 export function newArtifactKey(prefix: string, ext: string): string {
-  return `${prefix}/${randomUUID()}.${ext}`;
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 128);
+  const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16) || "bin";
+  return safePrefix + "/" + randomUUID() + "." + safeExt;
 }
