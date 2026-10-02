@@ -73,7 +73,7 @@ describe("immutable invariant engine",()=>{
     expect(Object.isFrozen(stage)).toBe(true);
     expect(Object.isFrozen(stage.input)).toBe(true);
     expect(Object.isFrozen(stage.output)).toBe(true);
-    expect(Object.isFrozen((stage.output as {items:number[]}).items)).toBe(true);
+    expect(Object.isFrozen((stage.output as unknown as {items:readonly number[]}).items)).toBe(true);
   });
 
   it("verifies ingestion metadata and binds the query to the tenant",()=>{
@@ -137,7 +137,7 @@ describe("immutable invariant engine",()=>{
   it("detects provenance mutation after snapshot creation",()=>{
     const ev1=evidence("ev-source-1",0,"original");
     const snapshot=immutable(ev1);
-    const tampered={...snapshot,quote:"tampered"};
+    const tampered={...ev1,quote:"tampered"};
     expect(verifyEvidenceRecord(snapshot).ok).toBe(true);
     expect(verifyEvidenceRecord(tampered).ok).toBe(false);
   });
