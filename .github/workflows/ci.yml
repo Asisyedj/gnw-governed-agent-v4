@@ -32,7 +32,7 @@ jobs:
       COOKIE_SECRET: ci-test-cookie-secret-minimum-32-chars-ok
       LOG_LEVEL: silent
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with: { node-version: "22.x", cache: npm }
@@ -84,7 +84,7 @@ jobs:
     name: Secret Scanning
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { fetch-depth: 0 }
       - name: TruffleHog secret scan
         uses: trufflesecurity/trufflehog@59e3b04e820c4cad30462696ac497853a5f7679c
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
         with: { fail-on-severity: high }
 
@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: build-and-test
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with:
