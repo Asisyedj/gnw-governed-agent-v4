@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage",
     "db:migrate": "node scripts/migrate.mjs",
     "verify:production": "node scripts/verify-production-closure.mjs",
+    "verify:production:env": "node scripts/preflight-production.mjs",
     "verify:rls": "node scripts/test-rls.mjs",
     "start": "node dist/server/app.js"
   },
