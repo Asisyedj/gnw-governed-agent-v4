@@ -48,14 +48,16 @@ export function isPrivateOrLocalHost(hostname: string): boolean {
 function isUnsafeResolvedAddress(address: string): boolean {
   const normalized = address.toLowerCase().replace(/^\[|\]$/g, "");
   if (net.isIPv4(normalized)) {
-    const [a,b,c,d] = normalized.split(".").map(Number);
-    return a === 0 || a === 10 || a === 127 || a === 169 && b === 254 || a === 192 && b === 168 || a === 172 && b >= 16 && b <= 31 || a === 100 && b >= 64 && b <= 127 || a === 192 && b === 0 && c === 0 || a === 198 && (b === 18 || b === 19) || a >= 224;
+    const parts = normalized.split(".").map(Number);
+    if (parts.length !== 4 || parts.some(n => !Number.isFinite(n))) return true;
+    const [a,b,c,d] = parts as [number,number,number,number];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127) || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
   }
   if (net.isIPv6(normalized)) {
     const h = normalized;
     if (h === "::" || h === "::1" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe8") || h.startsWith("fe9") || h.startsWith("fea") || h.startsWith("feb") || h.startsWith("ff")) return true;
     const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isUnsafeResolvedAddress(mapped[1]);
+    if (mapped?.[1]) return isUnsafeResolvedAddress(mapped[1]);
   }
   return false;
 }
@@ -68,7 +70,7 @@ export async function governedFetch(raw: string, init: RequestInit = {}, maxResp
 
   const resolved = await dns.lookup(url.hostname, { all: true, verbatim: true });
   if (!resolved.length || resolved.some(entry => isUnsafeResolvedAddress(entry.address))) throw new Error("unsafe_dns_destination");
-  const target = resolved[0].address;
+  const target = resolved[0]?.address;\n  if (!target) throw new Error("unsafe_dns_destination");
   const method = String(init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
   headers.set("host", url.host);
