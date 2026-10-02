@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, "gnw/**", "fix/**"]
   pull_request:
     branches: [main]
 
@@ -107,7 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: npm }
+        with: { node-version: "22" }
       - run: npm ci
       - name: Collect evidence
         run: |
@@ -116,7 +116,7 @@ jobs:
           npm --version > evidence/npm-version.txt
           npm audit --json > evidence/npm-audit.json
           jq -n \
-            --arg candidate "gnw-production-closure-v2" \
+            --arg candidate "gnw-production-closure-v3" \
             --arg sha "$(git rev-parse HEAD)" \
             --arg ref "$GITHUB_REF" \
             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
