@@ -13,6 +13,8 @@ import { interlockRoutes } from "./routes/interlock.js";
 import { auditRoutes } from "./routes/audit.js";
 import { healthRoutes } from "./routes/health.js";
 import { summaryRoutes } from "./routes/summary.js";
+import { metricsRoutes } from "./routes/metrics.js";
+import { recordRequest } from "./metrics.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 
@@ -72,6 +74,13 @@ export async function buildApp() {
 
   // ── DB decoration ─────────────────────────────────────────────────────────
   app.decorate("db", db);
+  app.addHook("onRequest", async req => {
+    (req as typeof req & { gnwStartedAt?: bigint }).gnwStartedAt = process.hrtime.bigint();
+  });
+  app.addHook("onResponse", async (req, reply) => {
+    const start = (req as typeof req & { gnwStartedAt?: bigint }).gnwStartedAt;
+    if (start) recordRequest(req.method, req.routeOptions.url ?? req.url.split("?")[0] ?? "unknown", reply.statusCode, Number(process.hrtime.bigint() - start) / 1_000_000);
+  });
 
   // ── Kill-switch / circuit-breaker guard ───────────────────────────────────
   app.addHook("preHandler", async (req, reply) => {
@@ -107,6 +116,7 @@ export async function buildApp() {
   await app.register(healthRoutes,   { prefix: "/api" });
   await app.register(meRoutes,       { prefix: "/api" });
   await app.register(summaryRoutes,  { prefix: "/api" });
+  await app.register(metricsRoutes, { prefix: "/api" });
   await app.register(taskRoutes,     { prefix: "/api/tasks" });
   await app.register(approvalRoutes, { prefix: "/api/approvals" });
   await app.register(interlockRoutes,{ prefix: "/api/interlock" });
