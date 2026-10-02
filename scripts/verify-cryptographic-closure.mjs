@@ -1,0 +1,20 @@
+import { createHash, createHmac, generateKeyPairSync, sign, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
+const failures=[];
+const sha=createHash("sha256").update("x").digest("hex");
+if(sha!=="2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db0221375d7b4ebf3a") failures.push("sha256-vector");
+const h=createHmac("sha256","secret").update("gnw").digest("hex");
+if(h!=="1f6c0f18e9b2e1f3b2875f3b4a8a9fd503bc3cb5a4de8e4f1ad55c8a6b6f2b55") failures.push("hmac-vector");
+const keys=generateKeyPairSync("ed25519");
+const message=Buffer.from("gnw-crypto-closure-v1");
+const sig=sign(null,message,keys.privateKey);
+if(!verify(null,message,keys.publicKey,sig)) failures.push("ed25519-roundtrip");
+const envelope=readFileSync("src/server/action-envelope.ts","utf8");
+const execution=readFileSync("src/server/execution.ts","utf8");
+const executor=readFileSync("src/server/executor-client.ts","utf8");
+if(!envelope.includes("actionDigest")) failures.push("envelope-action-digest-missing");
+if(!execution.includes("governanceActionDigest")) failures.push("execution-governance-digest-missing");
+if(!execution.includes("action_digest_binding")) failures.push("execution-digest-binding-missing");
+if(!executor.includes("actionDigest")) failures.push("executor-action-digest-missing");
+if(failures.length){console.error("GNW cryptographic closure: DENY");for(const f of failures)console.error(" - "+f);process.exit(1);}
+console.log("GNW cryptographic closure: independent vector and binding checks PASS");
