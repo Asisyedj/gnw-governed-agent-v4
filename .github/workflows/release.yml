@@ -43,6 +43,23 @@ jobs:
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
       - name: Install from committed lockfile
         run: npm ci
+      - name: Production environment preflight
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          EXECUTOR_URL: ${{ secrets.EXECUTOR_URL }}
+          EXECUTOR_SECRET: ${{ secrets.EXECUTOR_SECRET }}
+          GNW_REQUIRE_SIGNED_GRANTS: ${{ secrets.GNW_REQUIRE_SIGNED_GRANTS }}
+          GNW_GRANT_ISSUER: ${{ secrets.GNW_GRANT_ISSUER }}
+          GNW_GRANT_PRIVATE_KEY_PEM: ${{ secrets.GNW_GRANT_PRIVATE_KEY_PEM }}
+          GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
+          GNW_LEASE_PRIVATE_KEY_PEM: ${{ secrets.GNW_LEASE_PRIVATE_KEY_PEM }}
+          GNW_EGRESS_ALLOW_LIST: ${{ secrets.GNW_EGRESS_ALLOW_LIST }}
+          GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
+          STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
+          NODE_ENV: production
+        run: npm run verify:production:env
       - name: Provision dedicated database roles
         env:
           PGPASSWORD: gnw_admin_pw
