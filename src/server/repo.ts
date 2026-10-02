@@ -43,16 +43,24 @@ export async function claimNonce(db: Db, kind: string, nonce: string, taskId?: n
 export async function getInterlock(db: Db): Promise<Interlock> { const row = await db.query.interlocks.findFirst({ orderBy: desc(interlocks.updatedAt) }); return row ?? { killSwitch: false, circuitOpen: false, generation: 0 }; }
 export async function setInterlock(db: Db, patch: Partial<Interlock>, updatedByUserId?: number) { const current = await getInterlock(db); const [row] = await db.insert(interlocks).values({ killSwitch: patch.killSwitch ?? current.killSwitch, circuitOpen: patch.circuitOpen ?? current.circuitOpen, generation: (current.generation ?? 0) + 1, updatedByUserId: updatedByUserId ?? null }).returning(); return row!; }
 
-export async function reserveBudget(db: Db, tenantId: number, taskId: number, grantNonce: string, tokens: number, bytes: number): Promise<boolean> { if(tokens<=0||bytes<=0) return false; try { return await withTenant(db, tenantId, async tx => { const [task] = await tx.select({ tokenUsed: tasks.budgetTokensUsed, byteUsed: tasks.budgetBytesUsed, tokenLimit: tasks.budgetTokensAllocated, byteLimit: tasks.budgetBytesAllocated }).from(tasks).where(and(eq(tasks.id,taskId),eq(tasks.tenantId,tenantId))).for("update"); if(!task) return false; const [used] = await tx.select({tokens:sql<number>`coalesce(sum(${budgetReservations.reservedTokens}),0)`,bytes:sql<number>`coalesce(sum(${budgetReservations.reservedBytes}),0)`}).from(budgetReservations).where(and(eq(budgetReservations.tenantId,tenantId),eq(budgetReservations.taskId,taskId))); if(Number(used?.tokens??0)+tokens>task.tokenLimit-task.tokenUsed||Number(used?.bytes??0)+bytes>Number(task.byteLimit)-Number(task.byteUsed)) return false; await tx.insert(budgetReservations).values({tenantId,taskId,grantNonce,reservedTokens:tokens,reservedBytes:bytes}); return true; }); } catch { return false; } }
+export async function reserveBudget(db: Db, tenantId: number, taskId: number, grantNonce: string, tokens: number, bytes: number): Promise<boolean> {
+  if (tokens <= 0 || bytes <= 0) return false;
   try {
-    const task = await findTaskById(db, taskId, tenantId);
-    if (!task) return false;
-    const tokenLimit = task.budgetTokensAllocated - task.budgetTokensUsed;
-    const byteLimit = Number(task.budgetBytesAllocated) - Number(task.budgetBytesUsed);
-    const [used] = await db.select({ tokens: sql<number>`coalesce(sum(${budgetReservations.reservedTokens}),0)`, bytes: sql<number>`coalesce(sum(${budgetReservations.reservedBytes}),0)` }).from(budgetReservations).where(and(eq(budgetReservations.tenantId, tenantId), eq(budgetReservations.taskId, taskId)));
-    if (Number(used?.tokens ?? 0) + tokens > tokenLimit || Number(used?.bytes ?? 0) + bytes > byteLimit) return false;
-    await db.insert(budgetReservations).values({ tenantId, taskId, grantNonce, reservedTokens: tokens, reservedBytes: bytes });
-    return true;
+    return await withTenant(db, tenantId, async tx => {
+      const [task] = await tx.select({
+        tokenUsed: tasks.budgetTokensUsed, byteUsed: tasks.budgetBytesUsed,
+        tokenLimit: tasks.budgetTokensAllocated, byteLimit: tasks.budgetBytesAllocated
+      }).from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId))).for("update");
+      if (!task) return false;
+      const [used] = await tx.select({
+        tokens: sql<number>`coalesce(sum(${budgetReservations.reservedTokens}),0)`,
+        bytes: sql<number>`coalesce(sum(${budgetReservations.reservedBytes}),0)`
+      }).from(budgetReservations).where(and(eq(budgetReservations.tenantId, tenantId), eq(budgetReservations.taskId, taskId)));
+      if (Number(used?.tokens ?? 0) + tokens > task.tokenLimit - task.tokenUsed) return false;
+      if (Number(used?.bytes ?? 0) + bytes > Number(task.byteLimit) - Number(task.byteUsed)) return false;
+      await tx.insert(budgetReservations).values({ tenantId, taskId, grantNonce, reservedTokens: tokens, reservedBytes: bytes });
+      return true;
+    });
   } catch { return false; }
 }
 
