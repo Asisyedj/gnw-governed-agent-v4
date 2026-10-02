@@ -34,7 +34,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: gnw-app
-          image: ghcr.io/asisyedj/gnw-governed-agent-v4@sha256:REPLACE_WITH_VERIFIED_RELEASE_DIGEST
+          image: ghcr.io/asisyedj/gnw-governed-agent-v4:sha-5a5e5c02d4bfa13742e75ca55fc0665dca0a8ff8
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
