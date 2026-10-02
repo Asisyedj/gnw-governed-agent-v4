@@ -22,7 +22,15 @@ try {
     const hidden = await b.query('SELECT id FROM tasks WHERE tenant_id=$1',[t1]);
     if (hidden.rowCount !== 0) throw new Error('cross-tenant SELECT leak');
     let insertDenied = false;
-    try { await b.query('INSERT INTO tasks(tenant_id,title) VALUES($1,$2)',[t1,'cross-tenant']); } catch { insertDenied = true; }
+    await b.query('SAVEPOINT cross_tenant_insert');
+    try {
+      await b.query('INSERT INTO tasks(tenant_id,title) VALUES($1,$2)', [t1, 'cross-tenant']);
+    } catch {
+      insertDenied = true;
+      await b.query('ROLLBACK TO SAVEPOINT cross_tenant_insert');
+    } finally {
+      await b.query('RELEASE SAVEPOINT cross_tenant_insert');
+    }
     if (!insertDenied) throw new Error('cross-tenant INSERT was allowed');
     await b.query('INSERT INTO users(tenant_id,email,password_hash,role) VALUES($1,$2,$3,$4)',[t2,'b@example.test','x','owner']);
     await b.query('COMMIT');
