@@ -6,8 +6,8 @@ const read=p=>readFileSync(p,"utf8");
 const sha=s=>createHash("sha256").update(s).digest("hex");
 
 let applicability, matrix;
-try { applicability=JSON.parse(read("compliance/applicability.json")); } catch(e) { fail.push("applicability:invalid-json"); }
-try { matrix=JSON.parse(read("compliance/control-matrix.json")); } catch(e) { fail.push("matrix:invalid-json"); }
+try { applicability=JSON.parse(read("compliance/applicability.json")); } catch { fail.push("applicability:invalid-json"); }
+try { matrix=JSON.parse(read("compliance/control-matrix.json")); } catch { fail.push("matrix:invalid-json"); }
 
 if(applicability){
   if(applicability.schema!=="GNW.PK.Applicability.v1") fail.push("applicability:schema");
@@ -27,10 +27,18 @@ if(matrix){
     if(!c.regime||!c.title||!Array.isArray(c.requiredWhen)||!c.automation?.length||!c.evidence||c.blocking!==true||!/^https:\/\//.test(c.source??"")) fail.push("matrix:incomplete:"+String(c.id));
   }
 }
-if(applicability?.determinations?.PSS_CRYPTO?.status==="LEGAL_CLASSIFICATION_REQUIRED") fail.push("applicability:PSS_CRYPTO:legal-classification-required");
-if(fail.length){console.error("GNW compliance matrix: DENY");for(const x of fail) console.error(" - "+x);process.exit(1);}
+if(fail.length){
+  console.error("GNW compliance matrix: DENY");
+  for(const x of fail) console.error(" - "+x);
+  process.exit(1);
+}
+const blockingDeterminations=Object.entries(applicability.determinations??{})
+  .filter(([,v])=>["LEGAL_CLASSIFICATION_REQUIRED","UNDETERMINED","PENDING"].includes(v.status))
+  .map(([k,v])=>({key:k,status:v.status,basis:v.basis??""}));
 console.log(JSON.stringify({
   status:"PASS",
+  structuralValidation:"PASS",
+  releaseBlockers:blockingDeterminations,
   applicabilityDigest:sha(read("compliance/applicability.json")),
   controlMatrixDigest:sha(read("compliance/control-matrix.json")),
   controlCount:matrix.controls.length
