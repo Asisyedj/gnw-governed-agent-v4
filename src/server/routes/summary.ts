@@ -13,18 +13,17 @@ export const summaryRoutes: FastifyPluginAsync = async (app) => {
     const user = await findUserById(app.db, session.userId, session.tenantId);
     if (!user) return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated" });
 
-    const [tasksResult, approvals, interlock] = await Promise.all([
+    const [tasks, approvals, interlock] = await Promise.all([
       listTasksByTenant(app.db, session.tenantId, 50, 0),
       listPendingApprovals(app.db, session.tenantId),
       getInterlock(app.db),
     ]);
-    const tasks = tasksResult as Array<{ id: number; status: string; title: string; classification: string; updatedAt: Date }>;
 
     const stats = {
       total: tasks.length,
-      running: tasks.filter(t => t.status === "running").length,
-      done: tasks.filter(t => t.status === "done").length,
-      failed: tasks.filter(t => t.status === "failed").length,
+      running: tasks.filter((t) => t.status === "running").length,
+      done: tasks.filter((t) => t.status === "done").length,
+      failed: tasks.filter((t) => t.status === "failed").length,
     };
 
     return reply.send({ tasks, approvals, interlock, stats });
