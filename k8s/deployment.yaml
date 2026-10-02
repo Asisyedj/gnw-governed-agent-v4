@@ -25,12 +25,21 @@ spec:
         prometheus.io/path: "/api/metrics"
     spec:
       serviceAccountName: gnw-app
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        runAsGroup: 1001
         fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: gnw-app
       terminationGracePeriodSeconds: 30
       containers:
         - name: gnw-app
@@ -44,18 +53,22 @@ spec:
                 name: gnw-config
             - secretRef:
                 name: gnw-secrets
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            failureThreshold: 30
+            periodSeconds: 2
           readinessProbe:
             httpGet:
               path: /api/ready
               port: 3000
-            initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /api/health
               port: 3000
-            initialDelaySeconds: 15
             periodSeconds: 30
             failureThreshold: 3
           resources:
@@ -75,4 +88,5 @@ spec:
               mountPath: /tmp
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 128Mi
