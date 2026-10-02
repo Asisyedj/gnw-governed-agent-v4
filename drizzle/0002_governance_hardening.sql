@@ -1,3 +1,4 @@
+ALTER TABLE interlocks ADD COLUMN IF NOT EXISTS reason TEXT;
 -- GNW governance hardening: close remaining tenant-isolation gaps.
 ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 UPDATE budget_reservations br SET tenant_id=t.tenant_id FROM tasks t WHERE br.task_id=t.id AND br.tenant_id IS NULL;
