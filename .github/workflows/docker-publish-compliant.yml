@@ -83,7 +83,7 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@97c5b2343ab7c6442e68cfd6b01a8cbf57e5708d
       - name: Log in to GHCR
-        uses: docker/login-action@678a46a45e920924c7b07d6209b4d02a3031d403
+        uses: docker/login-action@783ae9cac559640a24c9212dfa6cd9e998252f9a
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
