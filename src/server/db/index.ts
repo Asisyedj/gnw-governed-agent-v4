@@ -10,10 +10,10 @@ export type Db=typeof db;
 export async function withTenant<T>(database:Db,tenantId:number,fn:(tx:any)=>Promise<T>):Promise<T>{
  if(!Number.isInteger(tenantId)||tenantId<=0) throw new Error('invalid_tenant_context');
  return database.transaction(async tx=>{
-  await tx.execute(sql\`select set_config('app.tenant_id', \${String(tenantId)}, true)\`);
+  await tx.execute(sql`select set_config('app.tenant_id', '${String(tenantId)}', true)`);
   return fn(tx);
  });
 }
 export function createDb(){return db;}
-export { schema };
+export {schema};
 export async function closeDb(){await pool.end();}
