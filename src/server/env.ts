@@ -1,6 +1,16 @@
 import "dotenv/config";
 function bool(v:string|undefined,f=false){return v===undefined?f:["1","true","yes","on"].includes(v.toLowerCase());}
 function int(v:string|undefined,f:number){const n=Number.parseInt(v??"",10);return Number.isFinite(n)?n:f;}
+function trustAnchor(v:string|undefined){
+ if(!v)return undefined;
+ try{
+  const parsed=JSON.parse(v) as {threshold?:unknown;participants?:unknown;requireTee?:unknown};
+  if(!Number.isInteger(parsed.threshold)||parsed.threshold<1||!parsed.participants||typeof parsed.participants!=="object"||Array.isArray(parsed.participants))return undefined;
+  const participants=Object.fromEntries(Object.entries(parsed.participants).filter(([k,p])=>typeof k==="string"&&typeof p==="string"&&k&&p));
+  if(Object.keys(participants).length<Number(parsed.threshold))return undefined;
+  return {threshold:Number(parsed.threshold),participants,requireTee:parsed.requireTee===undefined?true:Boolean(parsed.requireTee)} as const;
+ }catch{return undefined;}
+}
 export function loadEnv(source:NodeJS.ProcessEnv=process.env){
  const nodeEnv=source.NODE_ENV??"development",isProduction=nodeEnv==="production";
  const egress=(source.GNW_EGRESS_ALLOW_LIST??source.GNW_ALLOWED_EGRESS_HOSTS??"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
@@ -30,6 +40,8 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   teeAttestationPublicKeyPem:source.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM??"",
   teeAttestationMeasurement:(source.GNW_TEE_ATTESTATION_MEASUREMENT??"").toLowerCase(),
   teeAttestationMaxAgeMs:int(source.GNW_TEE_ATTESTATION_MAX_AGE_MS,120000),
+  mpcTrustAnchor:trustAnchor(source.GNW_MPC_TRUST_ANCHOR_JSON),
+  requireMpcTrustAnchor:bool(source.GNW_REQUIRE_MPC_TRUST_ANCHOR,isProduction),
   killSwitchUrl:source.GNW_KILL_SWITCH_URL??"",egressAllowList:egress,
   maxRequestBodyBytes:int(source.GNW_MAX_REQUEST_BODY_BYTES,10*1024*1024),rateLimitWindowMs:int(source.GNW_RATE_LIMIT_WINDOW_MS,60000),rateLimitMaxRequests:int(source.GNW_RATE_LIMIT_MAX_REQUESTS,120),
  } as const;
