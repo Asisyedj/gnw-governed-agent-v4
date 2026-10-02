@@ -40,9 +40,11 @@ const handlerIndex=exec.indexOf("handler()");
 if(authzIndex<0||handlerIndex<0||authzIndex>handlerIndex) failures.push("execution:handler-before-governance");
 if(!exec.includes("persistCapabilityLease")) failures.push("execution:capability-lease-persistence-missing");
 if(!exec.includes("consumeCapabilityLease")) failures.push("execution:capability-lease-consumption-missing");
+if(!exec.includes("governance_digest_mismatch")) failures.push("execution:envelope-governance-binding-missing");
 
 const audit=read("src/server/audit.ts");
 if(!audit.includes("setInterlock")) failures.push("audit:required-write-does-not-trip-interlock");
+if(!read("drizzle/0002_governance_hardening.sql").includes("audit_log_append_only")) failures.push("audit:append-only-trigger-missing");
 
 const llm=read("src/server/llm.ts");
 if(!llm.includes("governedFetch")||!llm.includes("assertEgressUrl")) failures.push("llm:production-egress-not-governed");
@@ -68,6 +70,7 @@ if(!ci.includes("npm run verify:rls")) failures.push("ci:rls-gate-missing");
 if(!ci.includes("npm run verify:production")) failures.push("ci:production-gate-missing");
 if(!ci.includes("npm audit --audit-level=high")) failures.push("ci:dependency-audit-missing");
 if(!ci.includes("gnw_migrator")) failures.push("ci:dedicated-migrator-missing");
+if(!ci.includes("TRUST_PROXY") && ci.includes("CORS_ORIGIN")) failures.push("ci:proxy-origin-policy-incomplete");
 
 const release=read(".github/workflows/release.yml");
 if(release.includes("softprops/action-gh-release")) failures.push("release:unsupported-release-action");
