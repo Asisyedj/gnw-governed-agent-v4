@@ -1,0 +1,54 @@
+{
+  "schema": "GNW.PK.Applicability.v1",
+  "effectiveDate": "2026-10-03",
+  "profile": {
+    "jurisdiction": "Pakistan",
+    "federalPublicSector": true,
+    "publicSectorOrganization": true,
+    "sbpRegulatedEntity": true,
+    "cloudOutsourcing": true,
+    "customerData": true,
+    "criticalInformationInfrastructure": "UNDETERMINED",
+    "paymentInstitution": false
+  },
+  "determinations": {
+    "PPRA_2026": {
+      "status": "APPLICABLE",
+      "basis": "Federal public-sector procurement profile"
+    },
+    "PISF_2026": {
+      "status": "APPLICABLE",
+      "basis": "Federal/public-sector organization profile"
+    },
+    "NCERT_AUDIT": {
+      "status": "APPLICABLE",
+      "basis": "Public-sector cyber-audit profile"
+    },
+    "SBP_TECH_GOVERNANCE": {
+      "status": "APPLICABLE",
+      "basis": "SBP-regulated entity profile"
+    },
+    "SBP_OUTSOURCING": {
+      "status": "APPLICABLE",
+      "basis": "Third-party/outsourcing profile"
+    },
+    "SBP_CLOUD": {
+      "status": "APPLICABLE",
+      "basis": "Cloud outsourcing profile for an SBP-regulated entity"
+    },
+    "PSS_CRYPTO": {
+      "status": "LEGAL_CLASSIFICATION_REQUIRED",
+      "basis": "Final scope determination must establish whether GNW constitutes an article/function covered by PS:5544 before placing a final PSS certification claim"
+    },
+    "CII_PROTECTION": {
+      "status": "UNDETERMINED",
+      "basis": "CII designation is organization/system-specific and is not inferred by this repository"
+    }
+  },
+  "releasePolicy": {
+    "unknownOrPendingApplicableDeterminationsBlock": true,
+    "staticCodeChecksDoNotSubstituteForRegulatoryApproval": true,
+    "realHardwareTeeRequiredForProduction": true,
+    "cryptographicReleaseSealRequired": true
+  }
+}
