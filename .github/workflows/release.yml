@@ -17,19 +17,24 @@ jobs:
         with: { fetch-depth: 0 }
 
       - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: npm }
+        with: { node-version: "22" }
 
+      - run: npm install --package-lock-only
       - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
 
       - name: Generate SBOM
         run: |
           npm install -g @cyclonedx/cyclonedx-npm
           cyclonedx-npm --output-format json --output-file sbom.json
-        continue-on-error: true
 
       - name: Create SHA256 manifest
         run: |
-          find dist -type f | sort | xargs sha256sum > dist/SHA256SUMS.txt || true
+          test -d dist
+          find dist -type f | sort | xargs sha256sum > dist/SHA256SUMS.txt
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
