@@ -7,4 +7,6 @@ data:
   NODE_ENV: "production"
   PORT: "3000"
   LOG_LEVEL: "info"
+  TRUST_PROXY: "true"
+  CORS_ORIGIN: "https://gnw.example.com"
   DB_POOL_MAX: "20"
