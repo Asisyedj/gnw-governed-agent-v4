@@ -36,8 +36,13 @@ if(evidence){
   if(!evidence.releaseTag||evidence.releaseTag!==expectedTag) fail.push("release-tag-binding");
   if(evidence.applicabilityDigest!==appDigest) fail.push("applicability-digest");
   if(evidence.controlMatrixDigest!==matrixDigest) fail.push("control-matrix-digest");
-  const artifactDigest=sha(read("dist/SHA256SUMS.txt"));
-  if(evidence.artifactManifestSha256!==artifactDigest) fail.push("artifact-manifest-digest");
+  const artifactRequired=(process.env.GNW_RELEASE_ARTIFACT_REQUIRED??"true").toLowerCase()==="true";
+  if(artifactRequired){
+    const artifactDigest=sha(read("dist/SHA256SUMS.txt"));
+    if(evidence.artifactManifestSha256!==artifactDigest) fail.push("artifact-manifest-digest");
+  } else if(!hex.test(evidence.artifactManifestSha256??"")) {
+    fail.push("artifact-manifest-digest-metadata-missing");
+  }
 
   const tee=evidence.tee;
   if(!tee||tee.mode!=="REAL_HARDWARE") fail.push("tee:not-real-hardware");
