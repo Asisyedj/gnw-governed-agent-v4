@@ -82,12 +82,11 @@ jobs:
       - name: Backup and restore drill
         env:
           PGPASSWORD: gnw_admin_pw
-          GNW_MIGRATOR_PASSWORD: gnw_migrator_pw
         shell: bash
         run: |
           set -euo pipefail
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "INSERT INTO tenants(slug,display_name) VALUES ('backup-drill-${GITHUB_RUN_ID}','Backup Drill') ON CONFLICT (slug) DO NOTHING;"
-          PGPASSWORD="$GNW_MIGRATOR_PASSWORD" pg_dump -h 127.0.0.1 -U gnw_migrator -d gnw_test --format=custom --no-owner --no-privileges --file=/tmp/gnw-backup.dump
+          pg_dump -h 127.0.0.1 -U postgres -d gnw_test --format=custom --no-owner --no-privileges --file=/tmp/gnw-backup.dump
           dropdb -h 127.0.0.1 -U postgres --if-exists gnw_restore
           createdb -h 127.0.0.1 -U postgres gnw_restore
           pg_restore -h 127.0.0.1 -U postgres -d gnw_restore --no-owner --no-privileges /tmp/gnw-backup.dump
