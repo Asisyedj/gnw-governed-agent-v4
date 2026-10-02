@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import { digestEnvelope, validateEnvelope } from "../../server/action-envelope.js";
-import { capabilityLeaseDigest, generateNonce, issueCapabilityLease, isLeaseValid } from "../../server/capability.js";
+import { capabilityLeaseDigest, generateNonce, issueCapabilityLease, isLeaseValid, verifyCapabilityLeaseSignature } from "../../server/capability.js";
 import { callExecutor } from "../../server/executor-client.js";
 import { executorBodyDigest, makeExecutorToken, verifyExecutorToken } from "../../executor/auth.js";
 import { GovernanceService, MemoryGovernanceStores, newGrant, requiresHumanApproval, type GovernanceRequest } from "../../server/governance.js";
@@ -31,6 +31,9 @@ describe("production control primitives",()=>{
    expect(isLeaseValid({...lease,consumed:true},now+500)).toBe(false);
    expect(isLeaseValid(lease,now+1001)).toBe(false);
    expect(capabilityLeaseDigest(lease)).toMatch(/^[0-9a-f]{64}$/);
+   expect(verifyCapabilityLeaseSignature(lease,keys.publicKey)).toBe(true);
+   expect(verifyCapabilityLeaseSignature({...lease,actionDigest:"tampered"},keys.publicKey)).toBe(false);
+   expect(verifyCapabilityLeaseSignature({...lease,signature:lease.signature.slice(0,-1)+"A"},keys.publicKey)).toBe(false);
    expect(generateNonce(12)).toHaveLength(24);
  });
  it("covers governance deny/allow/replay/approval/interlock paths",async()=>{
