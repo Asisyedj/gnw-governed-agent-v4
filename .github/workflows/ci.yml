@@ -52,6 +52,10 @@ jobs:
         run: npm run verify:production
       - name: Unit tests
         run: npm run test
+      - name: Reset test database for independent coverage run
+        run: |
+          PGPASSWORD=gnw_test_pw psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          npm run db:migrate
       - name: Tests with coverage
         run: npm run test:coverage
       - name: Build server
