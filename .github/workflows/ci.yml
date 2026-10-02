@@ -22,7 +22,7 @@ jobs:
           POSTGRES_PASSWORD: gnw_admin_pw
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U gnw -d gnw_test"
+          --health-cmd "pg_isready -U gnw_admin -d gnw_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -50,10 +50,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Create restricted runtime database role
-        run: |
-          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS;"
-          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE gnw_test TO gnw_app; GRANT USAGE, CREATE ON SCHEMA public TO gnw_app;"
-          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO gnw_app; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO gnw_app;"
+        run: node scripts/provision-db-role.mjs
       - name: Run migrations
         run: npm run db:migrate
       - name: Verify production closure static gate
@@ -63,6 +60,7 @@ jobs:
       - name: Reset test database for independent coverage run
         run: |
           PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          node scripts/provision-db-role.mjs
           npm run db:migrate
       - name: Tests with coverage
         run: npm run test:coverage
