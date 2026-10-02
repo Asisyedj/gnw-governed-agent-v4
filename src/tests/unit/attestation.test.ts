@@ -42,9 +42,11 @@ describe("runtime attestation",()=>{
    expect(r.allowed).toBe(false);
    expect(r.reason).toBe("runtime_attestation_required");
  });
- it("admits restricted governance only with valid attestation",async()=>{
+ it("admits restricted governance only with valid attestation and approval",async()=>{
    const g=new GovernanceService(new MemoryGovernanceStores(),undefined,()=>now,undefined,undefined,{issuer:"tee-verifier",publicKeyPem:keys.publicKey,expectedMeasurement:measurement,maxAgeMs:120000},true);
-   const r=await g.authorize({...base(),runtimeAttestation:makeAttestation()});
+   const request={...base(),runtimeAttestation:makeAttestation()};
+   const approval={approvalId:1,requestId:request.requestId,actionDigest:g.digest(request),tenant:request.tenant,status:"approved" as const,approverId:2,requestedBy:1,approverRole:"admin",expiresAt:now+5000,nonce:"approval-1"};
+   const r=await g.authorize(request,approval);
    expect(r.allowed).toBe(true);
  });
 });
