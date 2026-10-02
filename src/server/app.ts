@@ -28,7 +28,7 @@ export async function buildApp() {
         ? { transport: { target: "pino-pretty", options: { colorize: true } } }
         : {}),
     },
-    trustProxy: true,
+    trustProxy: process.env.TRUST_PROXY === "true",
     genReqId: () => crypto.randomUUID(),
   });
 
