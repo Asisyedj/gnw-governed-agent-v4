@@ -19,7 +19,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export type MeResponse = { user: { id: number; email: string; role: string; tenantId: number } | null; bootstrap: boolean; allowSelfRegistration: boolean };
+export type MeResponse = { user: { id: number; email: string; role: string; tenantId: number }; bootstrap: boolean; allowSelfRegistration: boolean };
+export type BootstrapResponse = { bootstrap: boolean; allowSelfRegistration: boolean };
 export type Summary = { tasks: TaskSummary[]; approvals: ApprovalSummary[]; interlock: { killSwitch: boolean; circuitOpen: boolean; generation: number }; stats: { total: number; running: number; done: number; failed: number } };
 export type TaskSummary = { id: number; title: string; status: string; classification: string; createdAt: string; updatedAt: string };
 export type ApprovalSummary = { id: number; taskId: number | null; actionDigest: string; status: string; expiresAt: string; createdAt: string };
@@ -28,6 +29,7 @@ export type StepSummary = { id: number; stepIndex: number; agentRole: string; to
 
 export const api = {
   me: () => request<MeResponse>("/api/me"),
+  bootstrap: () => request<BootstrapResponse>("/api/auth/bootstrap"),
   login: (email: string, password: string) => request<{ ok: boolean }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string) => request<{ ok: boolean }>("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
