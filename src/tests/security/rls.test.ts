@@ -77,8 +77,16 @@ describe("RLS — cross-tenant isolation", () => {
     }
   });
 
+  it("runs with a non-superuser, non-BYPASSRLS database role", async () => {
+    const result = await db.execute(sql`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`);
+    const row = result.rows[0] as { rolsuper: boolean; rolbypassrls: boolean } | undefined;
+    expect(row?.rolsuper).toBe(false);
+    expect(row?.rolbypassrls).toBe(false);
+  });
+
   it("fails closed when tenant context is absent", async () => {
-    await expect(db.select({ id: schema.tasks.id }).from(schema.tasks).limit(1)).rejects.toThrow();
+    const rows = await db.select({ id: schema.tasks.id }).from(schema.tasks).limit(1);
+    expect(rows).toHaveLength(0);
   });
 
   it("kill-switch activation requires authentication", async () => {
