@@ -2,6 +2,7 @@ name: docker-publish
 
 on:
   push:
+    branches: ["gnw/production-artifact-612b2df"]
     tags: ["v*"]
 
 permissions:
