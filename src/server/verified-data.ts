@@ -237,3 +237,51 @@ export function verifyDataStage<I, O>(
     operationDigest: digest({ stage, inputDigest, outputDigest, invariants: report.invariants }),
   }) as DataStage<I, O>;
 }
+
+export type IngestedChunk = Readonly<{
+  id: string;
+  documentId: string;
+  index: number;
+  contentHash: Sha256Digest;
+  embeddingDigest: Sha256Digest;
+  authorizationDigest: Sha256Digest;
+}>;
+
+export type IngestedDocument = Readonly<{
+  id: string;
+  tenantId: TenantId;
+  sourceUri: string;
+  sourceVersion: string;
+  owner: string;
+  permissions: readonly string[];
+  contentHash: Sha256Digest;
+  chunks: readonly IngestedChunk[];
+}>;
+
+export function verifyIngestion(document: IngestedDocument): VerificationReport {
+  const chunkIds = new Set(document.chunks.map(chunk => chunk.id));
+  return verifyInvariantSet("ingestion", [
+    ["ingestion.document-id", document.id.trim().length > 0, "document id is required"],
+    ["ingestion.tenant", document.tenantId > 0, "document tenant is required"],
+    ["ingestion.source", /^https:\/\//.test(document.sourceUri), "source URI must use HTTPS"],
+    ["ingestion.version", document.sourceVersion.trim().length > 0, "source version is required"],
+    ["ingestion.owner", document.owner.trim().length > 0, "document owner is required"],
+    ["ingestion.permissions", document.permissions.length > 0, "document permissions are required"],
+    ["ingestion.content-hash", /^[0-9a-f]{64}$/.test(document.contentHash), "document content hash must be sha256"],
+    ["ingestion.chunk-indexes", document.chunks.every((chunk, index) => chunk.index === index), "chunks must be contiguous and ordered"],
+    ["ingestion.chunk-ids", chunkIds.size === document.chunks.length, "chunk ids must be unique"],
+    ["ingestion.chunk-document", document.chunks.every(chunk => chunk.documentId === document.id), "chunk/document binding failed"],
+    ["ingestion.chunk-hashes", document.chunks.every(chunk => /^[0-9a-f]{64}$/.test(chunk.contentHash) && /^[0-9a-f]{64}$/.test(chunk.embeddingDigest)), "chunk hashes must be sha256"],
+    ["ingestion.chunk-authorization", document.chunks.every(chunk => /^[0-9a-f]{64}$/.test(chunk.authorizationDigest)), "every chunk needs an authorization digest"],
+  ]);
+}
+
+export function buildVerifiedRagInput(document: IngestedDocument, query: string): Readonly<{
+  document: IngestedDocument;
+  queryDigest: Sha256Digest;
+}> {
+  const report = verifyIngestion(document);
+  if (!report.ok) throw new Error(report.violations.map(v => v.code).join(","));
+  if (!query.trim()) throw new Error("query_required");
+  return immutable({ document, queryDigest: digest({ tenantId: document.tenantId, query }) });
+}
