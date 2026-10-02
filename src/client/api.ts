@@ -12,7 +12,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     let msg = res.statusText;
-    try { const b = await res.json(); msg = b.error ?? b.message ?? msg; } catch {}
+    try { const b = await res.json(); msg = b.error ?? b.message ?? msg; } catch { /* non-JSON error response */ }
     throw new ApiError(res.status, msg);
   }
   if (res.status === 204) return undefined as T;
