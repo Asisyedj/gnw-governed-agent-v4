@@ -40,9 +40,14 @@ async function handleReview(app: { db: Db }, req: FastifyRequest, reply: Fastify
 
   await insertAuditLog(app.db, {
     eventType: status === "approved" ? "approval.use" : "task.deny",
-    actorId: session.userId, tenantId: session.tenantId, taskId: approval.taskId ?? undefined,
-    resourceType: "approval", resourceId: String(id), outcome: "success",
-    detail: { reason }, ipAddress: req.ip
+    actorId: session.userId,
+    tenantId: session.tenantId,
+    ...(approval.taskId !== null && approval.taskId !== undefined ? { taskId: approval.taskId } : {}),
+    resourceType: "approval",
+    resourceId: String(id),
+    outcome: "success",
+    ...(reason !== undefined ? { detail: { reason } } : {}),
+    ipAddress: req.ip,
   });
   return reply.send({ ok: true, approval: updated });
 }
