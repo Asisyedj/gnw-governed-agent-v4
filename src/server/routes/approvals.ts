@@ -43,6 +43,7 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
     if (!parsed.success) return reply.status(400).send({ error: "Invalid input" });
 
     const updated = await reviewApproval(app.db, id, session.tenantId, session.userId, parsed.data.status, parsed.data.reason);
+    if (!updated) return reply.status(409).send({ error: "Approval was already reviewed by another request.", code: "already_reviewed" });
     const auditEntry: Parameters<typeof insertAuditLog>[1] = {
       eventType: `approval.${parsed.data.status}`,
       actorId: session.userId,
