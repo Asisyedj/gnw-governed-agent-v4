@@ -10,7 +10,6 @@ RUN npm ci --ignore-scripts
 FROM deps AS builder
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY src ./src
-COPY public ./public
 RUN npm run build
 
 FROM base AS prod-deps
