@@ -14,13 +14,15 @@ export async function executeWithGovernance(ctx:ExecutionContext,envelope:Action
   persistCapabilityLease: lease=>createCapabilityLease(ctx.db,{leaseId:lease.leaseId,requestId:lease.requestId,actionDigest:lease.actionDigest,subject:lease.subject,taskId:lease.taskId,tenantId:Number(lease.tenant),actorUserId:lease.actorUserId,capability:lease.capability,destination:lease.destination,issuedAt:new Date(lease.issuedAt),expiresAt:new Date(lease.expiresAt),interlockGeneration:lease.interlockGeneration,issuer:lease.issuer,signature:lease.signature})
  },undefined,()=>Date.now(),ctx.env.requireSignedGrants?{issuer:ctx.env.grantIssuer,publicKeyPem:ctx.env.grantPublicKeyPem}:undefined,leaseSigner);
  try{
-  validateEnvelope(envelope,Date.now(),300000,{taskId:ctx.taskId,tenantId:ctx.tenantId,actorId:ctx.actorId,grantId:ctx.grantId,nonce:ctx.governanceRequest.nonce,operation:ctx.governanceRequest.operation,tool:ctx.governanceRequest.tool});
+  const governanceActionDigest=governance.digest(ctx.governanceRequest);
+  validateEnvelope(envelope,Date.now(),300000,{taskId:ctx.taskId,tenantId:ctx.tenantId,actorId:ctx.actorId,grantId:ctx.grantId,nonce:ctx.governanceRequest.nonce,operation:ctx.governanceRequest.operation,tool:ctx.governanceRequest.tool,actionDigest:governanceActionDigest});
   const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
   if(!d.allowed){await audit(ctx.db,{eventType:"governance.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"denied",detail:{reason:d.reason,actionDigest:d.actionDigest},requestId:ctx.requestId},{required:true});return{success:false,error:d.reason,durationMs:Date.now()-start};}
-  const digest=digestEnvelope(envelope);
-  await audit(ctx.db,{eventType:"tool.invoke",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,operation:envelope.operation},requestId:ctx.requestId},{required:true});
+  const envelopeDigest=digestEnvelope(envelope), digest=d.actionDigest;
+  if(envelope.actionDigest!==d.actionDigest) throw new Error("action_digest_binding");
+  await audit(ctx.db,{eventType:"tool.invoke",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,envelopeDigest,operation:envelope.operation},requestId:ctx.requestId},{required:true});
   const output=await handler();
-  await audit(ctx.db,{eventType:"tool.result",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest},requestId:ctx.requestId},{required:true});
+  await audit(ctx.db,{eventType:"tool.result",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,envelopeDigest},requestId:ctx.requestId},{required:true});
   return{success:true,output,durationMs:Date.now()-start};
  }catch(e){const m=e instanceof Error?e.message:String(e);try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch { /* preserve original execution failure */ }return{success:false,error:m,durationMs:Date.now()-start};}
 }
