@@ -28,3 +28,14 @@ CREATE POLICY gnw_capability_leases_tenant ON capability_leases
 
 -- RLS must fail closed if application code forgets to establish tenant context.
 REVOKE ALL ON budget_reservations, capability_leases FROM PUBLIC;
+
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS request_id TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS action_digest TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS destination TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS interlock_generation INTEGER;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS issuer TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS signature TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS capability_leases_action_digest_idx ON capability_leases(action_digest);
+CREATE INDEX IF NOT EXISTS capability_leases_request_idx ON capability_leases(request_id);
