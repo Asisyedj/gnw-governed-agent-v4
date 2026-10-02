@@ -85,7 +85,7 @@ const release=read(".github/workflows/release.yml");
 if(release.includes("softprops/action-gh-release")) failures.push("release:unsupported-release-action");
 if(release.includes("npm install --package-lock-only")) failures.push("release:lockfile-mutated");
 if(!release.includes("npm run verify:production")||!release.includes("npm run verify:rls")) failures.push("release:closure-gates-missing");
-const docker=read(".github/workflows/docker-publish.yml");
+const docker=read(".github/workflows/docker-publish-compliant.yml");
 if(docker.includes("branches: [main]")) failures.push("docker:production-publish-on-branch");
 if(docker.includes("npm install --package-lock-only")) failures.push("docker:lockfile-mutated");
 if(!docker.includes("provenance: true")||!docker.includes("sbom: true")) failures.push("docker:attestation-metadata-missing");
