@@ -2,11 +2,11 @@
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
-ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 CREATE TABLE IF NOT EXISTS capability_leases (
  id SERIAL PRIMARY KEY, lease_id TEXT NOT NULL UNIQUE, task_id INTEGER, tenant_id INTEGER, actor_user_id INTEGER, capability TEXT NOT NULL,
  issued_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, revoked_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 UPDATE budget_reservations br SET tenant_id=t.tenant_id FROM tasks t WHERE br.task_id=t.id AND br.tenant_id IS NULL;
 ALTER TABLE budget_reservations ALTER COLUMN tenant_id SET NOT NULL;
 CREATE INDEX IF NOT EXISTS budget_res_tenant_idx ON budget_reservations(tenant_id);
