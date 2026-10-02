@@ -5,14 +5,14 @@ export type AuditEventType="auth.signin"|"auth.signout"|"auth.failed"|"task.crea
 export interface AuditEvent{eventType:AuditEventType;actorId?:number|null;tenantId?:number|null;taskId?:number|null;resourceType?:string|null;resourceId?:string|null;outcome:"success"|"failure"|"denied";detail?:Record<string,unknown>|null;requestId?:string|null;ipAddress?:string|null;}
 export async function audit(db:Db,event:AuditEvent,options:{required?:boolean}={}):Promise<void>{
  const entry:{eventType:string;actorId?:number;tenantId?:number;taskId?:number;resourceType?:string;resourceId?:string;outcome:"success"|"failure"|"denied";detail?:unknown;requestId?:string;ipAddress?:string}={eventType:event.eventType,outcome:event.outcome};
- if(event.actorId!=null)entry.actorId=event.actorId;
- if(event.tenantId!=null)entry.tenantId=event.tenantId;
- if(event.taskId!=null)entry.taskId=event.taskId;
- if(event.resourceType!=null)entry.resourceType=event.resourceType;
- if(event.resourceId!=null)entry.resourceId=event.resourceId;
- if(event.detail!=null)entry.detail=event.detail;
- if(event.requestId!=null)entry.requestId=event.requestId;
- if(event.ipAddress!=null)entry.ipAddress=event.ipAddress;
+ if(event.actorId !== null && event.actorId !== undefined)entry.actorId=event.actorId;
+ if(event.tenantId !== null && event.tenantId !== undefined)entry.tenantId=event.tenantId;
+ if(event.taskId !== null && event.taskId !== undefined)entry.taskId=event.taskId;
+ if(event.resourceType !== null && event.resourceType !== undefined)entry.resourceType=event.resourceType;
+ if(event.resourceId !== null && event.resourceId !== undefined)entry.resourceId=event.resourceId;
+ if(event.detail !== null && event.detail !== undefined)entry.detail=event.detail;
+ if(event.requestId !== null && event.requestId !== undefined)entry.requestId=event.requestId;
+ if(event.ipAddress !== null && event.ipAddress !== undefined)entry.ipAddress=event.ipAddress;
  try{await insertAuditLog(db,entry);}
  catch(err){if(options.required)throw err;console.error("[audit] failed to write audit log:",err);}
 }
