@@ -19,9 +19,9 @@ const baseRequest=():GovernanceRequest=>({
 
 describe("production control primitives",()=>{
  it("binds and validates action envelopes",()=>{
-   const env={taskId:"1",tenantId:"1",actorId:"7",operation:"search",tool:"knowledge.search",parameters:{q:"x"},grantId:"g",nonce:"n",issuedAt:now};
+   const env={taskId:"1",tenantId:"1",actorId:"7",operation:"search",tool:"knowledge.search",parameters:{q:"x"},grantId:"g",nonce:"n",issuedAt:now,actionDigest:"a".repeat(64)};
    expect(digestEnvelope(env)).toMatch(/^[0-9a-f]{64}$/);
-   expect(()=>validateEnvelope(env,now,300000,{taskId:1,tenantId:1,actorId:7,grantId:"g",nonce:"n",operation:"search",tool:"knowledge.search"})).not.toThrow();
+   expect(()=>validateEnvelope(env,now,300000,{taskId:1,tenantId:1,actorId:7,grantId:"g",nonce:"n",operation:"search",tool:"knowledge.search",actionDigest:env.actionDigest})).not.toThrow();
    expect(()=>validateEnvelope(env,now,300000,{taskId:2,tenantId:1,actorId:7,grantId:"g",nonce:"n",operation:"search",tool:"knowledge.search"})).toThrow("context_binding");
    expect(()=>validateEnvelope({...env,issuedAt:now-400000},now)).toThrow("outside window");
  });
@@ -113,7 +113,7 @@ describe("governed execution boundary",()=>{
    const handler=vi.fn(async()=>({ok:true}));
    const env={requireSignedGrants:false,grantIssuer:"gnw-test",grantPublicKeyPem:keys.publicKey,leasePrivateKeyPem:keys.privateKey,executorSecret:"",executorUrl:""} as any;
    const ctx={db:{},env,taskId:1,tenantId:1,actorId:1,requestId:"req-lease",grantId:"g",governanceRequest:{...baseRequest(),requestId:"req-lease",nonce:"grant-lease"}} as any;
-   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-lease",issuedAt:now},handler);
+   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-lease",issuedAt:now,actionDigest:"0".repeat(64)},handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
    expect(vi.mocked(repo.createCapabilityLease)).toHaveBeenCalledTimes(1);
@@ -122,7 +122,7 @@ describe("governed execution boundary",()=>{
    const {executeWithGovernance}=await import("../../server/execution.js");
    const handler=vi.fn(async()=>({ok:true}));
    const ctx={db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",leasePrivateKeyPem:"",executorSecret:"",executorUrl:""} as any,taskId:1,tenantId:1,actorId:1,requestId:"req-1",grantId:"g",governanceRequest:baseRequest()} as any;
-   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now},handler);
+   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now,actionDigest:"0".repeat(64)},handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
  });
