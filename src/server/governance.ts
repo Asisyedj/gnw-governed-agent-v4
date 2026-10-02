@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { canonicalize, sha256, verifyGrantSignature } from "./security.js";
+import { verifyRuntimeAttestation, type RuntimeAttestation } from "./attestation.js";
 import { issueCapabilityLease, type CapabilityLease } from "./capability.js";
 import { AGENT_TOOL_SCOPES, CLASSIFICATIONS, SPECIALIST_AGENTS, type Classification, type SpecialistAgent } from "../shared/types.js";
 
-export type GovernanceRequest={requestId:string;subject:string;tenant:string;role:string;purpose:string;classification:Classification;operation:string;resource:string;agent:SpecialistAgent;tool:string;scope:string;budgetTokens:number;budgetBytes:number;issuedAt:number;expiresAt:number;nonce:string;taskId?:number;normalizedParameters?:Record<string,unknown>;inputDigest?:string;envelopeDigest?:string;providerParameters?:Record<string,unknown>;provenance?:Record<string,{value:unknown;source:string;trust:string}>;capability?:string;outputConstraints?:Record<string,unknown>;budgetReservationTokens?:number;budgetReservationBytes?:number;issuer?:string;signature?:string};
+export type GovernanceRequest={requestId:string;subject:string;tenant:string;role:string;purpose:string;classification:Classification;operation:string;resource:string;agent:SpecialistAgent;tool:string;scope:string;budgetTokens:number;budgetBytes:number;issuedAt:number;expiresAt:number;nonce:string;taskId?:number;normalizedParameters?:Record<string,unknown>;inputDigest?:string;envelopeDigest?:string;providerParameters?:Record<string,unknown>;provenance?:Record<string,{value:unknown;source:string;trust:string}>;capability?:string;outputConstraints?:Record<string,unknown>;budgetReservationTokens?:number;budgetReservationBytes?:number;issuer?:string;signature?:string;runtimeAttestation?:RuntimeAttestation};
 export type ApprovalRecord={approvalId:string|number;requestId?:string;actionDigest:string;tenant:string;status:"pending"|"approved"|"denied"|"expired";approverId?:number|string;approverRole?:string;requestedBy?:number|string;expiresAt:number;nonce:string};
 export type GovernanceDecision={allowed:boolean;status:"ALLOW"|"DENY"|"STOP";reason:string;actionDigest:string;requestId:string;capabilityLease?:CapabilityLease};
 export type Interlock={killSwitch:boolean;circuitOpen:boolean;generation?:number;reason?:string|null};
@@ -14,7 +15,7 @@ const DEFAULT_LIMITS:GovernanceLimits={maxBudgetTokens:100000,maxBudgetBytes:500
 export function requiresHumanApproval(r:Pick<GovernanceRequest,"operation"|"classification"|"agent"|"tool">){return r.operation==="provider_job"||r.classification==="restricted"||r.tool==="video.provider_job";}
 export function digestRequest(r:GovernanceRequest){return sha256(`GNW-ACTION-ENVELOPE-V1|${canonicalize({requestId:r.requestId,subject:r.subject,tenant:r.tenant,role:r.role,purpose:r.purpose,classification:r.classification,operation:r.operation,resource:r.resource,agent:r.agent,tool:r.tool,scope:r.scope,normalizedParameters:r.normalizedParameters??{},inputDigest:r.inputDigest??"",envelopeDigest:r.envelopeDigest??"",providerParameters:r.providerParameters??null,outputConstraints:r.outputConstraints??null,budgetTokens:r.budgetTokens,budgetBytes:r.budgetBytes,budgetReservationTokens:r.budgetReservationTokens??r.budgetTokens,budgetReservationBytes:r.budgetReservationBytes??r.budgetBytes,provenance:r.provenance??{}})}`);}
 export class GovernanceService{
- constructor(private readonly stores:GovernanceStores,private readonly limits:GovernanceLimits=DEFAULT_LIMITS,private readonly now:()=>number=Date.now,private readonly grantVerifier?:{issuer:string;publicKeyPem:string},private readonly leaseSigner?:{issuer:string;privateKeyPem:string;ttlMs:number}){}
+ constructor(private readonly stores:GovernanceStores,private readonly limits:GovernanceLimits=DEFAULT_LIMITS,private readonly now:()=>number=Date.now,private readonly grantVerifier?:{issuer:string;publicKeyPem:string},private readonly leaseSigner?:{issuer:string;privateKeyPem:string;ttlMs:number},private readonly attestationVerifier?:{issuer:string;publicKeyPem:string;expectedMeasurement?:string;maxAgeMs?:number},private readonly requireAttestation=false){}
  digest(r:GovernanceRequest){return digestRequest(r);}
  async authorize(r:GovernanceRequest,a?:ApprovalRecord):Promise<GovernanceDecision>{
   const actionDigest=this.digest(r),base={actionDigest,requestId:r.requestId};let interlock:Interlock;
@@ -32,6 +33,9 @@ export class GovernanceService{
    if(!Number.isInteger(rt)||rt<=0||rt>r.budgetTokens||!Number.isInteger(rb)||rb<=0||rb>r.budgetBytes)throw new GovernanceError("budget_reservation_invalid");
    if(!(AGENT_TOOL_SCOPES[r.agent]??[]).includes(r.tool))throw new GovernanceError("tool_not_allowed");
    if(r.scope!==r.tool)throw new GovernanceError("scope_binding");
+   if(this.requireAttestation&&r.classification==="restricted"){
+    if(!this.attestationVerifier||!r.runtimeAttestation||!verifyRuntimeAttestation(r.runtimeAttestation,this.attestationVerifier,now))throw new GovernanceError("runtime_attestation_required");
+   }
    if(requiresHumanApproval(r)){
     if(!a||a.status!=="approved")throw new GovernanceError("approval_required");
     if(a.actionDigest!==actionDigest||a.tenant!==r.tenant||(a.requestId&&a.requestId!==r.requestId))throw new GovernanceError("approval_binding");
