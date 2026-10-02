@@ -8,7 +8,7 @@ import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-
 export type ExecutionContext={db:Db;env:Env;taskId:number;tenantId:number;actorId:number;requestId:string;governanceRequest:GovernanceRequest;approval?:ApprovalRecord;grantId:string};
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
 export async function executeWithGovernance(ctx:ExecutionContext,envelope:ActionEnvelope,handler:()=>Promise<unknown>):Promise<ExecutionResult>{
- const start=Date.now();const governance=new GovernanceService({claimNonce:(k,n,t)=>claimNonce(ctx.db,k,n,t),reserveBudget:(tenantId,taskId,nonce,tokens,bytes)=>reserveBudget(ctx.db,tenantId,taskId,nonce,tokens,bytes),getInterlock:()=>getInterlock(ctx.db)},undefined,Date.now(),ctx.env.requireSignedGrants?{issuer:ctx.env.grantIssuer,publicKeyPem:ctx.env.grantPublicKeyPem}:undefined);
+ const start=Date.now();const governance=new GovernanceService({claimNonce:(k,n,t)=>claimNonce(ctx.db,k,n,t),reserveBudget:(tenantId,taskId,nonce,tokens,bytes)=>reserveBudget(ctx.db,tenantId,taskId,nonce,tokens,bytes),getInterlock:()=>getInterlock(ctx.db)},undefined,()=>Date.now(),ctx.env.requireSignedGrants?{issuer:ctx.env.grantIssuer,publicKeyPem:ctx.env.grantPublicKeyPem}:undefined);
  try{
   validateEnvelope(envelope,Date.now(),300000,{taskId:ctx.taskId,tenantId:ctx.tenantId,actorId:ctx.actorId,grantId:ctx.grantId,nonce:ctx.governanceRequest.nonce,operation:ctx.governanceRequest.operation,tool:ctx.governanceRequest.tool});
   const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
