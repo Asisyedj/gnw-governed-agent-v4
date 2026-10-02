@@ -7,7 +7,7 @@ export default function AuditView() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try { setEntries(await api.audit.list(200)); }
       catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed to load"); }
       finally { setLoading(false); }

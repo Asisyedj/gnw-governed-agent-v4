@@ -1,38 +1,7 @@
-import { randomBytes } from "node:crypto";
-
-export function generateNonce(bytes = 16): string {
-  return randomBytes(bytes).toString("hex");
-}
-
-export type CapabilityLease = {
-  leaseId: string;
-  taskId: string;
-  tenantId: string;
-  actorId: string;
-  tool: string;
-  operation: string;
-  scope: string;
-  expiresAt: number;
-  consumed: boolean;
-};
-
-export function makeCapabilityLease(
-  taskId: string,
-  tenantId: string,
-  actorId: string,
-  tool: string,
-  operation: string,
-  scope: string,
-  ttlMs: number
-): CapabilityLease {
-  return {
-    leaseId: generateNonce(24),
-    taskId, tenantId, actorId, tool, operation, scope,
-    expiresAt: Date.now() + ttlMs,
-    consumed: false,
-  };
-}
-
-export function isLeaseValid(lease: CapabilityLease, nowMs = Date.now()): boolean {
-  return !lease.consumed && lease.expiresAt > nowMs;
-}
+import { createHash,createPrivateKey,createPublicKey,randomBytes,sign as cryptoSign,verify as cryptoVerify } from 'node:crypto';
+export function generateNonce(bytes=16){return randomBytes(bytes).toString('hex');}
+export type CapabilityLease={leaseId:string;requestId:string;actionDigest:string;subject:string;tenant:string;taskId:number;actorUserId:number;capability:string;destination:string|null;issuedAt:number;expiresAt:number;interlockGeneration:number;issuer:string;signature:string;consumed:boolean};
+function payload(v:Omit<CapabilityLease,'signature'|'consumed'>){return JSON.stringify(v);}
+export function issueCapabilityLease(input:{requestId:string;actionDigest:string;subject:string;tenant:string;taskId:number;actorUserId:number;capability:string;destination:string|null;ttlMs:number;interlockGeneration:number;issuer:string;privateKeyPem:string},now=Date.now()):CapabilityLease{const base={leaseId:generateNonce(24),requestId:input.requestId,actionDigest:input.actionDigest,subject:input.subject,tenant:input.tenant,taskId:input.taskId,actorUserId:input.actorUserId,capability:input.capability,destination:input.destination,issuedAt:now,expiresAt:now+input.ttlMs,interlockGeneration:input.interlockGeneration,issuer:input.issuer};if(input.ttlMs<=0||base.expiresAt<=base.issuedAt)throw new Error('capability_ttl_invalid');const signature=cryptoSign(null,Buffer.from(payload(base)),createPrivateKey(input.privateKeyPem)).toString('base64url');return{...base,signature,consumed:false};}
+export function verifyCapabilityLease(lease:CapabilityLease,publicKeyPem:string,now=Date.now()):boolean{if(lease.consumed||lease.expiresAt<=now)return false;const{signature,consumed:_consumed,...base}=lease;try{return cryptoVerify(null,Buffer.from(payload(base)),createPublicKey(publicKeyPem),Buffer.from(signature,'base64url'));}catch{return false;}}
+export function isLeaseValid(lease:CapabilityLease,nowMs=Date.now()){return !lease.consumed&&lease.expiresAt>nowMs;}
