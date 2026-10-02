@@ -15,9 +15,22 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    name: Staging scope preflight
+    runs-on: ubuntu-24.04
+    outputs:
+      has_target: ${{ steps.scope.outputs.has_target }}
+    steps:
+      - id: scope
+        env:
+          TARGET: ${{ secrets.GNW_STAGING_BASE_URL }}
+        run: |
+          if [ -n "$TARGET" ]; then echo "has_target=true" >> "$GITHUB_OUTPUT"; else echo "has_target=false" >> "$GITHUB_OUTPUT"; fi
+
   baseline:
     name: Authorized staging baseline scan
-    if: ${{ secrets.GNW_STAGING_BASE_URL != '' }}
+    needs: preflight
+    if: ${{ needs.preflight.outputs.has_target == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -37,7 +50,8 @@ jobs:
 
   active:
     name: Authorized staging active scan
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.active_scan == true && secrets.GNW_STAGING_BASE_URL != '' }}
+    needs: preflight
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.active_scan == true && needs.preflight.outputs.has_target == 'true' }}
     runs-on: ubuntu-24.04
     environment: security-testing
     steps:
