@@ -43,6 +43,8 @@ jobs:
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
       - name: Install from committed lockfile
         run: npm ci
+      - name: Validate Pakistan compliance matrix
+        run: npm run verify:compliance
       - name: Production environment preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
