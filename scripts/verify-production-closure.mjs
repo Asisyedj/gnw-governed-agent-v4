@@ -96,6 +96,9 @@ if(existsSync(workflowDir)){
 }
 const ns=read("k8s/namespace.yaml");
 for(const token of ["pod-security.kubernetes.io/enforce: restricted","pod-security.kubernetes.io/audit: restricted","pod-security.kubernetes.io/warn: restricted"]){if(!ns.includes(token)) failures.push(`k8s:pod-security-label-missing:${token}`);}
+const crypto=read("scripts/verify-cryptographic-closure.mjs");
+if(!crypto) failures.push("crypto:verifier-missing");
+else for(const token of ["GNW-ACTION-ENVELOPE-V1","GNW-TEE-ATTESTATION-V1","GNW-TRUST-ANCHOR-V1","executor_action_digest_required"]){if(!crypto.includes(token)) failures.push(`crypto:verifier-control-missing:${token}`);}
 const deployment=read("k8s/deployment.yaml");
 for(const token of ["runAsNonRoot: true","readOnlyRootFilesystem: true","allowPrivilegeEscalation: false","drop: [\"ALL\"]","seccompProfile:","emptyDir:","sizeLimit: 128Mi"]){if(!deployment.includes(token)) failures.push(`k8s:deployment-hardening-missing:${token}`);}
 try{execFileSync("git",["rev-parse","--is-inside-work-tree"],{stdio:"ignore"});execFileSync("git",["diff","--check"],{stdio:"ignore"});}catch{failures.push("git:checkout-or-diff-check-unavailable");}
