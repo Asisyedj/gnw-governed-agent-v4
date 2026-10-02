@@ -16,6 +16,12 @@ export function validateSecrets(): void {
   if (process.env.NODE_ENV === "production") {
     if (dbUrl && !dbUrl.startsWith("postgresql://") && !dbUrl.startsWith("postgres://"))
       errors.push("DATABASE_URL must be a valid PostgreSQL connection string");
+    if (!process.env.EXECUTOR_SECRET) errors.push("EXECUTOR_SECRET is required in production");
+    if (!process.env.GNW_GRANT_PRIVATE_KEY_PEM) errors.push("GNW_GRANT_PRIVATE_KEY_PEM is required in production");
+    if (!process.env.GNW_GRANT_PUBLIC_KEY_PEM) errors.push("GNW_GRANT_PUBLIC_KEY_PEM is required in production");
+    if (!process.env.GNW_LEASE_PRIVATE_KEY_PEM) errors.push("GNW_LEASE_PRIVATE_KEY_PEM is required in production");
+    if (process.env.GNW_REQUIRE_SIGNED_GRANTS !== "true") errors.push("GNW_REQUIRE_SIGNED_GRANTS must be true in production");
+    if (process.env.EXECUTOR_URL && !process.env.EXECUTOR_URL.startsWith("https://")) errors.push("EXECUTOR_URL must use HTTPS in production");
   }
 
   if (errors.length > 0) {
