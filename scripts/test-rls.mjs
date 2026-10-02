@@ -36,6 +36,10 @@ try {
   try {
     await a.query('BEGIN');
     await a.query('SELECT set_config(\'app.tenant_id\',$1,true)', [String(t1)]);
+    const setting = (await a.query("SELECT current_setting('app.tenant_id', true) AS tenant_id")) .rows[0]?.tenant_id;
+    if (String(setting) !== String(t1)) throw new Error('tenant context not established for tenant-a transaction');
+    const policy = (await a.query("SELECT policyname, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname='public' AND tablename='tasks'")).rows;
+    if (!policy.length) throw new Error('tasks RLS policy missing at runtime');
     const u1 = (await a.query(
       'INSERT INTO users(tenant_id,email,password_hash,role) VALUES($1,$2,$3,$4) RETURNING id',
       [t1,'a@example.test','x','owner']
