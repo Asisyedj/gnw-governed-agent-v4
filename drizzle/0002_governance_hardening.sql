@@ -157,6 +157,34 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Capability leases are security evidence and must persist the complete authorization binding.
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS request_id TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS action_digest TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS destination TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS interlock_generation INTEGER;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS issuer TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS signature TEXT;
+ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
+
+DO $ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM capability_leases
+    WHERE request_id IS NULL
+       OR action_digest IS NULL
+       OR subject IS NULL
+       OR interlock_generation IS NULL
+       OR issuer IS NULL
+       OR signature IS NULL
+  ) THEN
+    RAISE EXCEPTION 'existing capability_leases require an explicit re-issuance/backfill before enabling complete lease evidence';
+  END IF;
+END $;
+
+CREATE INDEX IF NOT EXISTS capability_leases_action_digest_idx ON capability_leases(action_digest);
+CREATE INDEX IF NOT EXISTS capability_leases_request_idx ON capability_leases(request_id);
+CREATE INDEX IF NOT EXISTS capability_leases_expiry_idx ON capability_leases(expires_at);
+
 ALTER TABLE capability_leases ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE capability_leases ALTER COLUMN task_id SET NOT NULL;
 ALTER TABLE capability_leases ALTER COLUMN actor_user_id SET NOT NULL;
