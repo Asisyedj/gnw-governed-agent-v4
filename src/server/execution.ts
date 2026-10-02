@@ -2,13 +2,17 @@ import type { Db } from "./db/index.js";
 import type { Env } from "./env.js";
 import { audit } from "./audit.js";
 import { governedFetch, assertEgressUrl } from "./security.js";
-import { claimNonce, getInterlock, reserveBudget } from "./repo.js";
+import { claimNonce, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 export type ExecutionContext={db:Db;env:Env;taskId:number;tenantId:number;actorId:number;requestId:string;governanceRequest:GovernanceRequest;approval?:ApprovalRecord;grantId:string};
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
 export async function executeWithGovernance(ctx:ExecutionContext,envelope:ActionEnvelope,handler:()=>Promise<unknown>):Promise<ExecutionResult>{
- const start=Date.now();const governance=new GovernanceService({claimNonce:(k,n,t)=>claimNonce(ctx.db,k,n,t),reserveBudget:(tenantId,taskId,nonce,tokens,bytes)=>reserveBudget(ctx.db,tenantId,taskId,nonce,tokens,bytes),getInterlock:()=>getInterlock(ctx.db)},undefined,()=>Date.now(),ctx.env.requireSignedGrants?{issuer:ctx.env.grantIssuer,publicKeyPem:ctx.env.grantPublicKeyPem}:undefined);
+ const start=Date.now();
+ const leaseSigner=ctx.env.leasePrivateKeyPem?{issuer:ctx.env.grantIssuer,privateKeyPem:ctx.env.leasePrivateKeyPem,ttlMs:300000}:undefined;
+ const governance=new GovernanceService({claimNonce:(k,n,t)=>claimNonce(ctx.db,k,n,t),reserveBudget:(tenantId,taskId,nonce,tokens,bytes)=>reserveBudget(ctx.db,tenantId,taskId,nonce,tokens,bytes),getInterlock:()=>getInterlock(ctx.db),
+  persistCapabilityLease: lease=>createCapabilityLease(ctx.db,{leaseId:lease.leaseId,requestId:lease.requestId,actionDigest:lease.actionDigest,subject:lease.subject,taskId:lease.taskId,tenantId:Number(lease.tenant),actorUserId:lease.actorUserId,capability:lease.capability,destination:lease.destination,issuedAt:new Date(lease.issuedAt),expiresAt:new Date(lease.expiresAt),interlockGeneration:lease.interlockGeneration,issuer:lease.issuer,signature:lease.signature})
+ },undefined,()=>Date.now(),ctx.env.requireSignedGrants?{issuer:ctx.env.grantIssuer,publicKeyPem:ctx.env.grantPublicKeyPem}:undefined,leaseSigner);
  try{
   validateEnvelope(envelope,Date.now(),300000,{taskId:ctx.taskId,tenantId:ctx.tenantId,actorId:ctx.actorId,grantId:ctx.grantId,nonce:ctx.governanceRequest.nonce,operation:ctx.governanceRequest.operation,tool:ctx.governanceRequest.tool});
   const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
