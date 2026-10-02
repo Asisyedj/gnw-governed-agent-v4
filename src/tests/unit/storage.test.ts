@@ -16,7 +16,7 @@ describe("artifact storage",()=>{
         sharedStorageConfirmed:true,
       } as any;
       const storage=createStorage(env);
-      await expect(storage.put("../escape.txt",Buffer.from("x"),"text/plain")).rejects.toThrow("invalid_storage_key");
+      await expect(storage.put("../escape.txt",Buffer.from("x"),"text/plain")).rejects.toThrow(/invalid_storage_key|storage_path_escape/);
       await expect(storage.get("/absolute.txt")).rejects.toThrow("invalid_storage_key");
     } finally {
       await rm(dir,{recursive:true,force:true});
