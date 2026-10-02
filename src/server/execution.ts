@@ -4,7 +4,7 @@ import { audit } from "./audit.js";
 import { governedFetch, assertEgressUrl } from "./security.js";
 import { claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
-import type { CapabilityLease } from "./capability.js";
+import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 
 export type ExecutionContext={
@@ -96,7 +96,11 @@ export async function executeWithGovernance(
     const digest=digestEnvelope(envelope);
     await audit(ctx.db,{eventType:"tool.invoke",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,actionDigest:d.actionDigest,operation:envelope.operation,capabilityLeaseId:d.capabilityLease?.leaseId},requestId:ctx.requestId},{required:true});
     if(d.capabilityLease){
-      const consumed=await consumeCapabilityLease(ctx.db,{leaseId:d.capabilityLease.leaseId,tenantId:ctx.tenantId,taskId:ctx.taskId,actorUserId:ctx.actorId,actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration});
+      if(!ctx.env.leasePublicKeyPem || d.capabilityLease.issuer!==ctx.env.grantIssuer || !verifyCapabilityLeaseSignature(d.capabilityLease,ctx.env.leasePublicKeyPem)){
+        throw new Error("capability_lease_signature_invalid");
+      }
+      await audit(ctx.db,{eventType:"capability.signature_verified",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"capability_lease",resourceId:d.capabilityLease.leaseId,outcome:"success",detail:{actionDigest:d.actionDigest,issuer:d.capabilityLease.issuer},requestId:ctx.requestId},{required:true});
+      const consumed=await consumeCapabilityLease(ctx.db,{leaseId:d.capabilityLease.leaseId,tenantId:ctx.tenantId,taskId:ctx.taskId,actorUserId:ctx.actorId,actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration,signature:d.capabilityLease.signature,publicKeyPem:ctx.env.leasePublicKeyPem});
       if(!consumed) throw new Error("capability_lease_invalid_or_replayed");
       await audit(ctx.db,{eventType:"capability.consume",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"capability_lease",resourceId:d.capabilityLease.leaseId,outcome:"success",detail:{actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration},requestId:ctx.requestId},{required:true});
     }
