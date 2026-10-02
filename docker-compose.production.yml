@@ -2,9 +2,11 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: gnw
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: gnw
+      GNW_APP_DB_USER: ${GNW_APP_DB_USER:?set GNW_APP_DB_USER}
+      GNW_APP_DB_PASSWORD: ${GNW_APP_DB_PASSWORD:?set GNW_APP_DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U gnw -d gnw"]
       interval: 5s
@@ -13,6 +15,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
       - ${POSTGRES_TLS_DIR:?set POSTGRES_TLS_DIR}:/tls:ro
+      - ./deploy/postgres/10-create-app-role.sh:/docker-entrypoint-initdb.d/10-create-app-role.sh:ro
     command: >-
       postgres
       -c ssl=on
@@ -28,9 +31,10 @@ services:
     environment: &app-env
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      DATABASE_URL: postgresql://${GNW_APP_DB_USER:?set GNW_APP_DB_USER}:${GNW_APP_DB_PASSWORD:?set GNW_APP_DB_PASSWORD}@db:5432/gnw?sslmode=require
       COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
       GNW_POSTGRES_SSL_REQUIRED: "true"
+      NODE_EXTRA_CA_CERTS: /tls/ca.crt
       EXECUTOR_URL: ${EXECUTOR_URL:?set EXECUTOR_URL}
       EXECUTOR_SECRET: ${EXECUTOR_SECRET:?set EXECUTOR_SECRET}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
@@ -51,6 +55,7 @@ services:
       GNW_EGRESS_ALLOW_LIST: ${GNW_EGRESS_ALLOW_LIST:-}
     volumes:
       - app-a-data:/data
+      - ${POSTGRES_TLS_DIR:?set POSTGRES_TLS_DIR}:/tls:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
@@ -68,6 +73,7 @@ services:
     environment: *app-env
     volumes:
       - app-b-data:/data
+      - ${POSTGRES_TLS_DIR:?set POSTGRES_TLS_DIR}:/tls:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
