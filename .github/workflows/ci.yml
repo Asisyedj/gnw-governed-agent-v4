@@ -65,7 +65,7 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
       - name: Persist lockfile
-        if: ${{ success() && github.event_name == 'pull_request' }}
+        if: ${{ success() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
         run: |
           if [ -n "$(git status --porcelain -- package-lock.json)" ]; then
             git config user.name "github-actions[bot]"
