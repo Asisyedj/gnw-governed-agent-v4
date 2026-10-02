@@ -25,6 +25,24 @@ jobs:
           git diff --check
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
 
+      - name: Install committed lockfile and validate release controls
+        run: |
+          npm ci
+          npm run verify:production
+          npm run verify:compliance
+          npm run verify:cryptographic-closure
+
+      - name: Verify production release authorization, TEE and regulatory evidence
+        env:
+          GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
+          GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+          GNW_RELEASE_ARTIFACT_REQUIRED: "false"
+        run: npm run verify:release:evidence
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@792ab493f0fa5c8c55920b93a26cefd49a3fa82a
