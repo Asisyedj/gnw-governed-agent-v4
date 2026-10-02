@@ -72,7 +72,7 @@ jobs:
         run: npm run verify:release:evidence
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@792ab493f0fa5c8c55920b93a26cefd49a3fa82a
+        uses: docker/metadata-action@8e671d84a3bd81afdfc4fdbb96a42b07c2a80934
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
