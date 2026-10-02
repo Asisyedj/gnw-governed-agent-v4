@@ -14,7 +14,7 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   deepResearchBaseUrl:(source.GNW_DEEP_RESEARCH_BASE_URL??source.LLM_BASE_URL??"https://api.openai.com/v1").replace(/\/$/,""),
   deepResearchApiKey:source.GNW_DEEP_RESEARCH_API_KEY??source.LLM_API_KEY??"",deepResearchModel:source.GNW_DEEP_RESEARCH_MODEL??"o3-deep-research",
   deepResearchMaxToolCalls:int(source.GNW_DEEP_RESEARCH_MAX_TOOL_CALLS,50),deepResearchTimeoutMs:int(source.GNW_DEEP_RESEARCH_TIMEOUT_MS,3600000),
-  deepResearchUseCodeInterpreter:bool(source.GNW_DEEP_RESEARCH_USE_CODE_INTERPRETER,true),
+  deepResearchUseCodeInterpreter:bool(source.GNW_DEEP_RESEARCH_USE_CODE_INTERPRETER,isProduction?false:true),
   deepResearchAllowedDomains:(source.GNW_DEEP_RESEARCH_ALLOWED_DOMAINS??"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean),
   deepResearchMcpUrl:(source.GNW_DEEP_RESEARCH_MCP_URL??"").replace(/\/$/,""),deepResearchMcpLabel:(source.GNW_DEEP_RESEARCH_MCP_LABEL??"").trim(),
   llmTimeoutMs:int(source.LLM_TIMEOUT_MS,45000),
