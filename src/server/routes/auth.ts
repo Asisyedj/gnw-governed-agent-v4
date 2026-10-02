@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "node:crypto";
