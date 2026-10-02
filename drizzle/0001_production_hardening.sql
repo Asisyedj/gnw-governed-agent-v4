@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS capability_leases (
 );
 ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE interlocks ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 UPDATE budget_reservations br SET tenant_id=t.tenant_id FROM tasks t WHERE br.task_id=t.id AND br.tenant_id IS NULL;
