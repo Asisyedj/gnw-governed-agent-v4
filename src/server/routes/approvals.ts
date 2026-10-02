@@ -43,7 +43,18 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
     if (!parsed.success) return reply.status(400).send({ error: "Invalid input" });
 
     const updated = await reviewApproval(app.db, id, session.tenantId, session.userId, parsed.data.status, parsed.data.reason);
-    await insertAuditLog(app.db, { eventType: `approval.${parsed.data.status}`, actorId: session.userId, tenantId: session.tenantId, taskId: approval.taskId ?? undefined, resourceType: "approval", resourceId: String(id), outcome: "success", detail: { reason: parsed.data.reason }, ipAddress: req.ip });
+    const auditEntry: Parameters<typeof insertAuditLog>[1] = {
+      eventType: `approval.${parsed.data.status}`,
+      actorId: session.userId,
+      tenantId: session.tenantId,
+      resourceType: "approval",
+      resourceId: String(id),
+      outcome: "success",
+      ipAddress: req.ip,
+    };
+    if (approval.taskId !== null) auditEntry.taskId = approval.taskId;
+    if (parsed.data.reason !== undefined) auditEntry.detail = { reason: parsed.data.reason };
+    await insertAuditLog(app.db, auditEntry);
     return reply.send({ ok: true, approval: updated });
   });
 };
