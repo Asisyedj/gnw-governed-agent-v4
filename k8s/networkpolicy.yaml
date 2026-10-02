@@ -19,17 +19,33 @@ spec:
         - protocol: TCP
           port: 3000
   egress:
+    # Managed PostgreSQL may be in-cluster or provided through an approved
+    # network path. Keep this selector exact when PostgreSQL runs in-cluster.
     - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: gnw
+          podSelector:
+            matchLabels:
+              app: gnw-db
       ports:
         - protocol: TCP
-          port: 5432  # postgres
+          port: 5432
+    # Outbound HTTPS is additionally constrained in application code by the
+    # GNW egress allowlist and SSRF/DNS controls.
     - ports:
         - protocol: TCP
-          port: 443   # outbound HTTPS only
-        - protocol: TCP
-          port: 53
+          port: 443
+    # DNS is limited to the cluster DNS pods.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
         - protocol: UDP
+          port: 53
+        - protocol: TCP
           port: 53
