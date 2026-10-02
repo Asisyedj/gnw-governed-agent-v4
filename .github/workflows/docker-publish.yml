@@ -74,6 +74,7 @@ jobs:
         run: |
           set -eu
           COOKIE_SECRET="$(printf "x%.0s" $(seq 1 64))"
+          docker pull "$IMAGE_TAG"
           docker run -d --rm --name gnw-production-smoke \
             -e NODE_ENV=production \
             -e DATABASE_URL=postgresql://127.0.0.1:5432/gnw \
