@@ -1,41 +1,30 @@
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: gnw
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: gnw
-    healthcheck:
-      test: ["CMD-SHELL","pg_isready -h 127.0.0.1 -p 5432 -U gnw -d gnw"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    volumes: [db-data:/var/lib/postgresql/data]
-
   app-a:
     build: .
-    depends_on:
-      db: {condition: service_healthy}
+    restart: unless-stopped
     environment: &app-env
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:?set managed DATABASE_URL}
       GNW_POSTGRES_SSL_REQUIRED: "true"
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
       OWNER_EMAIL: ${OWNER_EMAIL:-}
       OWNER_PASSWORD: ${OWNER_PASSWORD:?set OWNER_PASSWORD}
-      ALLOW_SELF_REGISTRATION: ${ALLOW_SELF_REGISTRATION:-false}
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      ALLOW_SELF_REGISTRATION: "false"
+      LLM_BASE_URL: ${LLM_BASE_URL:?set LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL:-}
       GNW_GRANT_ISSUER: ${GNW_GRANT_ISSUER:?set GNW_GRANT_ISSUER}
       GNW_GRANT_PRIVATE_KEY_PEM: ${GNW_GRANT_PRIVATE_KEY_PEM:?set GNW_GRANT_PRIVATE_KEY_PEM}
       GNW_GRANT_PUBLIC_KEY_PEM: ${GNW_GRANT_PUBLIC_KEY_PEM:?set GNW_GRANT_PUBLIC_KEY_PEM}
       GNW_REQUIRE_SIGNED_GRANTS: "true"
-      GNW_EGRESS_ALLOW_LIST: ${GNW_EGRESS_ALLOW_LIST:-}
-    volumes: [app-a-data:/data]
+      GNW_EGRESS_ALLOW_LIST: ${GNW_EGRESS_ALLOW_LIST:?set GNW_EGRESS_ALLOW_LIST}
+    volumes:
+      - app-a-data:/data
     read_only: true
-    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=128m","/var/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+      - /var/tmp:rw,noexec,nosuid,nodev,size=64m
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 256
@@ -43,18 +32,19 @@ services:
 
   app-b:
     build: .
-    depends_on:
-      db: {condition: service_healthy}
+    restart: unless-stopped
     environment: *app-env
-    volumes: [app-b-data:/data]
+    volumes:
+      - app-b-data:/data
     read_only: true
-    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=128m","/var/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+      - /var/tmp:rw,noexec,nosuid,nodev,size=64m
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 256
     mem_limit: 1g
 
 volumes:
-  db-data:
   app-a-data:
   app-b-data:
