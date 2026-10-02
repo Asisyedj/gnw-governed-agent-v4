@@ -31,7 +31,7 @@ export function castVote(session: QuorumSession, memberId: string, vote: "approv
   let status: QuorumSession["status"] = "open";
   if (approvals >= session.policy.threshold) status = "approved";
   else if (rejections > session.policy.memberCount - session.policy.threshold) status = "rejected";
-  return { ...session, votes: newVotes, status, closedAt: status !== "open" ? Date.now() : undefined };
+  if (status === "open") return { ...session, votes: newVotes, status };\n  return { ...session, votes: newVotes, status, closedAt: Date.now() };
 }
 
 export function checkExpiry(session: QuorumSession): QuorumSession {
