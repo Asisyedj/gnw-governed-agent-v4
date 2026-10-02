@@ -1,4 +1,4 @@
-import { createVerify } from "node:crypto";
+import { verify as cryptoVerify } from "node:crypto";
 
 export type ThresholdSignature={participantId:string;signature:string};
 export type TrustAnchor={threshold:number;participants:Record<string,string>;requireTee:boolean};
@@ -27,10 +27,7 @@ export function verifyThresholdAttestation(
     const publicKeyPem=anchor.participants[entry.participantId];
     if(!publicKeyPem||!/^[0-9a-f]+$/i.test(entry.signature))continue;
     try{
-      const verifier=createVerify("sha256");
-      verifier.update(payload(actionDigest,measurement,nonce));
-      verifier.end();
-      if(verifier.verify(publicKeyPem,Buffer.from(entry.signature,"hex"))){seen.add(entry.participantId);valid++;}
+      if(cryptoVerify(null,Buffer.from(payload(actionDigest,measurement,nonce)),publicKeyPem,Buffer.from(entry.signature,"hex"))){seen.add(entry.participantId);valid++;}
     }catch{/* invalid participant material is a failed vote */}
   }
   return valid>=anchor.threshold;
