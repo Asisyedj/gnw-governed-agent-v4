@@ -21,7 +21,12 @@ export async function executeWithGovernance(
   const start=Date.now();
   const leaseTtlMs=Math.min(300_000, Math.max(1, ctx.governanceRequest.expiresAt-Date.now()));
   const attestationVerifier=ctx.env.teeAttestationIssuer&&ctx.env.teeAttestationPublicKeyPem
-    ? {issuer:ctx.env.teeAttestationIssuer,publicKeyPem:ctx.env.teeAttestationPublicKeyPem,expectedMeasurement:ctx.env.teeAttestationMeasurement||undefined,maxAgeMs:ctx.env.teeAttestationMaxAgeMs}
+    ? {
+        issuer:ctx.env.teeAttestationIssuer,
+        publicKeyPem:ctx.env.teeAttestationPublicKeyPem,
+        ...(ctx.env.teeAttestationMeasurement?{expectedMeasurement:ctx.env.teeAttestationMeasurement}:{}),
+        maxAgeMs:ctx.env.teeAttestationMaxAgeMs,
+      }
     : undefined;
   const governance=new GovernanceService(
     {
