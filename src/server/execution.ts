@@ -20,6 +20,9 @@ export async function executeWithGovernance(
 ):Promise<ExecutionResult>{
   const start=Date.now();
   const leaseTtlMs=Math.min(300_000, Math.max(1, ctx.governanceRequest.expiresAt-Date.now()));
+  const attestationVerifier=ctx.env.teeAttestationIssuer&&ctx.env.teeAttestationPublicKeyPem
+    ? {issuer:ctx.env.teeAttestationIssuer,publicKeyPem:ctx.env.teeAttestationPublicKeyPem,expectedMeasurement:ctx.env.teeAttestationMeasurement||undefined,maxAgeMs:ctx.env.teeAttestationMaxAgeMs}
+    : undefined;
   const governance=new GovernanceService(
     {
       claimNonce:(k,n,t)=>claimNonce(ctx.db,k,n,t),
@@ -50,6 +53,8 @@ export async function executeWithGovernance(
     ctx.env.leasePrivateKeyPem
       ? {issuer:ctx.env.grantIssuer,privateKeyPem:ctx.env.leasePrivateKeyPem,ttlMs:leaseTtlMs}
       : undefined,
+    attestationVerifier,
+    ctx.env.teeAttestationRequired,
   );
 
   try{
