@@ -29,8 +29,12 @@ describe("Auth routes", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("GET /api/me — unauthenticated returns 401", async () => {
+  it("GET /api/me — unauthenticated returns bootstrap-safe response", async () => {
     const res = await app.inject({ method: "GET", url: "/api/me" });
-    expect(res.statusCode).toBe(401);
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.user).toBeNull();
+    expect(typeof body.bootstrap).toBe("boolean");
+    expect(typeof body.allowSelfRegistration).toBe("boolean");
   });
 });
