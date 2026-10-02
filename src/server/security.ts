@@ -15,7 +15,8 @@ export function sha256(value: string | Buffer): string {
 }
 
 export function grantSigningPayload(grant: Record<string, unknown>): string {
-  const { signature: _sig, ...frozen } = grant;
+  const frozen = { ...grant };
+  delete frozen.signature;
   return canonicalize(frozen);
 }
 
@@ -50,7 +51,7 @@ function isUnsafeResolvedAddress(address: string): boolean {
   if (net.isIPv4(normalized)) {
     const parts = normalized.split(".").map(Number);
     if (parts.length !== 4 || parts.some(n => !Number.isFinite(n))) return true;
-    const [a,b,c,d] = parts as [number,number,number,number];
+    const [a,b,c] = parts as [number,number,number,number];
     return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127) || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
   }
   if (net.isIPv6(normalized)) {
