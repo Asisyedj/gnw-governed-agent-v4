@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-test:
@@ -32,24 +32,27 @@ jobs:
       COOKIE_SECRET: ci-test-cookie-secret-minimum-32-chars-ok
       LOG_LEVEL: silent
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
-        with: { node-version: "22" }
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - name: Verify clean checkout
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)"
+          test -n "$(git rev-parse HEAD)"
+          git diff --check
       - name: Verify npm cache integrity
         run: npm cache verify
-      - name: Ensure lockfile
-        run: npm install --package-lock-only
+      - name: Clean install from committed lockfile
+        run: npm ci
       - name: Provision non-superuser application role
         env:
           PGPASSWORD: gnw_admin_pw
         run: |
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app; GRANT USAGE, CREATE ON SCHEMA public TO gnw_app;"
-      - name: Clean install
-        run: npm ci
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1             -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1             -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1             -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_app;"
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
@@ -60,42 +63,31 @@ jobs:
         run: npm run verify:production
       - name: Database RLS verification
         run: npm run verify:rls
-      - name: Unit tests
+      - name: Unit and integration tests
         run: npm run test
       - name: Tests with coverage
         run: npm run test:coverage
-      - name: Build server
-        run: npm run build:server
-      - name: Build client
-        run: npm run build:client
+      - name: Build
+        run: npm run build
       - name: Dependency audit
         run: npm audit --audit-level=high
-      - name: Persist lockfile
-        if: ${{ success() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
-        run: |
-          if [ -n "$(git status --porcelain -- package-lock.json)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package-lock.json
-            git commit -m "chore: add reproducible npm lockfile"
-            git push
-          fi
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: coverage
+          name: coverage-${{ github.sha }}
           path: coverage
           if-no-files-found: ignore
+          retention-days: 30
 
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
         with: { fetch-depth: 0 }
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@59e3b04e820c4cad30462696ac497853a5f7679c
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -106,8 +98,8 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
         with: { fail-on-severity: high }
 
   evidence:
@@ -115,10 +107,12 @@ jobs:
     runs-on: ubuntu-24.04
     needs: build-and-test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c18127333b1
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with:
-          node-version: "22"
+          node-version: "22.x"
+          cache: npm
       - name: Install from committed lockfile
         run: npm ci
       - name: Collect evidence
@@ -126,17 +120,12 @@ jobs:
           mkdir -p evidence
           node --version > evidence/node-version.txt
           npm --version > evidence/npm-version.txt
+          git rev-parse HEAD > evidence/commit-sha.txt
+          git diff --check > evidence/diff-check.txt
           npm audit --json > evidence/npm-audit.json
-          jq -n \
-            --arg candidate "gnw-production-closure-v2" \
-            --arg sha "$(git rev-parse HEAD)" \
-            --arg ref "$GITHUB_REF" \
-            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg node "$(node --version)" \
-            --arg npm "$(npm --version)" \
-            '{schema:"GNW.BuildEvidence.v2",candidate:$candidate,sha:$sha,ref:$ref,ts:$ts,node:$node,npm:$npm}' > evidence/build.json
-      - uses: actions/upload-artifact@v4
+          jq -n             --arg candidate "gnw-production-closure-v2"             --arg sha "$(git rev-parse HEAD)"             --arg ref "$GITHUB_REF"             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --arg node "$(node --version)"             --arg npm "$(npm --version)"             '{schema:"GNW.BuildEvidence.v3",candidate:$candidate,sha:$sha,ref:$ref,ts:$ts,node:$node,npm:$npm}' > evidence/build.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: build-evidence
+          name: build-evidence-${{ github.sha }}
           path: evidence/
           retention-days: 90
