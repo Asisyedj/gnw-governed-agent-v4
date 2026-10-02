@@ -32,6 +32,32 @@ jobs:
           npm run verify:compliance
           npm run verify:crypto
           npm run verify:production
+      - name: Production environment preflight
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          EXECUTOR_URL: ${{ secrets.EXECUTOR_URL }}
+          EXECUTOR_SECRET: ${{ secrets.EXECUTOR_SECRET }}
+          GNW_REQUIRE_SIGNED_GRANTS: ${{ secrets.GNW_REQUIRE_SIGNED_GRANTS }}
+          GNW_GRANT_ISSUER: ${{ secrets.GNW_GRANT_ISSUER }}
+          GNW_GRANT_PRIVATE_KEY_PEM: ${{ secrets.GNW_GRANT_PRIVATE_KEY_PEM }}
+          GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
+          GNW_LEASE_PRIVATE_KEY_PEM: ${{ secrets.GNW_LEASE_PRIVATE_KEY_PEM }}
+          GNW_EGRESS_ALLOW_LIST: ${{ secrets.GNW_EGRESS_ALLOW_LIST }}
+          GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
+          STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
+          GNW_REQUIRE_TEE_ATTESTATION: "true"
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+          GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
+          GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
+          GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
+          NODE_ENV: production
+        run: npm run verify:production:env
       - name: Validate signed production evidence
         env:
           GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
