@@ -71,6 +71,11 @@ export async function executeWithGovernance(
       }
     );
 
+    const envelopeDigest=digestEnvelope(envelope);
+    if(ctx.governanceRequest.envelopeDigest!==envelopeDigest){
+      throw new Error("ActionEnvelope: governance_digest_mismatch");
+    }
+
     const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
     if(!d.allowed){
       await audit(ctx.db,{
