@@ -12,7 +12,10 @@ export default function Workspace({ summary, onRefresh }: { summary: Summary; on
   const createTask = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try {
-      await api.tasks.create({ title: title.trim(), description: description.trim() || undefined, classification });
+      const payload: { title: string; classification: string; description?: string } = { title: title.trim(), classification };
+      const cleanDescription = description.trim();
+      if (cleanDescription) payload.description = cleanDescription;
+      await api.tasks.create(payload);
       setTitle(""); setDescription(""); setCreating(false);
       await onRefresh();
     } catch (err: unknown) {
