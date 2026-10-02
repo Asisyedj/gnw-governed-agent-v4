@@ -21,8 +21,9 @@ services:
     build:
       context: .
       target: deps
-    command: npx drizzle-kit migrate
+    command: node scripts/migrate.mjs
     environment:
+      NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
     depends_on:
       db:
@@ -41,9 +42,13 @@ services:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      EXECUTOR_URL: ${EXECUTOR_URL:?EXECUTOR_URL is required}
+      EXECUTOR_SECRET: ${EXECUTOR_SECRET:?EXECUTOR_SECRET is required}
+      GNW_POSTGRES_SSL_REQUIRED: "true"
       PORT: "3000"
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ALLOW_SELF_REGISTRATION: ${ALLOW_SELF_REGISTRATION:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
     depends_on:
       db:
         condition: service_healthy
