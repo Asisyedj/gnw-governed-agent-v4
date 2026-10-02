@@ -27,10 +27,17 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const me = await api.me();
-        setBootstrap(me.bootstrap);
-        setAllowRegistration(me.allowSelfRegistration);
-        if (me.user) await refresh();
+        try {
+          const me = await api.me();
+          setBootstrap(me.bootstrap);
+          setAllowRegistration(me.allowSelfRegistration);
+          if (me.user) await refresh();
+        } catch (error) {
+          const boot = await api.bootstrap();
+          setBootstrap(boot.bootstrap);
+          setAllowRegistration(boot.allowSelfRegistration);
+          if (!(error instanceof ApiError && error.status === 401)) throw error;
+        }
       } catch (err) {
         console.error("session error:", err);
       } finally {
