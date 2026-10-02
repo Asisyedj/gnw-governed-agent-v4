@@ -79,8 +79,15 @@ jobs:
             fi
             sleep 1
           done
-          test -s /tmp/gnw-health.json
-          test -s /tmp/gnw-ready.json
+          if ! test -s /tmp/gnw-health.json || ! test -s /tmp/gnw-ready.json; then
+            echo "::error::GNW production container failed health/readiness smoke test"
+            docker ps -a || true
+            docker logs gnw-ci-smoke || true
+            cat /tmp/gnw-ci-smoke.log || true
+            docker inspect gnw-ci-smoke --format '{{json .State}}' || true
+            docker stop gnw-ci-smoke || true
+            exit 1
+          fi
           grep -q '"ok":true' /tmp/gnw-health.json
           grep -q '"ok":true' /tmp/gnw-ready.json
           docker stop gnw-ci-smoke
