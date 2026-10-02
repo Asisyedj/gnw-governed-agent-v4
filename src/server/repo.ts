@@ -3,6 +3,7 @@ import { withTenant, type Db } from "./db/index.js";
 import { schema } from "./db/index.js";
 import type { Interlock } from "./governance.js";
 import { randomUUID } from "node:crypto";
+import { verifyCapabilityLeaseSignature } from "./capability.js";
 
 const { tenants, users, sessions, tasks, taskSteps, approvals, nonces, interlocks, auditLog, budgetReservations, artifacts, capabilityLeases } = schema;
 
