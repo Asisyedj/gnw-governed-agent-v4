@@ -23,6 +23,8 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "3000"
         prometheus.io/path: "/api/metrics"
+        gnw.build.commit: "135dbc82d656f88b56af7c35d6a7dd2bf5967161"
+        gnw.image.digest: "sha256:851b4ce3cfa81df89ae647f918cd759b7241c8352083cc4416ca31b2f25c5fb0"
     spec:
       serviceAccountName: gnw-app
       securityContext:
@@ -34,8 +36,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: gnw-app
-          image: ghcr.io/asisyedj/gnw-governed-agent-v4@sha256:2b879fba929a51969c8eb88995551de9be35868e8748ab2a344fb1a0d151d210
-          # Immutable image built and verified from closure commit f2209b8834fdf09e627f75b29e18166c306cb257
+          image: ghcr.io/asisyedj/gnw-governed-agent-v4@sha256:851b4ce3cfa81df89ae647f918cd759b7241c8352083cc4416ca31b2f25c5fb0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
