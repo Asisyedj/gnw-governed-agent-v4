@@ -9,7 +9,7 @@ const required=[
   "src/server/governance.ts","src/server/action-envelope.ts",
   "src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts",
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts",
-  "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts"
+  "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md"
 ];
 
 const failures=[];
@@ -45,6 +45,13 @@ if(!exec.includes("governance_digest_mismatch")) failures.push("execution:envelo
 const audit=read("src/server/audit.ts");
 if(!audit.includes("setInterlock")) failures.push("audit:required-write-does-not-trip-interlock");
 if(!read("drizzle/0002_governance_hardening.sql").includes("audit_log_append_only")) failures.push("audit:append-only-trigger-missing");
+
+const policy=read("docs/RUNTIME_EXECUTION_POLICY.md");
+if(!policy.includes("GNW-REP-1.0")) failures.push("policy:runtime-policy-version-missing");
+if(!policy.includes("BuildEvidence.v3")) failures.push("policy:evidence-schema-missing");
+if(!policy.includes("OWASP GenAI LLM Top 10 2026")) failures.push("policy:owasp-2026-baseline-missing");
+if(!policy.includes("Agent Control Standard")) failures.push("policy:acs-baseline-missing");
+if(!policy.includes("gpt-5.6-sol")) failures.push("policy:deep-research-model-baseline-missing");
 
 const llm=read("src/server/llm.ts");
 if(!llm.includes("governedFetch")||!llm.includes("assertEgressUrl")) failures.push("llm:production-egress-not-governed");
