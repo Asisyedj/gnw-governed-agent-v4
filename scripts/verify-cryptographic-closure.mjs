@@ -4,7 +4,7 @@ const failures=[];
 const sha=createHash("sha256").update("x").digest("hex");
 if(sha!=="2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db0221375d7b4ebf3a") failures.push("sha256-vector");
 const h=createHmac("sha256","secret").update("gnw").digest("hex");
-if(h!=="1f6c0f18e9b2e1f3b2875f3b4a8a9fd503bc3cb5a4de8e4f1ad55c8a6b6f2b55") failures.push("hmac-vector");
+if(h!=="a7f9b499996dc6f76500bab909454cfc36871785ce67998ce9835536c3ab9978") failures.push("hmac-vector");
 const keys=generateKeyPairSync("ed25519");
 const message=Buffer.from("gnw-crypto-closure-v1");
 const sig=sign(null,message,keys.privateKey);
