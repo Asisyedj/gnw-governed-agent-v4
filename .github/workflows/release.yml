@@ -13,33 +13,47 @@ jobs:
     name: Create Release
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { fetch-depth: 0 }
-
-      - uses: actions/setup-node@v4
-        with: { node-version: "22" }
-
-      - run: npm install --package-lock-only
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run test
-      - run: npm run build
-
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - name: Verify clean checkout
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)"
+          git diff --check
+          test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
+      - name: Install from committed lockfile
+        run: npm ci
+      - name: Verify production closure
+        run: npm run verify:production
+      - name: Verify database RLS
+        run: npm run verify:rls
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Coverage
+        run: npm run test:coverage
+      - name: Build
+        run: npm run build
+      - name: Dependency audit
+        run: npm audit --audit-level=high
       - name: Generate SBOM
         run: |
-          npm install -g @cyclonedx/cyclonedx-npm
-          cyclonedx-npm --output-format json --output-file sbom.json
-
+          npm exec --yes --package=@cyclonedx/cyclonedx-npm -- cyclonedx-npm --output-format json --output-file sbom.json
       - name: Create SHA256 manifest
         run: |
           test -d dist
-          find dist -type f | sort | xargs sha256sum > dist/SHA256SUMS.txt
-
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum > dist/SHA256SUMS.txt
+      - name: Verify release artifacts
+        run: |
+          test -s sbom.json
+          test -s dist/SHA256SUMS.txt
       - name: GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            sbom.json
-            dist/SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME"             --verify-tag             --generate-notes             sbom.json             dist/SHA256SUMS.txt
