@@ -94,15 +94,19 @@ try {
     )).rows[0];
 
     let auditUpdateDenied = false;
+    await b.query('SAVEPOINT audit_update_test');
     try {
       await b.query('UPDATE audit_log SET detail=$1 WHERE id=$2',[JSON.stringify({tampered:true}),auditRow.id]);
     } catch { auditUpdateDenied = true; }
+    await b.query('ROLLBACK TO SAVEPOINT audit_update_test');
     if(!auditUpdateDenied) throw new Error('audit log UPDATE was permitted');
 
     let auditDeleteDenied = false;
+    await b.query('SAVEPOINT audit_delete_test');
     try {
       await b.query('DELETE FROM audit_log WHERE id=$1',[auditRow.id]);
     } catch { auditDeleteDenied = true; }
+    await b.query('ROLLBACK TO SAVEPOINT audit_delete_test');
     if(!auditDeleteDenied) throw new Error('audit log DELETE was permitted');
 
     let compositeMismatchDenied = false;
