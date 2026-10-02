@@ -121,4 +121,20 @@ describe("governed execution boundary",()=>{
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
  });
+
+ it("refuses an envelope changed after the governance request was created",async()=>{
+   const {executeWithGovernance}=await import("../../server/execution.js");
+   const handler=vi.fn(async()=>({ok:true}));
+   const envelope={taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{q:"original"},grantId:"g",nonce:"grant-2",issuedAt:now};
+   const ctx={
+     db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
+     taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-1",grantId:"g",
+     governanceRequest:{...baseRequest(),nonce:"grant-2",envelopeDigest:digestEnvelope(envelope)},
+   } as any;
+   const tampered={...envelope,parameters:{q:"tampered"}};
+   const result=await executeWithGovernance(ctx,tampered,handler);
+   expect(result.success).toBe(false);
+   expect(result.error).toContain("governance_digest_mismatch");
+   expect(handler).not.toHaveBeenCalled();
+ });
 });
