@@ -13,6 +13,7 @@ export type RequestId = string & { readonly [REQUEST_BRAND]: "request-id" };
 export type EvidenceId = string & { readonly [EVIDENCE_BRAND]: "evidence-id" };
 
 export type DeepReadonly<T> =
+  T extends string | number | bigint | boolean | symbol | null | undefined ? T :
   T extends (...args: never[]) => unknown ? T :
   T extends readonly (infer U)[] ? readonly DeepReadonly<U>[] :
   T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } :
