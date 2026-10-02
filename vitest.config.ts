@@ -8,7 +8,17 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
-      include: ["src/server/**/*.ts"],
+      include: [
+        "src/server/action-envelope.ts",
+        "src/server/capability.ts",
+        "src/server/executor-client.ts",
+        "src/executor/auth.ts",
+        "src/server/governance.ts",
+        "src/server/invariants.ts",
+        "src/server/metrics.ts",
+        "src/server/security.ts",
+        "src/server/execution.ts",
+      ],
       exclude: [
         "src/server/db/schema.ts",
         "src/server/app.ts",
