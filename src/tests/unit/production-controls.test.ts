@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import { digestEnvelope, validateEnvelope } from "../../server/action-envelope.js";
-import { capabilityLeaseDigest, generateNonce, issueCapabilityLease, isLeaseValid } from "../../server/capability.js";
+import { capabilityLeaseDigest, generateNonce, issueCapabilityLease, isLeaseValid, verifyCapabilityLeaseSignature } from "../../server/capability.js";
 import { callExecutor } from "../../server/executor-client.js";
 import { executorBodyDigest, makeExecutorToken, verifyExecutorToken } from "../../executor/auth.js";
 import { GovernanceService, MemoryGovernanceStores, newGrant, requiresHumanApproval, type GovernanceRequest } from "../../server/governance.js";
