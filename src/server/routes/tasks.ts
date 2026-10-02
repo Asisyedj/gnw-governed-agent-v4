@@ -46,7 +46,16 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
     }
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: "Invalid input", details: parsed.error.issues });
-    const task = await createTask(app.db, { tenantId: session.tenantId, createdByUserId: session.userId, ...parsed.data });
+    const input: { tenantId: number; createdByUserId: number; title: string; description?: string; classification?: string; budgetTokensAllocated?: number; budgetBytesAllocated?: number } = {
+      tenantId: session.tenantId,
+      createdByUserId: session.userId,
+      title: parsed.data.title,
+    };
+    if (parsed.data.description !== undefined) input.description = parsed.data.description;
+    if (parsed.data.classification !== undefined) input.classification = parsed.data.classification;
+    if (parsed.data.budgetTokensAllocated !== undefined) input.budgetTokensAllocated = parsed.data.budgetTokensAllocated;
+    if (parsed.data.budgetBytesAllocated !== undefined) input.budgetBytesAllocated = parsed.data.budgetBytesAllocated;
+    const task = await createTask(app.db, input);
     await insertAuditLog(app.db, { eventType: "task.create", actorId: session.userId, tenantId: session.tenantId, taskId: task.id, resourceType: "task", resourceId: String(task.id), outcome: "success", ipAddress: req.ip });
     return reply.status(201).send(task);
   });
