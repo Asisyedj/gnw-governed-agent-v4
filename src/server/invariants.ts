@@ -19,7 +19,9 @@ export {
   asTaskId,
   asTenantId,
   immutable,
+  buildVerifiedRagInput,
   verifyDataStage,
+  verifyIngestion,
   verifyEvidenceRecord,
   verifyGroundedAnswer,
   verifyInvariantSet,
@@ -27,6 +29,8 @@ export {
 } from "./verified-data.js";
 export type {
   DataStage,
+  IngestedChunk,
+  IngestedDocument,
   DeepReadonly,
   EvidenceId,
   EvidenceRecord,
