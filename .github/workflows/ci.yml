@@ -119,7 +119,13 @@ jobs:
           mkdir -p evidence
           node --version > evidence/node-version.txt
           npm --version > evidence/npm-version.txt
+          set +e
           npm audit --json > evidence/npm-audit.json
+          audit_status=$?
+          set -e
+          if [ "$audit_status" -ne 0 ] && [ "$audit_status" -ne 1 ]; then
+            exit "$audit_status"
+          fi
           jq -n \
             --arg candidate "gnw-production-closure-v3" \
             --arg sha "$(git rev-parse HEAD)" \
