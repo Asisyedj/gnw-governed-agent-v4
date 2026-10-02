@@ -1,6 +1,5 @@
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat, unlink, readdir } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { mkdir, stat, unlink } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Env } from "./env.js";
 
@@ -21,9 +20,17 @@ export interface StorageDriver {
 class LocalStorageDriver implements StorageDriver {
   constructor(private readonly dir: string, private readonly baseUrl: string) {}
 
+  private safePath(key: string): string {
+    if (!key || key.includes("\\") || key.includes("\0")) throw new Error("invalid_storage_key");
+    const root = resolve(this.dir);
+    const target = resolve(root, key);
+    if (target !== root && !target.startsWith(root + "/")) throw new Error("invalid_storage_key");
+    return target;
+  }
+
   async put(key: string, data: Buffer | Uint8Array, contentType: string): Promise<StorageObject> {
-    const filePath = join(this.dir, key);
-    await mkdir(join(this.dir, key.split("/").slice(0, -1).join("/")), { recursive: true });
+    const filePath = this.safePath(key);
+    await mkdir(resolve(filePath, ".."), { recursive: true });
     await import("node:fs/promises").then(fs => fs.writeFile(filePath, data));
     const info = await stat(filePath);
     return { key, url: this.url(key), contentType, size: info.size, uploadedAt: info.mtime };
@@ -31,10 +38,10 @@ class LocalStorageDriver implements StorageDriver {
 
   async get(key: string): Promise<Buffer> {
     const fs = await import("node:fs/promises");
-    return fs.readFile(join(this.dir, key));
+    return fs.readFile(this.safePath(key));
   }
 
-  async delete(key: string): Promise<void> { await unlink(join(this.dir, key)).catch(() => {}); }
+  async delete(key: string): Promise<void> { await unlink(this.safePath(key)).catch(() => {}); }
 
   url(key: string): string { return `${this.baseUrl}/artifacts/${key}`; }
 
@@ -44,9 +51,9 @@ class LocalStorageDriver implements StorageDriver {
     const result: StorageObject[] = [];
     for (const entry of entries) {
       if (!entry.isFile()) continue;
-      const key = join(entry.path ?? "", entry.name).replace(this.dir, "").replace(/^\//, "");
+      const key = join(entry.path ?? "", entry.name).replace(resolve(this.dir), "").replace(/^[/\\]/, "").replaceAll("\\", "/");
       if (!key.startsWith(prefix)) continue;
-      const info = await stat(join(this.dir, key)).catch(() => null);
+      const info = await stat(this.safePath(key)).catch(() => null);
       if (!info) continue;
       result.push({ key, url: this.url(key), contentType: "application/octet-stream", size: info.size, uploadedAt: info.mtime });
     }
