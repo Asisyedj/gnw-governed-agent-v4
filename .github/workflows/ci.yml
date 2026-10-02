@@ -22,7 +22,7 @@ jobs:
           POSTGRES_PASSWORD: gnw_test_pw
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U gnw"
+          --health-cmd "pg_isready -U gnw -d gnw_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -54,7 +54,7 @@ jobs:
         run: npm run test
       - name: Reset test database for independent coverage run
         run: |
-          PGPASSWORD=gnw_test_pw psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          PGPASSWORD=gnw_test_pw psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;"
           npm run db:migrate
       - name: Tests with coverage
         run: npm run test:coverage
