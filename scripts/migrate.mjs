@@ -4,10 +4,11 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 
 const { Pool } = pg;
-if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+const migrationUrl = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
+if (!migrationUrl) throw new Error('MIGRATION_DATABASE_URL or DATABASE_URL is required');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: migrationUrl,
   ssl: process.env.GNW_POSTGRES_SSL_REQUIRED === 'true' ? { rejectUnauthorized: true } : false,
 });
 
