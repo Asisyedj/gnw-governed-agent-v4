@@ -18,7 +18,7 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   deepResearchAllowedDomains:(source.GNW_DEEP_RESEARCH_ALLOWED_DOMAINS??"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean),
   deepResearchMcpUrl:(source.GNW_DEEP_RESEARCH_MCP_URL??"").replace(/\/$/,""),deepResearchMcpLabel:(source.GNW_DEEP_RESEARCH_MCP_LABEL??"").trim(),
   llmTimeoutMs:int(source.LLM_TIMEOUT_MS,45000),
-  storageDriver:(source.STORAGE_DRIVER??"local") as "local"|"s3",artifactDir:source.ARTIFACT_DIR??"./data/artifacts",
+  storageDriver:(source.STORAGE_DRIVER??"local") as "local"|"s3",artifactDir:source.ARTIFACT_DIR??"./data/artifacts",sharedStorageConfirmed:bool(source.GNW_SHARED_STORAGE_CONFIRMED,false),
   s3:{bucket:source.S3_BUCKET??"",region:source.S3_REGION??"",endpoint:source.S3_ENDPOINT??"",accessKeyId:source.S3_ACCESS_KEY_ID??"",secretAccessKey:source.S3_SECRET_ACCESS_KEY??"",publicBaseUrl:source.S3_PUBLIC_BASE_URL??""},
   videoProvider:source.VIDEO_PROVIDER??"stub",videoProviderUrl:source.VIDEO_PROVIDER_URL??"",videoProviderApiKey:source.VIDEO_PROVIDER_API_KEY??"",
   notifyWebhookUrl:source.NOTIFY_WEBHOOK_URL??"",corsOrigin:source.CORS_ORIGIN??"same-origin",
