@@ -1,0 +1,14 @@
+import { createHash, createHmac, generateKeyPairSync, sign, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
+const fail=[];
+const sha=createHash("sha256").update("abc").digest("hex");
+if(sha!=="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")fail.push("sha256-vector");
+const h=createHmac("sha256","key").update("The quick brown fox jumps over the lazy dog").digest("hex");
+if(h!=="f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8")fail.push("hmac-vector");
+const kp=generateKeyPairSync("ed25519"),msg=Buffer.from("GNW-CRYPTO-CLOSURE-V1"),sig=sign(null,msg,kp.privateKey);
+if(!verify(null,msg,kp.publicKey,sig))fail.push("ed25519-vector");
+const read=p=>readFileSync(p,"utf8");
+const gov=read("src/server/governance.ts"),exec=read("src/server/execution.ts"),env=read("src/server/action-envelope.ts"),att=read("src/server/attestation.ts"),ta=read("src/server/trust-anchor.ts"),client=read("src/server/executor-client.ts");
+for(const [label,text,needle] of [["governance",gov,"envelopeDigest"],["execution",exec,"governance_digest_mismatch"],["envelope",env,"digestEnvelope"],["tee",att,"GNW-TEE-ATTESTATION-V1"],["trust-anchor",ta,"GNW-TRUST-ANCHOR-V1"],["executor",client,"actionDigest"]])if(!text.includes(needle))fail.push(label+"-binding-missing");
+if(fail.length){console.error("GNW cryptographic closure: DENY");for(const x of fail)console.error(" - "+x);process.exit(1);}
+console.log("GNW cryptographic closure: independent vector and binding checks PASS");
