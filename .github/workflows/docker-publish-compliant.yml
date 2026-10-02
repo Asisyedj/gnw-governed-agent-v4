@@ -27,6 +27,8 @@ jobs:
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
       - name: Install committed lockfile
         run: npm ci
+      - name: Verify canonical Git release metadata
+        run: npm run verify:git-release-metadata
       - name: Validate compliance, cryptographic closure and production closure
         run: |
           npm run verify:compliance
