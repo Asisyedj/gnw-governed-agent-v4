@@ -123,6 +123,10 @@ jobs:
           test -s dist/SHA256SUMS.txt
 
       - name: Verify production release evidence seal
+        env:
+          GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
+          GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_RELEASE_ARTIFACT_REQUIRED: "true"
         run: npm run verify:release:evidence
       - name: GitHub Release
         env:
