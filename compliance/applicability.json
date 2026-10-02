@@ -1,0 +1,32 @@
+{
+  "schema": "GNW.PK.Applicability.v1",
+  "effectiveDate": "2026-10-03",
+  "profile": {
+    "jurisdiction": "Pakistan",
+    "federalPublicSector": true,
+    "publicSectorOrganization": true,
+    "sbpRegulatedEntity": true,
+    "cloudOutsourcing": true,
+    "customerData": true,
+    "criticalInformationInfrastructure": "UNDETERMINED",
+    "paymentInstitution": false
+  },
+  "determinations": {
+    "PPRA_2026": {"status": "APPLICABLE", "basis": "Federal public-sector procurement profile"},
+    "PISF_2026": {"status": "APPLICABLE", "basis": "Federal/public-sector organization profile"},
+    "NCERT_AUDIT": {"status": "APPLICABLE", "basis": "Public-sector cyber-audit profile"},
+    "SBP_TECH_GOVERNANCE": {"status": "APPLICABLE", "basis": "SBP-regulated entity profile"},
+    "SBP_OUTSOURCING": {"status": "APPLICABLE", "basis": "Third-party/outsourcing profile"},
+    "SBP_CLOUD": {"status": "APPLICABLE", "basis": "Cloud outsourcing profile"},
+    "PSS_CRYPTO": {"status": "LEGAL_CLASSIFICATION_REQUIRED", "basis": "Final legal/organizational classification required before any PSS PS:5544 conformity claim"},
+    "CII_PROTECTION": {"status": "UNDETERMINED", "basis": "CII designation is organization/system-specific"}
+  },
+  "releasePolicy": {
+    "unknownOrPendingApplicableDeterminationsBlock": true,
+    "realHardwareTeeRequiredForProduction": true,
+    "independentAuditRequired": true,
+    "hsmEvidenceRequired": true,
+    "cryptographicReleaseSealRequired": true,
+    "simulatorEvidenceIsNonProduction": true
+  }
+}
