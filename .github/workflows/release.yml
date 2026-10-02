@@ -121,6 +121,13 @@ jobs:
         run: |
           test -s sbom.json
           test -s dist/SHA256SUMS.txt
+
+      - name: Verify signed production release evidence and seal
+        env:
+          GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
+          GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_RELEASE_ARTIFACT_REQUIRED: "true"
+        run: npm run verify:release:evidence
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
