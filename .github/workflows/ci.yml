@@ -73,7 +73,7 @@ jobs:
       - name: Smoke test production container
         run: |
           docker rm -f gnw-ci-smoke >/dev/null 2>&1 || true
-          docker run -d --network host --name gnw-ci-smoke             -e NODE_ENV=test             -e DATABASE_URL="$DATABASE_URL"             -e COOKIE_SECRET="$COOKIE_SECRET"             -e LOG_LEVEL=silent             gnw-ci:${GITHUB_SHA} >/tmp/gnw-ci-smoke.log 2>&1
+          docker run -d --network host --name gnw-ci-smoke             -e NODE_ENV=production             -e DATABASE_URL="$DATABASE_URL"             -e COOKIE_SECRET="$COOKIE_SECRET"             -e LOG_LEVEL=silent             -e PORT=3000             gnw-ci:${GITHUB_SHA} >/tmp/gnw-ci-smoke.log 2>&1
           for i in $(seq 1 30); do
             if wget -qO- http://127.0.0.1:3000/api/health >/tmp/gnw-health.json 2>/dev/null &&                wget -qO- http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json 2>/dev/null; then
               break
