@@ -114,7 +114,7 @@ describe("governed execution boundary",()=>{
      taskId:1,tenantId:1,actorId:1,requestId:"req-1",grantId:"g",
      governanceRequest:baseRequest(),
    } as any;
-   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-exec-1",issuedAt:now},handler);
+   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now},handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
  });
