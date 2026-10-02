@@ -13,6 +13,8 @@ This document records the control design needed to make GNW auditable against ma
 | SOC 2 Trust Services Criteria | Security, availability, processing integrity, confidentiality and privacy controls mapped to technical + organizational evidence. |
 | NIST AI RMF 1.0 | Govern / Map / Measure / Manage evidence covering AI risks, controls, testing and response. |
 | NIST AI RMF GenAI Profile | GAI-specific risk register, adversarial testing, provenance, human oversight, monitoring and incident evidence. |
+| OWASP GenAI LLM Top 10 2026 | Current LLM/GenAI risk baseline, including prompt injection, sensitive-information disclosure, supply-chain, output handling, excessive agency, system prompt leakage, vector/embedding weaknesses, misinformation and unbounded consumption. |
+| OWASP Agent Control Standard (ACS) | Runtime inspection, traceability, instrumentation and declarative safety-policy enforcement for agent platforms. |
 | OWASP Top 10 for Agentic Applications | Agent goal hijack, tool misuse, identity/privilege abuse, agentic supply chain, unexpected code execution, memory/context poisoning, inter-agent communication, cascading failures, human-agent trust exploitation and rogue-agent behavior. |
 | OWASP Agent Control Standard | Runtime policy enforcement, action authorization, tool restrictions, traceability, inspection and control-plane evidence. |
 | OWASP ASVS / API security practice | Authentication, session security, authorization, input validation, rate limiting, secure headers and error handling. |
