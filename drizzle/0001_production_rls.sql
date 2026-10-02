@@ -1,6 +1,7 @@
 -- GNW production hardening: PostgreSQL schema alignment and real RLS.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE interlocks ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 CREATE TABLE IF NOT EXISTS capability_leases (
  id SERIAL PRIMARY KEY, lease_id TEXT NOT NULL UNIQUE, task_id INTEGER, tenant_id INTEGER, actor_user_id INTEGER, capability TEXT NOT NULL,
