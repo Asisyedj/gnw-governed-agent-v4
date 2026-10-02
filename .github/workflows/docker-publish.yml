@@ -70,7 +70,7 @@ jobs:
 
       - name: Production container smoke test
         env:
-          IMAGE_TAG: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          IMAGE_TAG: ghcr.io/${{ github.repository }}:sha-${GITHUB_SHA::7}
         run: |
           set -eu
           COOKIE_SECRET="$(printf "x%.0s" $(seq 1 64))"
