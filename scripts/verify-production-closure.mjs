@@ -36,7 +36,7 @@ if(!/\.transaction\(async tx/.test(db)) failures.push("db:tenant-context-not-tra
 const exec=read("src/server/execution.ts");
 if(!exec.includes("governance.authorize")) failures.push("execution:governance-not-enforced");
 const authzIndex=exec.indexOf("governance.authorize");
-const handlerIndex=exec.indexOf("handler()");
+const handlerIndex=exec.indexOf("const output=await handler(");
 if(authzIndex<0||handlerIndex<0||authzIndex>handlerIndex) failures.push("execution:handler-before-governance");
 if(!exec.includes("persistCapabilityLease")) failures.push("execution:capability-lease-persistence-missing");
 if(!exec.includes("consumeCapabilityLease")) failures.push("execution:capability-lease-consumption-missing");
