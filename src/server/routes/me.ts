@@ -10,12 +10,13 @@ const ALLOW_SELF_REGISTRATION = process.env.ALLOW_SELF_REGISTRATION === "true";
 export const meRoutes: FastifyPluginAsync = async (app) => {
   app.get("/me", async (req, reply) => {
     const session = await resolveSession(app.db, req.cookies as Record<string, string>);
+    if (!session) return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated" });
     const tenant = await findTenantBySlug(app.db, "default");
     const count = tenant ? await countUsersByTenant(app.db, tenant.id) : 0;
     const bootstrap = !tenant || count === 0;
 
     if (!session) {
-      return reply.send({ user: null, bootstrap, allowSelfRegistration: bootstrap || ALLOW_SELF_REGISTRATION });
+      return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated", bootstrap, allowSelfRegistration: bootstrap || ALLOW_SELF_REGISTRATION });
     }
 
     const user = await findUserById(app.db, session.userId, session.tenantId);
