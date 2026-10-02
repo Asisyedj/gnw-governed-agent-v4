@@ -7,7 +7,7 @@ const pool=new Pool({connectionString:process.env.DATABASE_URL,max:20,idleTimeou
 pool.on('error',err=>console.error('Unexpected pg pool error',err));
 export const db=drizzle(pool,{schema,logger:process.env.NODE_ENV!=='production'});
 export type Db=typeof db;
-export async function withTenant<T>(database:Db,tenantId:number,fn:(tx:any)=>Promise<T>):Promise<T>{
+export async function withTenant<T=any>(database:Db,tenantId:number,fn:(tx:any)=>Promise<T>):Promise<T>{
  if(!Number.isInteger(tenantId)||tenantId<=0) throw new Error('invalid_tenant_context');
  return database.transaction(async tx=>{
   await tx.execute(sql`select set_config('app.tenant_id', '${String(tenantId)}', true)`);
