@@ -44,10 +44,10 @@ export const interlockRoutes: FastifyPluginAsync = async (app) => {
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: "Invalid input", details: parsed.error.issues });
 
-    const patch: { killSwitch?: boolean; circuitOpen?: boolean } = {};
+    const patch: { killSwitch?: boolean; circuitOpen?: boolean; reason?: string } = {};
     if (parsed.data.killSwitch !== undefined) patch.killSwitch = parsed.data.killSwitch;
     if (parsed.data.circuitOpen !== undefined) patch.circuitOpen = parsed.data.circuitOpen;
-    if (parsed.data.reason !== undefined) (patch as { reason?: string }).reason = parsed.data.reason;
+    if (parsed.data.reason !== undefined) patch.reason = parsed.data.reason;
     const updated = await setInterlock(app.db, patch, session.userId);
     await insertAuditLog(app.db, {
       eventType: "interlock.update",
