@@ -36,7 +36,7 @@ export const sessions = pgTable("sessions", {
   expiresAt:ts("expires_at").notNull(),
   createdAt:ts("created_at").notNull().defaultNow(),
 }, t => ({
-  tenantUserFk: foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId]}).name("sessions_user_same_tenant_fk"),
+  tenantUserFk: foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"sessions_user_same_tenant_fk"}),
 }));
 
 export const tasks = pgTable("tasks", {
@@ -64,7 +64,7 @@ export const tasks = pgTable("tasks", {
   idTenantIdx: uniqueIndex("tasks_id_tenant_uq").on(t.id,t.tenantId),
   statusIdx:index("tasks_status_idx").on(t.status),
   createdIdx:index("tasks_created_at_idx").on(t.createdAt),
-  creatorTenantFk: foreignKey({columns:[t.createdByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId]}).name("tasks_creator_same_tenant_fk"),
+  creatorTenantFk: foreignKey({columns:[t.createdByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"tasks_creator_same_tenant_fk"}),
 }));
 
 export const taskSteps = pgTable("task_steps", {
@@ -90,7 +90,7 @@ export const taskSteps = pgTable("task_steps", {
   tenantIdx:index("task_steps_tenant_id_idx").on(t.tenantId),
   idTenantIdx: uniqueIndex("task_steps_id_tenant_uq").on(t.id,t.tenantId),
   uniqueStep:uniqueIndex("task_steps_unique_step").on(t.taskId,t.stepIndex),
-  taskTenantFk: foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId]}).name("task_steps_task_same_tenant_fk"),
+  taskTenantFk: foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId],name:"task_steps_task_same_tenant_fk"}),
 }));
 
 export const approvals = pgTable("approvals", {
@@ -112,9 +112,9 @@ export const approvals = pgTable("approvals", {
   statusIdx:index("approvals_status_idx").on(t.status),
   nonceIdx:uniqueIndex("approvals_nonce_idx").on(t.nonce),
   digestIdx:index("approvals_digest_idx").on(t.actionDigest),
-  taskTenantFk: foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId]}).name("approvals_task_same_tenant_fk"),
-  requesterTenantFk: foreignKey({columns:[t.requestedByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId]}).name("approvals_requester_same_tenant_fk"),
-  reviewerTenantFk: foreignKey({columns:[t.reviewedByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId]}).name("approvals_reviewer_same_tenant_fk"),
+  taskTenantFk: foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId],name:"approvals_task_same_tenant_fk"}),
+  requesterTenantFk: foreignKey({columns:[t.requestedByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"approvals_requester_same_tenant_fk"}),
+  reviewerTenantFk: foreignKey({columns:[t.reviewedByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"approvals_reviewer_same_tenant_fk"}),
 }));
 
 export const nonces = pgTable("nonces", {
@@ -147,7 +147,7 @@ export const budgetReservations = pgTable("budget_reservations", {
   taskIdx:index("budget_res_task_idx").on(t.taskId),
   uniqueGrant:uniqueIndex("budget_res_grant_idx").on(t.taskId,t.grantNonce),
   tenantIdx:index("budget_res_tenant_idx").on(t.tenantId),
-  taskTenantFk: foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId]}).name("budget_task_same_tenant_fk"),
+  taskTenantFk: foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId],name:"budget_task_same_tenant_fk"}),
 }));
 
 export const auditLog = pgTable("audit_log", {
@@ -183,8 +183,8 @@ export const capabilityLeases = pgTable("capability_leases", {
   createdAt:ts("created_at").notNull().defaultNow()
 }, t=>({
   tenantIdx:index("capability_leases_tenant_idx").on(t.tenantId),
-  taskTenantFk:foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId]}).name("capability_task_same_tenant_fk"),
-  actorTenantFk:foreignKey({columns:[t.actorUserId,t.tenantId],foreignColumns:[users.id,users.tenantId]}).name("capability_actor_same_tenant_fk"),
+  taskTenantFk:foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId],name:"capability_task_same_tenant_fk"}),
+  actorTenantFk:foreignKey({columns:[t.actorUserId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"capability_actor_same_tenant_fk"}),
 }));
 
 export const artifacts = pgTable("artifacts", {
@@ -200,8 +200,8 @@ export const artifacts = pgTable("artifacts", {
   createdAt:ts("created_at").notNull().defaultNow()
 }, t=>({
   tenantIdx:index("artifacts_tenant_idx").on(t.tenantId),
-  taskTenantFk:foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId]}).name("artifacts_task_same_tenant_fk"),
-  stepTenantFk:foreignKey({columns:[t.stepId,t.tenantId],foreignColumns:[taskSteps.id,taskSteps.tenantId]}).name("artifacts_step_same_tenant_fk"),
+  taskTenantFk:foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId],name:"artifacts_task_same_tenant_fk"}),
+  stepTenantFk:foreignKey({columns:[t.stepId,t.tenantId],foreignColumns:[taskSteps.id,taskSteps.tenantId],name:"artifacts_step_same_tenant_fk"}),
 }));
 
 export const schema={tenants,users,sessions,tasks,taskSteps,approvals,nonces,interlocks,budgetReservations,auditLog,capabilityLeases,artifacts};
