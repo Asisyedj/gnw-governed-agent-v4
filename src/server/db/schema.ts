@@ -173,12 +173,20 @@ export const auditLog = pgTable("audit_log", {
 export const capabilityLeases = pgTable("capability_leases", {
   id:serial("id").primaryKey(),
   leaseId:text("lease_id").notNull().unique(),
+  requestId:text("request_id").notNull(),
+  actionDigest:text("action_digest").notNull(),
+  subject:text("subject").notNull(),
   taskId:integer("task_id").notNull(),
   tenantId:integer("tenant_id").notNull(),
   actorUserId:integer("actor_user_id").notNull(),
   capability:text("capability").notNull(),
+  destination:text("destination"),
+  interlockGeneration:integer("interlock_generation").notNull(),
+  issuer:text("issuer").notNull(),
+  signature:text("signature").notNull(),
   issuedAt:ts("issued_at").notNull(),
   expiresAt:ts("expires_at").notNull(),
+  consumedAt:ts("consumed_at"),
   revokedAt:ts("revoked_at"),
   createdAt:ts("created_at").notNull().defaultNow()
 }, t=>({
