@@ -1,0 +1,57 @@
+name: staging-security-test
+
+on:
+  schedule:
+    - cron: "23 3 * * 3"
+  workflow_dispatch:
+    inputs:
+      active_scan:
+        description: "Run the authorized active ZAP scan against staging"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Authorized staging baseline scan
+    if: ${{ secrets.GNW_STAGING_BASE_URL != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { persist-credentials: false }
+      - name: ZAP baseline scan
+        env:
+          TARGET: ${{ secrets.GNW_STAGING_BASE_URL }}
+        run: |
+          mkdir -p zap-results
+          docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t "$TARGET" -m 2 -I -r staging-baseline.html -J staging-baseline.json -w staging-baseline.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zap-baseline-${{ github.sha }}
+          path: zap-results/
+          retention-days: 90
+
+  active:
+    name: Authorized staging active scan
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.active_scan == true && secrets.GNW_STAGING_BASE_URL != '' }}
+    runs-on: ubuntu-24.04
+    environment: security-testing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { persist-credentials: false }
+      - name: ZAP active scan
+        env:
+          TARGET: ${{ secrets.GNW_STAGING_BASE_URL }}
+        run: |
+          mkdir -p zap-results
+          docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-full-scan.py -t "$TARGET" -m 5 -I -r staging-active.html -J staging-active.json -w staging-active.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zap-active-${{ github.sha }}
+          path: zap-results/
+          retention-days: 180
