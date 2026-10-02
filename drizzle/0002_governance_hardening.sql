@@ -167,7 +167,7 @@ ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS issuer TEXT;
 ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS signature TEXT;
 ALTER TABLE capability_leases ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
 
-DO $ BEGIN
+DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM capability_leases
     WHERE request_id IS NULL
@@ -179,7 +179,7 @@ DO $ BEGIN
   ) THEN
     RAISE EXCEPTION 'existing capability_leases require an explicit re-issuance/backfill before enabling complete lease evidence';
   END IF;
-END $;
+END $$;
 
 CREATE INDEX IF NOT EXISTS capability_leases_action_digest_idx ON capability_leases(action_digest);
 CREATE INDEX IF NOT EXISTS capability_leases_request_idx ON capability_leases(request_id);
