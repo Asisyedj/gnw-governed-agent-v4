@@ -12,6 +12,7 @@ services:
       retries: 20
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
       - ${POSTGRES_TLS_DIR:?set POSTGRES_TLS_DIR}:/tls:ro
     command: >-
       postgres
