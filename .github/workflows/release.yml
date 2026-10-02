@@ -134,4 +134,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME"             --verify-tag             --generate-notes             sbom.json             dist/SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME"             --verify-tag             --generate-notes             sbom.json             dist/SHA256SUMS.txt             git-release-metadata.json
