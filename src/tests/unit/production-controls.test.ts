@@ -31,6 +31,10 @@ describe("production control primitives",()=>{
    expect(isLeaseValid({...lease,consumed:true},now+500)).toBe(false);
    expect(isLeaseValid(lease,now+1001)).toBe(false);
    expect(capabilityLeaseDigest(lease)).toMatch(/^[0-9a-f]{64}$/);
+   expect(verifyCapabilityLeaseSignature(lease,keys.publicKey)).toBe(true);
+   expect(verifyCapabilityLeaseSignature({...lease,actionDigest:"tampered"},keys.publicKey)).toBe(false);
+   const tamperedSignature=lease.signature[0]==="0"?"1"+lease.signature.slice(1):"0"+lease.signature.slice(1);
+   expect(verifyCapabilityLeaseSignature({...lease,signature:tamperedSignature},keys.publicKey)).toBe(false);
    expect(generateNonce(12)).toHaveLength(24);
  });
  it("covers governance deny/allow/replay/approval/interlock paths",async()=>{
