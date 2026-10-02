@@ -29,6 +29,11 @@ jobs:
           TARGET: ${{ secrets.GNW_STAGING_BASE_URL }}
         run: |
           if [ -n "$TARGET" ]; then echo "has_target=true" >> "$GITHUB_OUTPUT"; else echo "has_target=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Enforce scheduled penetration-test target
+        if: ${{ github.event_name == 'schedule' && steps.scope.outputs.has_target != 'true' }}
+        run: |
+          echo "GNW_STAGING_BASE_URL is required for the scheduled authorized DAST baseline." >&2
+          exit 1
 
   baseline:
     name: Authorized staging baseline scan
