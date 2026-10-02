@@ -96,6 +96,10 @@ if(docker.includes("branches: [main]")) failures.push("docker:production-publish
 if(docker.includes("npm install --package-lock-only")) failures.push("docker:lockfile-mutated");
 if(!docker.includes("provenance: true")||!docker.includes("sbom: true")) failures.push("docker:attestation-metadata-missing");
 if(!docker.includes("trivy-action")) failures.push("docker:vulnerability-scan-missing");
+if(!docker.includes("npm run verify:production")) failures.push("docker:production-gate-missing");
+if(!docker.includes("npm run verify:compliance")) failures.push("docker:compliance-matrix-gate-missing");
+if(!docker.includes("npm run verify:cryptographic-closure")) failures.push("docker:crypto-closure-gate-missing");
+if(!docker.includes("npm run verify:release:evidence")) failures.push("docker:release-evidence-gate-missing");
 if(!read("compliance/applicability.json").includes('\"realHardwareTeeRequiredForProduction\": true')) failures.push("compliance:real-hardware-tee-policy-missing");
 if(!read("compliance/control-matrix.json").includes('\"REL-001\"')) failures.push("compliance:release-seal-control-missing");
 const workflowDir=".github/workflows";
