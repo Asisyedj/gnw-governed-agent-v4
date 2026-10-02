@@ -4,7 +4,7 @@
   "description": "GNW Governed Agent — production control plane",
   "type": "module",
   "engines": {
-    "node": "22.x"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
