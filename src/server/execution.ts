@@ -7,7 +7,7 @@ import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 
 export type ExecutionContext={
-  db:Db; env:Env; taskId:number; tenantId:number; actorId:number; requestId:string;
+  db:Db; env:Env; taskId:number; tenantId:number; actorId:number; role:string; requestId:string;
   governanceRequest:GovernanceRequest; approval?:ApprovalRecord; grantId:string;
 };
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
@@ -45,6 +45,9 @@ export async function executeWithGovernance(
   );
 
   try{
+    if(ctx.governanceRequest.requestId!==ctx.requestId || Number(ctx.governanceRequest.subject)!==ctx.actorId || Number(ctx.governanceRequest.tenant)!==ctx.tenantId || ctx.governanceRequest.taskId!==ctx.taskId || ctx.governanceRequest.role!==ctx.role){
+      throw new Error("governance_context_mismatch");
+    }
     validateEnvelope(
       envelope,
       Date.now(),
