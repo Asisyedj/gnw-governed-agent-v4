@@ -88,6 +88,23 @@ try {
       [t2,'b@example.test','x','owner']
     )).rows[0];
 
+    const auditRow = (await b.query(
+      'INSERT INTO audit_log(event_type,tenant_id,outcome,detail) VALUES($1,$2,$3,$4) RETURNING id',
+      ['rls.test',t2,'success',JSON.stringify({test:true})]
+    )).rows[0];
+
+    let auditUpdateDenied = false;
+    try {
+      await b.query('UPDATE audit_log SET detail=$1 WHERE id=$2',[JSON.stringify({tampered:true}),auditRow.id]);
+    } catch { auditUpdateDenied = true; }
+    if(!auditUpdateDenied) throw new Error('audit log UPDATE was permitted');
+
+    let auditDeleteDenied = false;
+    try {
+      await b.query('DELETE FROM audit_log WHERE id=$1',[auditRow.id]);
+    } catch { auditDeleteDenied = true; }
+    if(!auditDeleteDenied) throw new Error('audit log DELETE was permitted');
+
     let compositeMismatchDenied = false;
     try {
       await b.query(
@@ -105,6 +122,13 @@ try {
   }
 
   const tables = ['users','tasks','task_steps','approvals','budget_reservations','audit_log','capability_leases','artifacts'];
+  const leaseColumns = await q(
+    'SELECT column_name FROM information_schema.columns WHERE table_schema=\'public\' AND table_name=\'capability_leases\' AND column_name = ANY($1::text[])',
+    [['request_id','action_digest','subject','destination','interlock_generation','issuer','signature','consumed_at']]
+  );
+  if (new Set(leaseColumns.map(row => row.column_name)).size !== 8) {
+    throw new Error('capability lease evidence columns incomplete');
+  }
   const rlsRows = await q(
     'SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=\'public\' AND c.relname = ANY($1::text[])',
     [tables]
