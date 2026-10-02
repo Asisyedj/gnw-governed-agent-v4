@@ -26,7 +26,9 @@ export const interlockRoutes: FastifyPluginAsync = async (app) => {
     if (!(["owner", "admin"] as string[]).includes(user.role)) return reply.status(403).send({ error: "Only owner/admin can modify interlock.", code: "forbidden" });
     const body = z.object({ enabled: z.boolean(), reason: z.string().trim().max(1000).optional() }).safeParse(req.body);
     if (!body.success) return reply.status(400).send({ error: "Invalid input" });
-    const updated = await setInterlock(app.db, { killSwitch: body.data.enabled, reason: body.data.reason }, session.userId);
+    const interlockPatch: { killSwitch: boolean; reason?: string } = { killSwitch: body.data.enabled };
+    if (body.data.reason !== undefined) interlockPatch.reason = body.data.reason;
+    const updated = await setInterlock(app.db, interlockPatch, session.userId);
     await insertAuditLog(app.db, { eventType: body.data.enabled ? "kill_switch.engage" : "kill_switch.release", actorId: session.userId, tenantId: session.tenantId, outcome: "success", detail: { generation: updated.generation }, ipAddress: req.ip });
     return reply.send({ ok: true, interlock: updated });
   });
