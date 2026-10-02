@@ -56,6 +56,14 @@ jobs:
           GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
           GNW_LEASE_PRIVATE_KEY_PEM: ${{ secrets.GNW_LEASE_PRIVATE_KEY_PEM }}
           GNW_EGRESS_ALLOW_LIST: ${{ secrets.GNW_EGRESS_ALLOW_LIST }}
+          GNW_REQUIRE_TEE_ATTESTATION: ${{ secrets.GNW_REQUIRE_TEE_ATTESTATION }}
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: ${{ secrets.GNW_REQUIRE_MPC_TRUST_ANCHOR }}
+          GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
           STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
           NODE_ENV: production
@@ -105,10 +113,23 @@ jobs:
         run: |
           test -d dist
           find dist -type f -print0 | sort -z | xargs -0 sha256sum > dist/SHA256SUMS.txt
+      - name: Record release evidence
+        run: |
+          mkdir -p release-evidence
+          git rev-parse HEAD > release-evidence/commit-sha.txt
+          git describe --exact-match --tags HEAD > release-evidence/tag.txt
+          node --version > release-evidence/node-version.txt
+          npm --version > release-evidence/npm-version.txt
+          sha256sum sbom.json dist/SHA256SUMS.txt > release-evidence/artifact-sha256.txt
+          date -u +%Y-%m-%dT%H:%M:%SZ > release-evidence/completed-utc.txt
+          printf "release-policy=GNW-REP-1.0\\n" > release-evidence/policy.txt
       - name: Verify release artifacts
         run: |
           test -s sbom.json
           test -s dist/SHA256SUMS.txt
+          test -s release-evidence/commit-sha.txt
+          test -s release-evidence/tag.txt
+          test -s release-evidence/artifact-sha256.txt
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
