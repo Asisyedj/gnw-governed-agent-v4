@@ -68,6 +68,8 @@ jobs:
           GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
           GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
           STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           NODE_ENV: production
         run: npm run verify:production:env
       - name: Provision dedicated database roles
