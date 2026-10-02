@@ -1,0 +1,28 @@
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+const fail=[];
+const read=p=>readFileSync(p,"utf8");
+const sha=s=>createHash("sha256").update(s).digest("hex");
+let app,matrix;
+try{app=JSON.parse(read("compliance/applicability.json"));}catch{fail.push("applicability:invalid-json");}
+try{matrix=JSON.parse(read("compliance/control-matrix.json"));}catch{fail.push("matrix:invalid-json");}
+if(app){
+  if(app.schema!=="GNW.PK.Applicability.v1") fail.push("applicability:schema");
+  const d=app.determinations??{};
+  for(const k of ["PPRA_2026","PISF_2026","NCERT_AUDIT","SBP_TECH_GOVERNANCE","SBP_OUTSOURCING","SBP_CLOUD","PSS_CRYPTO","CII_PROTECTION"]) if(!d[k]?.status) fail.push("applicability:missing:"+k);
+  if(app.releasePolicy?.unknownOrPendingApplicableDeterminationsBlock!==true) fail.push("applicability:must-block-unknown");
+  if(app.releasePolicy?.realHardwareTeeRequiredForProduction!==true) fail.push("applicability:real-tee-required");
+  if(app.releasePolicy?.independentAuditRequired!==true) fail.push("applicability:independent-audit-required");
+  if(app.releasePolicy?.cryptographicReleaseSealRequired!==true) fail.push("applicability:crypto-seal-required");
+}
+if(matrix){
+  if(matrix.schema!=="GNW.PK.ControlMatrix.v1") fail.push("matrix:schema");
+  const ids=new Set();
+  for(const c of matrix.controls??[]){
+    if(!c.id||ids.has(c.id)) fail.push("matrix:duplicate-or-missing-id:"+String(c.id));
+    ids.add(c.id);
+    if(!c.regime||!c.title||!Array.isArray(c.requiredWhen)||!c.automation?.length||!c.evidence||c.blocking!==true||!/^https:|^internal-GNW-/.test(c.source??"")) fail.push("matrix:incomplete:"+String(c.id));
+  }
+}
+if(fail.length){console.error("GNW compliance matrix: DENY");for(const x of fail)console.error(" - "+x);process.exit(1);}
+console.log(JSON.stringify({status:"PASS",applicabilityDigest:sha(read("compliance/applicability.json")),controlMatrixDigest:sha(read("compliance/control-matrix.json")),controlCount:matrix.controls.length},null,2));

@@ -1,0 +1,33 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"GNW Production Release Evidence",
+  "type":"object",
+  "required":["schema","policyVersion","gitCommitSha","releaseTag","applicabilityDigest","controlMatrixDigest","artifactManifestSha256","tee","mpcTrustAnchor","regulatoryEvidence","independentAudit","hsm","approvals","seal"],
+  "properties":{
+    "schema":{"const":"GNW.ProductionReleaseEvidence.v1"},
+    "policyVersion":{"type":"string","minLength":1},
+    "gitCommitSha":{"type":"string","pattern":"^[0-9a-f]{40}$"},
+    "releaseTag":{"type":"string","pattern":"^v.+"},
+    "applicabilityDigest":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "controlMatrixDigest":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "artifactManifestSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "tee":{"type":"object","required":["mode","issuer","measurement","nonce","issuedAt","expiresAt","signature","actionDigest"],"properties":{
+      "mode":{"const":"REAL_HARDWARE"},"issuer":{"type":"string","minLength":1},"measurement":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+      "nonce":{"type":"string","pattern":"^[0-9a-f]{32,128}$"},"issuedAt":{"type":"integer"},"expiresAt":{"type":"integer"},
+      "signature":{"type":"string","pattern":"^[0-9a-f]+$"},"actionDigest":{"type":"string","pattern":"^[0-9a-f]{64}$"}
+    }},
+    "mpcTrustAnchor":{"type":"object","required":["subject","measurement","nonce","signatures"],"properties":{
+      "subject":{"type":"string","pattern":"^[0-9a-f]{40}$"},"measurement":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+      "nonce":{"type":"string","pattern":"^[0-9a-f]{32,128}$"},"signatures":{"type":"array","minItems":2}
+    }},
+    "regulatoryEvidence":{"type":"array","items":{"type":"object","required":["controlId","status","evidenceSha256","reference","issuedAt"],"properties":{
+      "controlId":{"type":"string","minLength":1},"status":{"const":"PASS"},"evidenceSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"reference":{"type":"string","minLength":1},"issuedAt":{"type":"string","minLength":1}
+    }}},
+    "independentAudit":{"type":"object","required":["required","status","reportSha256","blockingFindings"],"properties":{
+      "required":{"const":true},"status":{"const":"PASS"},"reportSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"blockingFindings":{"const":0}
+    }},
+    "hsm":{"type":"object","required":["status","attestationSha256"],"properties":{"status":{"const":"PASS"},"attestationSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}}},
+    "approvals":{"type":"array","minItems":2},
+    "seal":{"type":"object","required":["algorithm","signature","keyId"],"properties":{"algorithm":{"const":"Ed25519"},"signature":{"type":"string","pattern":"^[0-9a-f]+$"},"keyId":{"type":"string","minLength":1}}}
+  }
+}

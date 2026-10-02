@@ -43,6 +43,8 @@ jobs:
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
       - name: Install from committed lockfile
         run: npm ci
+      - name: Validate Pakistan compliance matrix
+        run: npm run verify:compliance
       - name: Production environment preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -56,6 +58,14 @@ jobs:
           GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
           GNW_LEASE_PRIVATE_KEY_PEM: ${{ secrets.GNW_LEASE_PRIVATE_KEY_PEM }}
           GNW_EGRESS_ALLOW_LIST: ${{ secrets.GNW_EGRESS_ALLOW_LIST }}
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+          GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: ${{ secrets.GNW_REQUIRE_MPC_TRUST_ANCHOR }}
+          GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
+          GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
           GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
           STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
           NODE_ENV: production
@@ -111,6 +121,13 @@ jobs:
         run: |
           test -s sbom.json
           test -s dist/SHA256SUMS.txt
+
+      - name: Verify signed production release evidence and seal
+        env:
+          GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
+          GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_RELEASE_ARTIFACT_REQUIRED: "true"
+        run: npm run verify:release:evidence
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
