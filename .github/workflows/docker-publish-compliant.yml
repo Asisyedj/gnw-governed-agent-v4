@@ -79,7 +79,7 @@ jobs:
             type=semver,pattern={{version}}
             type=sha,prefix=sha-
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@b27a081f655e9d4b60d04c3fcc5cbcaead454f6a
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1
       - name: Set up Buildx
         uses: docker/setup-buildx-action@97c5b2343ab7c6442e68cfd6b01a8cbf57e5708d
       - name: Log in to GHCR
