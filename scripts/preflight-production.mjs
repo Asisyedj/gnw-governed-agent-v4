@@ -46,7 +46,7 @@ const databaseUrl = env.DATABASE_URL ?? "";
 if (databaseUrl && !/[?&]sslmode=verify-full(?:&|$)/i.test(databaseUrl)) failures.push("DATABASE_URL must use sslmode=verify-full");
 if ((env.STORAGE_DRIVER ?? "local") === "local" && env.GNW_SHARED_STORAGE_CONFIRMED !== "true") failures.push("GNW_SHARED_STORAGE_CONFIRMED must be true for local shared storage");
 if (env.GNW_HOST && /example\.com$/i.test(env.GNW_HOST)) failures.push("GNW_HOST is still an example domain");
-\nfunction verifyKeyPair(privateName,publicName,label){
+function verifyKeyPair(privateName,publicName,label){
   try{
     const priv=createPrivateKey(req(privateName)),pub=createPublicKey(req(publicName));
     const payload=Buffer.from("GNW-"+label+"-KEY-PAIR-V1");
@@ -58,6 +58,16 @@ verifyKeyPair("GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GRANT");
 verifyKeyPair("GNW_LEASE_PRIVATE_KEY_PEM","GNW_LEASE_PUBLIC_KEY_PEM","LEASE");
 
 function parseJson(name) {
+  try{
+    const priv=createPrivateKey(req(privateName)),pub=createPublicKey(req(publicName));
+    const payload=Buffer.from("GNW-"+label+"-KEY-PAIR-V1");
+    const signature=sign(null,payload,priv);
+    if(!cryptoVerify(null,payload,pub,signature)) failures.push(label+" key pair verification failed");
+  }catch{ failures.push(label+" key pair parse/verification failed"); }
+}
+verifyKeyPair("GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GRANT");
+verifyKeyPair("GNW_LEASE_PRIVATE_KEY_PEM","GNW_LEASE_PUBLIC_KEY_PEM","LEASE");
+
   try { return JSON.parse(env[name] ?? ""); }
   catch { failures.push(name + " invalid JSON"); return undefined; }
 }
