@@ -2,8 +2,9 @@ import type { Db } from "./db/index.js";
 import type { Env } from "./env.js";
 import { audit } from "./audit.js";
 import { governedFetch, assertEgressUrl } from "./security.js";
-import { claimNonce, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
+import { claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
+import type { CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 
 export type ExecutionContext={
@@ -15,7 +16,7 @@ export type ExecutionResult={success:boolean;output?:unknown;error?:string;durat
 export async function executeWithGovernance(
   ctx:ExecutionContext,
   envelope:ActionEnvelope,
-  handler:()=>Promise<unknown>
+  handler:(lease?:CapabilityLease)=>Promise<unknown>
 ):Promise<ExecutionResult>{
   const start=Date.now();
   const leaseTtlMs=Math.min(300_000, Math.max(1, ctx.governanceRequest.expiresAt-Date.now()));
@@ -29,7 +30,14 @@ export async function executeWithGovernance(
         taskId:lease.taskId,
         tenantId:Number(lease.tenant),
         actorUserId:lease.actorUserId,
+        requestId:lease.requestId,
+        actionDigest:lease.actionDigest,
+        subject:lease.subject,
         capability:lease.capability,
+        destination:lease.destination,
+        interlockGeneration:lease.interlockGeneration,
+        issuer:lease.issuer,
+        signature:lease.signature,
         issuedAt:new Date(lease.issuedAt),
         expiresAt:new Date(lease.expiresAt),
       }),
@@ -92,7 +100,30 @@ export async function executeWithGovernance(
       requestId:ctx.requestId
     },{required:true});
 
-    const output=await handler();
+    if(d.capabilityLease){
+      const consumed=await consumeCapabilityLease(ctx.db,{
+        leaseId:d.capabilityLease.leaseId,
+        tenantId:ctx.tenantId,
+        taskId:ctx.taskId,
+        actorUserId:ctx.actorId,
+        actionDigest:d.actionDigest,
+        interlockGeneration:d.capabilityLease.interlockGeneration,
+      });
+      if(!consumed) throw new Error("capability_lease_invalid_or_replayed");
+      await audit(ctx.db,{
+        eventType:"capability.consume",
+        actorId:ctx.actorId,
+        tenantId:ctx.tenantId,
+        taskId:ctx.taskId,
+        resourceType:"capability_lease",
+        resourceId:d.capabilityLease.leaseId,
+        outcome:"success",
+        detail:{actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration},
+        requestId:ctx.requestId
+      },{required:true});
+    }
+
+    const output=await handler(d.capabilityLease);
 
     await audit(ctx.db,{
       eventType:"tool.result",
