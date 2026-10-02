@@ -25,7 +25,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         const me = await api.me();
         setBootstrap(me.bootstrap);
