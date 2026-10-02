@@ -1,10 +1,10 @@
 import { URL } from "node:url";
-import { createHash, createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, sign, verify as cryptoVerify } from "node:crypto";
 
 const required = [
   "DATABASE_URL", "COOKIE_SECRET", "SESSION_SECRET", "EXECUTOR_URL", "EXECUTOR_SECRET",
   "GNW_REQUIRE_SIGNED_GRANTS", "GNW_GRANT_ISSUER", "GNW_GRANT_PRIVATE_KEY_PEM",
-  "GNW_GRANT_PUBLIC_KEY_PEM", "GNW_LEASE_PRIVATE_KEY_PEM", "GNW_EGRESS_ALLOW_LIST",
+  "GNW_GRANT_PUBLIC_KEY_PEM", "GNW_LEASE_PRIVATE_KEY_PEM", "GNW_LEASE_PUBLIC_KEY_PEM", "GNW_EGRESS_ALLOW_LIST",
   "GNW_REQUIRE_TEE_ATTESTATION", "GNW_TEE_ATTESTATION_ISSUER", "GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM",
   "GNW_TEE_ATTESTATION_MEASUREMENT", "GNW_TEE_ATTESTATION_EVIDENCE_JSON",
   "GNW_REQUIRE_MPC_TRUST_ANCHOR", "GNW_MPC_TRUST_ANCHOR_JSON", "GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON"
@@ -46,6 +46,16 @@ const databaseUrl = env.DATABASE_URL ?? "";
 if (databaseUrl && !/[?&]sslmode=verify-full(?:&|$)/i.test(databaseUrl)) failures.push("DATABASE_URL must use sslmode=verify-full");
 if ((env.STORAGE_DRIVER ?? "local") === "local" && env.GNW_SHARED_STORAGE_CONFIRMED !== "true") failures.push("GNW_SHARED_STORAGE_CONFIRMED must be true for local shared storage");
 if (env.GNW_HOST && /example\.com$/i.test(env.GNW_HOST)) failures.push("GNW_HOST is still an example domain");
+\nfunction verifyKeyPair(privateName,publicName,label){
+  try{
+    const priv=createPrivateKey(req(privateName)),pub=createPublicKey(req(publicName));
+    const payload=Buffer.from("GNW-"+label+"-KEY-PAIR-V1");
+    const signature=sign(null,payload,priv);
+    if(!cryptoVerify(null,payload,pub,signature)) failures.push(label+" key pair verification failed");
+  }catch{ failures.push(label+" key pair parse/verification failed"); }
+}
+verifyKeyPair("GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GRANT");
+verifyKeyPair("GNW_LEASE_PRIVATE_KEY_PEM","GNW_LEASE_PUBLIC_KEY_PEM","LEASE");
 
 function parseJson(name) {
   try { return JSON.parse(env[name] ?? ""); }
