@@ -1,0 +1,95 @@
+name: docker-publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-push:
+    name: Build, Scan & Attest Container
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - name: Verify exact tag and clean source
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)"
+          git diff --check
+          test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
+      - name: Install committed lockfile
+        run: npm ci
+      - name: Validate compliance, cryptographic closure and production closure
+        run: |
+          npm run verify:compliance
+          npm run verify:crypto
+          npm run verify:production
+      - name: Validate signed production evidence
+        env:
+          GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
+          GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+          GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
+          GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
+          GNW_RELEASE_ARTIFACT_REQUIRED: "false"
+        run: npm run verify:release:evidence
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@792ab493f0fa5c8c55920b93a26cefd49a3fa82a
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@b27a081f655e9d4b60d04c3fcc5cbcaead454f6a
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@97c5b2343ab7c6442e68cfd6b01a8cbf57e5708d
+      - name: Log in to GHCR
+        uses: docker/login-action@678a46a45e920924c7b07d6209b4d02a3031d403
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & Push
+        id: push
+        uses: docker/build-push-action@cdfd6263be87f1ad1df48e3edcc81e4f41e57daa
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+      - name: Canonicalize image reference
+        id: image
+        shell: bash
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}@${{ steps.push.outputs.digest }}" >> "$GITHUB_OUTPUT"
+      - name: Scan image for HIGH/CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@bfa4b33a029b9aa80ddb784b45574c30e072c59e
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@9d57eef8c06cd9d6b433effeeb7a6a77b3ff94ad
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
