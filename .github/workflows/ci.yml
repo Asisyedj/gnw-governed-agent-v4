@@ -189,12 +189,15 @@ jobs:
           cache: npm
       - name: Install from committed lockfile
         run: npm ci
+      - name: Collect canonical Git release metadata
+        run: npm run verify:git-release-metadata
       - name: Collect evidence
         run: |
           mkdir -p evidence
           node --version > evidence/node-version.txt
           npm --version > evidence/npm-version.txt
           git rev-parse HEAD > evidence/commit-sha.txt
+          cp git-release-metadata.json evidence/git-release-metadata.json
           git diff --check > evidence/diff-check.txt
           npm audit --json > evidence/npm-audit.json
           cp docs/RUNTIME_EXECUTION_POLICY.md evidence/runtime-policy.md
