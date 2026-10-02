@@ -46,13 +46,20 @@ jobs:
         run: npm cache verify
       - name: Clean install from committed lockfile
         run: npm ci
-      - name: Provision non-superuser application role
+      - name: Provision dedicated database roles
         env:
           PGPASSWORD: gnw_admin_pw
         run: |
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1             -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1             -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1             -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
+            -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
