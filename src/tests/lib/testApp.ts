@@ -2,7 +2,6 @@
  * Shared test application factory.
  * Creates a fully initialised Fastify app connected to the test database.
  */
-import { buildApp } from "../../server/app.js";
 import type { FastifyInstance } from "fastify";
 import type { Db } from "../../server/db/index.js";
 
@@ -11,6 +10,9 @@ process.env.NODE_ENV      = "test";
 process.env.DATABASE_URL  = process.env.DATABASE_URL ?? "postgresql://gnw:gnw_test_pw@localhost:5432/gnw_test";
 process.env.COOKIE_SECRET = "test-cookie-secret-minimum-32-characters-ok";
 process.env.LOG_LEVEL     = "silent";
+process.env.ALLOW_SELF_REGISTRATION = "true";
+
+const { buildApp } = await import("../../server/app.js");
 
 export async function createTestApp(): Promise<{ app: FastifyInstance; db: Db }> {
   const { app, db } = await buildApp();
