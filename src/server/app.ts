@@ -13,6 +13,9 @@ import { interlockRoutes } from "./routes/interlock.js";
 import { auditRoutes } from "./routes/audit.js";
 import { healthRoutes } from "./routes/health.js";
 import { summaryRoutes } from "./routes/summary.js";
+import { metricsRoutes } from "./routes/metrics.js";
+import { recordRequest } from "./metrics.js";
+import type { FastifyRequest } from "fastify";
 
 const PORT = Number(process.env.PORT ?? 3000);
 
@@ -20,6 +23,8 @@ export async function buildApp() {
   validateSecrets();
 
   const db = createDb();
+
+  const requestStarts = new WeakMap<FastifyRequest, bigint>();
 
   const app = Fastify({
     logger: {
@@ -30,6 +35,15 @@ export async function buildApp() {
     },
     trustProxy: process.env.TRUST_PROXY === "true",
     genReqId: () => crypto.randomUUID(),
+  });
+
+  app.addHook("onRequest", async (req) => { requestStarts.set(req, process.hrtime.bigint()); });
+  app.addHook("onResponse", async (req, reply) => {
+    const started = requestStarts.get(req);
+    if (!started) return;
+    const route = req.routeOptions?.url ?? req.url.split("?")[0] ?? "unknown";
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    recordRequest(req.method, route, reply.statusCode, elapsedMs);
   });
 
   // ── Security headers ──────────────────────────────────────────────────────
@@ -109,6 +123,7 @@ export async function buildApp() {
   await app.register(approvalRoutes, { prefix: "/api/approvals" });
   await app.register(interlockRoutes,{ prefix: "/api/interlock" });
   await app.register(auditRoutes,    { prefix: "/api/audit" });
+  await app.register(metricsRoutes,  { prefix: "" });
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {
