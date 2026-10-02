@@ -23,7 +23,9 @@ export function castVote(session: QuorumSession, memberId: string, vote: "approv
   }
   const already = session.votes.find(v => v.memberId === memberId);
   if (already) throw new Error("Member has already voted");
-  const newVotes = [...session.votes, { quorumId: session.quorumId, memberId, vote, reason, timestamp: Date.now() }];
+  const newVote: QuorumVote = { quorumId: session.quorumId, memberId, vote, timestamp: Date.now() };
+  if (reason !== undefined) newVote.reason = reason;
+  const newVotes = [...session.votes, newVote];
   const approvals = newVotes.filter(v => v.vote === "approve").length;
   const rejections = newVotes.filter(v => v.vote === "reject").length;
   let status: QuorumSession["status"] = "open";
