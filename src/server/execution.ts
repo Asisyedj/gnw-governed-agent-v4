@@ -60,6 +60,8 @@ export async function executeWithGovernance(
       : undefined,
     attestationVerifier,
     ctx.env.teeAttestationRequired,
+    ctx.env.mpcTrustAnchor,
+    ctx.env.requireMpcTrustAnchor,
   );
 
   try{
@@ -88,91 +90,24 @@ export async function executeWithGovernance(
 
     const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
     if(!d.allowed){
-      await audit(ctx.db,{
-        eventType:"governance.deny",
-        actorId:ctx.actorId,
-        tenantId:ctx.tenantId,
-        taskId:ctx.taskId,
-        resourceType:"tool",
-        resourceId:envelope.tool,
-        outcome:"denied",
-        detail:{reason:d.reason,actionDigest:d.actionDigest},
-        requestId:ctx.requestId
-      },{required:true});
+      await audit(ctx.db,{eventType:"governance.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"denied",detail:{reason:d.reason,actionDigest:d.actionDigest},requestId:ctx.requestId},{required:true});
       return{success:false,error:d.reason,durationMs:Date.now()-start};
     }
-
     const digest=digestEnvelope(envelope);
-    await audit(ctx.db,{
-      eventType:"tool.invoke",
-      actorId:ctx.actorId,
-      tenantId:ctx.tenantId,
-      taskId:ctx.taskId,
-      resourceType:"tool",
-      resourceId:envelope.tool,
-      outcome:"success",
-      detail:{digest,actionDigest:d.actionDigest,operation:envelope.operation,capabilityLeaseId:d.capabilityLease?.leaseId},
-      requestId:ctx.requestId
-    },{required:true});
-
+    await audit(ctx.db,{eventType:"tool.invoke",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,actionDigest:d.actionDigest,operation:envelope.operation,capabilityLeaseId:d.capabilityLease?.leaseId},requestId:ctx.requestId},{required:true});
     if(d.capabilityLease){
-      const consumed=await consumeCapabilityLease(ctx.db,{
-        leaseId:d.capabilityLease.leaseId,
-        tenantId:ctx.tenantId,
-        taskId:ctx.taskId,
-        actorUserId:ctx.actorId,
-        actionDigest:d.actionDigest,
-        interlockGeneration:d.capabilityLease.interlockGeneration,
-      });
+      const consumed=await consumeCapabilityLease(ctx.db,{leaseId:d.capabilityLease.leaseId,tenantId:ctx.tenantId,taskId:ctx.taskId,actorUserId:ctx.actorId,actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration});
       if(!consumed) throw new Error("capability_lease_invalid_or_replayed");
-      await audit(ctx.db,{
-        eventType:"capability.consume",
-        actorId:ctx.actorId,
-        tenantId:ctx.tenantId,
-        taskId:ctx.taskId,
-        resourceType:"capability_lease",
-        resourceId:d.capabilityLease.leaseId,
-        outcome:"success",
-        detail:{actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration},
-        requestId:ctx.requestId
-      },{required:true});
+      await audit(ctx.db,{eventType:"capability.consume",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"capability_lease",resourceId:d.capabilityLease.leaseId,outcome:"success",detail:{actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration},requestId:ctx.requestId},{required:true});
     }
-
     const output=await handler(d.capabilityLease);
-
-    await audit(ctx.db,{
-      eventType:"tool.result",
-      actorId:ctx.actorId,
-      tenantId:ctx.tenantId,
-      taskId:ctx.taskId,
-      resourceType:"tool",
-      resourceId:envelope.tool,
-      outcome:"success",
-      detail:{digest,actionDigest:d.actionDigest,capabilityLeaseId:d.capabilityLease?.leaseId},
-      requestId:ctx.requestId
-    },{required:true});
-
+    await audit(ctx.db,{eventType:"tool.result",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,actionDigest:d.actionDigest,capabilityLeaseId:d.capabilityLease?.leaseId},requestId:ctx.requestId},{required:true});
     return{success:true,output,durationMs:Date.now()-start};
   }catch(e){
     const m=e instanceof Error?e.message:String(e);
-    try{
-      await audit(ctx.db,{
-        eventType:"tool.deny",
-        actorId:ctx.actorId,
-        tenantId:ctx.tenantId,
-        taskId:ctx.taskId,
-        resourceType:"tool",
-        resourceId:envelope.tool,
-        outcome:"failure",
-        detail:{error:m},
-        requestId:ctx.requestId
-      },{required:true});
-    }catch{/* required audit failure already triggers the safety interlock */}
+    try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch{/* required audit failure already triggers the safety interlock */}
     return{success:false,error:m,durationMs:Date.now()-start};
   }
 }
 
-export async function safeEgressFetch(url:string,init:RequestInit,allowedHosts:readonly string[],maxBytes:number){
-  assertEgressUrl(url,allowedHosts);
-  return governedFetch(url,init,maxBytes);
-}
+export async function safeEgressFetch(url:string,init:RequestInit,allowedHosts:readonly string[],maxBytes:number){assertEgressUrl(url,allowedHosts);return governedFetch(url,init,maxBytes);}
