@@ -50,6 +50,8 @@ jobs:
         run: npm run db:migrate
       - name: Verify production closure static gate
         run: npm run verify:production
+      - name: Database RLS verification
+        run: npm run verify:rls
       - name: Unit tests
         run: npm run test
       - name: Tests with coverage
