@@ -5,7 +5,7 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import { createDb, closeDb } from "./db/index.js";
 import { getInterlock, insertAuditLog } from "./repo.js";
 import { validateSecrets } from "./lib/secretsCheck.js";
-import { authRoutes } from "./routes/auth.js";
+import { authRoutes, resolveSession } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { approvalRoutes } from "./routes/approvals.js";
@@ -78,6 +78,8 @@ export async function buildApp() {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
       const exempt = ["/api/auth", "/api/interlock", "/api/health", "/api/ready"];
       if (!exempt.some((p) => req.url.startsWith(p))) {
+        const session = await resolveSession(db, req.cookies as Record<string, string>);
+        if (!session) return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated" });
         const lock = await getInterlock(db);
         if (lock.killSwitch) {
           await insertAuditLog(db, { eventType: "kill_switch_block", outcome: "denied", detail: { path: req.url, method: req.method }, ipAddress: req.ip });
