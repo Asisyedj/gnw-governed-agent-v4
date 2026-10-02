@@ -7,6 +7,8 @@ import {
   asTaskId,
   asTenantId,
   immutable,
+  buildVerifiedRagInput,
+  verifyIngestion,
   verifyDataStage,
   verifyEvidenceRecord,
   verifyGroundedAnswer,
@@ -72,6 +74,31 @@ describe("immutable invariant engine",()=>{
     expect(Object.isFrozen(stage.input)).toBe(true);
     expect(Object.isFrozen(stage.output)).toBe(true);
     expect(Object.isFrozen((stage.output as {items:number[]}).items)).toBe(true);
+  });
+
+  it("verifies ingestion metadata and binds the query to the tenant",()=>{
+    const document={
+      id:"doc-1",
+      tenantId:tenant,
+      sourceUri:"https://example.com/source",
+      sourceVersion:"v1",
+      owner:"owner-1",
+      permissions:["tenant:7:read"],
+      contentHash:asSha256(digest({content:"document"})),
+      chunks:[{
+        id:"chunk-1",
+        documentId:"doc-1",
+        index:0,
+        contentHash:asSha256(digest({chunk:"one"})),
+        embeddingDigest:asSha256(digest({embedding:[1,2,3]})),
+        authorizationDigest:asSha256(digest({tenant,task,permission:"read"})),
+      }],
+    } as const;
+    expect(verifyIngestion(document).ok).toBe(true);
+    const input=buildVerifiedRagInput(document,"test query");
+    expect(input.queryDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.isFrozen(input)).toBe(true);
+    expect(Object.isFrozen(input.document)).toBe(true);
   });
 
   it("verifies evidence provenance before retrieval can pass",()=>{
