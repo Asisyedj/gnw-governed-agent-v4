@@ -85,7 +85,9 @@ jobs:
             docker logs gnw-ci-smoke || true
             cat /tmp/gnw-ci-smoke.log || true
             docker inspect gnw-ci-smoke --format '{{json .State}}' || true
+            docker inspect gnw-ci-smoke --format 'exit={{.State.ExitCode}} status={{.State.Status}}' || true
             docker stop gnw-ci-smoke || true
+            docker rm -f gnw-ci-smoke || true
             exit 1
           fi
           grep -q '"ok":true' /tmp/gnw-health.json
