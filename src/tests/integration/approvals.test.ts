@@ -13,8 +13,8 @@ describe("Approvals — unauthenticated", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("POST /api/approvals/:id/approve — returns 401 without session", async () => {
-    const res = await app.inject({ method: "POST", url: "/api/approvals/999/approve", payload: {} });
+  it("PATCH /api/approvals/:id — returns 401 without session", async () => {
+    const res = await app.inject({ method: "PATCH", url: "/api/approvals/999", payload: { status: "approved" } });
     expect(res.statusCode).toBe(401);
   });
 });
