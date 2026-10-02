@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { canonicalize } from "./security.js";
 
-export type ActionEnvelope={taskId:string;tenantId:string;actorId:string;operation:string;tool:string;parameters:unknown;grantId:string;nonce:string;issuedAt:number};
-export type EnvelopeBinding={taskId:number|string;tenantId:number|string;actorId:number|string;grantId:string;nonce:string;operation:string;tool:string};
+export type ActionEnvelope={taskId:string;tenantId:string;actorId:string;operation:string;tool:string;parameters:unknown;grantId:string;nonce:string;issuedAt:number;actionDigest:string};
+export type EnvelopeBinding={taskId:number|string;tenantId:number|string;actorId:number|string;grantId:string;nonce:string;operation:string;tool:string;actionDigest?:string};
 export function digestEnvelope(env:ActionEnvelope):string{
   const canonical=canonicalize([env.taskId,env.tenantId,env.actorId,env.operation,env.tool,env.parameters,env.grantId,env.nonce,env.issuedAt]);
   return createHash("sha256").update(canonical).digest("hex");
@@ -12,6 +12,8 @@ export function validateEnvelope(env:ActionEnvelope, nowMs=Date.now(), maxAgeMs=
   if(!Number.isInteger(env.issuedAt))throw new Error("ActionEnvelope: issuedAt invalid");
   const age=nowMs-env.issuedAt;if(age<0||age>maxAgeMs)throw new Error(`ActionEnvelope: issuedAt outside window (age=${age}ms)`);
   if(binding){
+    if(!/^[0-9a-f]{64}$/.test(env.actionDigest))throw new Error("ActionEnvelope: actionDigest invalid");
+    if(binding.actionDigest!==undefined&&env.actionDigest!==binding.actionDigest)throw new Error("ActionEnvelope: action_digest_binding");
     if(String(env.taskId)!==String(binding.taskId)||String(env.tenantId)!==String(binding.tenantId)||String(env.actorId)!==String(binding.actorId))throw new Error("ActionEnvelope: context_binding");
     if(env.grantId!==binding.grantId||env.nonce!==binding.nonce||env.operation!==binding.operation||env.tool!==binding.tool)throw new Error("ActionEnvelope: authorization_binding");
   }
