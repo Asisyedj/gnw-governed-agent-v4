@@ -26,13 +26,13 @@
     "start": "node dist/server/app.js"
   },
   "dependencies": {
-    "@fastify/cookie": "^9.3.1",
-    "@fastify/helmet": "^11.1.1",
-    "@fastify/rate-limit": "^9.1.0",
-    "@fastify/static": "^7.0.4",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^10.2.0",
+    "@fastify/static": "^10.1.5",
     "bcryptjs": "^2.4.3",
-    "drizzle-orm": "^0.32.1",
-    "fastify": "^4.28.1",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
     "pg": "^8.12.0",
     "zod": "^3.23.8"
   },
@@ -45,8 +45,8 @@
     "@types/pg": "^8.11.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "@vitest/coverage-v8": "^2.0.5",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^5.0.3",
     "concurrently": "^9.0.1",
     "drizzle-kit": "^0.23.0",
     "eslint": "^9.9.0",
@@ -55,8 +55,7 @@
     "react-dom": "^18.3.1",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
-    "vite": "^5.4.2",
-    "vitest": "^2.0.5",
-    "@vitest/coverage-istanbul": "^2.0.5"
+    "vite": "^6.4.3",
+    "vitest": "^5.0.3"
   }
 }
