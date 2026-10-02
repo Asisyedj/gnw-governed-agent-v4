@@ -12,6 +12,24 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_DB: gnw_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: gnw_admin_pw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gnw_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://gnw_app:gnw_app_pw@localhost:5432/gnw_test
+      COOKIE_SECRET: ci-release-cookie-secret-minimum-32-chars-ok
+      LOG_LEVEL: silent
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { fetch-depth: 0 }
@@ -25,6 +43,28 @@ jobs:
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
       - name: Install from committed lockfile
         run: npm ci
+      - name: Provision dedicated database roles
+        env:
+          PGPASSWORD: gnw_admin_pw
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
+      - name: Run migrations with dedicated migrator role
+        env:
+          DATABASE_URL: postgresql://gnw_migrator:gnw_migrator_pw@localhost:5432/gnw_test
+        run: npm run db:migrate
+      - name: Grant runtime database privileges
+        env:
+          PGPASSWORD: gnw_admin_pw
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE UPDATE, DELETE ON audit_log, nonces, interlocks FROM gnw_app;"
       - name: Verify production closure
         run: npm run verify:production
       - name: Verify database RLS
