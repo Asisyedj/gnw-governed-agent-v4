@@ -115,9 +115,10 @@ export async function buildApp() {
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {
     const status = (error as { statusCode?: number }).statusCode ?? 500;
+    const message = error instanceof Error ? error.message : "Request failed";
     if (status >= 500) app.log.error({ err: error, reqId: req.id }, "Internal server error");
     return reply.status(status).send({
-      error: status >= 500 ? "Internal server error" : error.message,
+      error: status >= 500 ? "Internal server error" : message,
       code:  (error as { code?: string }).code ?? "internal_error",
       reqId: req.id,
     });
