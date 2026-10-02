@@ -50,16 +50,11 @@ jobs:
         env:
           PGPASSWORD: gnw_admin_pw
         run: |
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
-          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 \
-            -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
@@ -93,7 +88,6 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_restore -v ON_ERROR_STOP=1 -c "SELECT 1 FROM tenants WHERE slug='backup-drill-${GITHUB_RUN_ID}' LIMIT 1;"
           dropdb -h 127.0.0.1 -U postgres --if-exists gnw_restore
           rm -f /tmp/gnw-backup.dump
-
       - name: Unit and integration tests
         run: npm run test
       - name: Tests with coverage
@@ -116,6 +110,11 @@ jobs:
           GNW_GRANT_PRIVATE_KEY_PEM: ci-smoke-private-key
           GNW_GRANT_PUBLIC_KEY_PEM: ci-smoke-public-key
           GNW_LEASE_PRIVATE_KEY_PEM: ci-smoke-lease-private-key
+          GNW_REQUIRE_TEE_ATTESTATION: "true"
+          GNW_TEE_ATTESTATION_ISSUER: ci-smoke-tee-verifier
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ci-smoke-tee-public-key
+          GNW_TEE_ATTESTATION_MEASUREMENT: "0000000000000000000000000000000000000000000000000000000000000000"
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: "120000"
           GNW_EGRESS_ALLOW_LIST: api.openai.com
           LLM_BASE_URL: https://api.openai.com/v1
           LLM_API_KEY: ci-smoke-api-key
@@ -128,10 +127,10 @@ jobs:
         run: |
           set -euo pipefail
           docker rm -f gnw-production-smoke >/dev/null 2>&1 || true
-          docker run -d --network host --name gnw-production-smoke             -e NODE_ENV             -e DATABASE_URL             -e COOKIE_SECRET             -e SESSION_SECRET             -e EXECUTOR_URL             -e EXECUTOR_SECRET             -e GNW_REQUIRE_SIGNED_GRANTS             -e GNW_GRANT_ISSUER             -e GNW_GRANT_PRIVATE_KEY_PEM             -e GNW_GRANT_PUBLIC_KEY_PEM             -e GNW_LEASE_PRIVATE_KEY_PEM             -e GNW_EGRESS_ALLOW_LIST             -e LLM_BASE_URL             -e LLM_API_KEY             -e STORAGE_DRIVER             -e GNW_SHARED_STORAGE_CONFIRMED             -e GNW_POSTGRES_SSL_REQUIRED             -e TRUST_PROXY             -e PORT             -e LOG_LEVEL             gnw-production-smoke:${GITHUB_SHA}
+          docker run -d --network host --name gnw-production-smoke -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
           trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true' EXIT
           for _ in {1..30}; do
-            if curl -fsS http://127.0.0.1:3000/api/health >/tmp/gnw-health.json &&                curl -fsS http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json; then
+            if curl -fsS http://127.0.0.1:3000/api/health >/tmp/gnw-health.json && curl -fsS http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json; then
               grep -q '"ok":true' /tmp/gnw-health.json
               grep -q '"ok":true' /tmp/gnw-ready.json
               exit 0
@@ -197,9 +196,11 @@ jobs:
           cp docs/RUNTIME_EXECUTION_POLICY.md evidence/runtime-policy.md
           printf "GNW-REP-1.0\\n" > evidence/policy-version.txt
           printf "DeepResearchModel=gpt-5.6-sol\\n" >> evidence/policy-version.txt
-          jq -n             --arg candidate "gnw-production-closure-v2"             --arg sha "$(git rev-parse HEAD)"             --arg ref "$GITHUB_REF"             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --arg node "$(node --version)"             --arg npm "$(npm --version)"             '{schema:"GNW.BuildEvidence.v3",candidate:$candidate,sha:$sha,ref:$ref,ts:$ts,node:$node,npm:$npm}' > evidence/build.json
+          jq -n --arg candidate "gnw-production-closure-v2" --arg sha "$(git rev-parse HEAD)" --arg ref "$GITHUB_REF" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg node "$(node --version)" --arg npm "$(npm --version)" '{schema:"GNW.BuildEvidence.v3",candidate:$candidate,sha:$sha,ref:$ref,ts:$ts,node:$node,npm:$npm}' > evidence/build.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: build-evidence-${{ github.sha }}
           path: evidence/
           retention-days: 90
+
+  

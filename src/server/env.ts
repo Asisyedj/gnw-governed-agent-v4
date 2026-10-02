@@ -25,6 +25,11 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   executorUrl:(source.EXECUTOR_URL??(isProduction?"":"http://localhost:8788")).replace(/\/$/,""),executorSecret:source.EXECUTOR_SECRET??source.GNW_EXECUTOR_SHARED_TOKEN??"",
   grantIssuer:source.GNW_GRANT_ISSUER??"gnw-dev",grantPrivateKeyPem:source.GNW_GRANT_PRIVATE_KEY_PEM??"",grantPublicKeyPem:source.GNW_GRANT_PUBLIC_KEY_PEM??"",leasePrivateKeyPem:source.GNW_LEASE_PRIVATE_KEY_PEM??"",
   requireSignedGrants:bool(source.GNW_REQUIRE_SIGNED_GRANTS,isProduction),councilMode:(source.GNW_COUNCIL_MODE??"disabled") as "disabled"|"shadow",
+  teeAttestationRequired:bool(source.GNW_REQUIRE_TEE_ATTESTATION,isProduction),
+  teeAttestationIssuer:source.GNW_TEE_ATTESTATION_ISSUER??"",
+  teeAttestationPublicKeyPem:source.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM??"",
+  teeAttestationMeasurement:(source.GNW_TEE_ATTESTATION_MEASUREMENT??"").toLowerCase(),
+  teeAttestationMaxAgeMs:int(source.GNW_TEE_ATTESTATION_MAX_AGE_MS,120000),
   killSwitchUrl:source.GNW_KILL_SWITCH_URL??"",egressAllowList:egress,
   maxRequestBodyBytes:int(source.GNW_MAX_REQUEST_BODY_BYTES,10*1024*1024),rateLimitWindowMs:int(source.GNW_RATE_LIMIT_WINDOW_MS,60000),rateLimitMaxRequests:int(source.GNW_RATE_LIMIT_MAX_REQUESTS,120),
  } as const;

@@ -3,7 +3,9 @@ import { URL } from "node:url";
 const required = [
   "DATABASE_URL", "COOKIE_SECRET", "SESSION_SECRET", "EXECUTOR_URL", "EXECUTOR_SECRET",
   "GNW_REQUIRE_SIGNED_GRANTS", "GNW_GRANT_ISSUER", "GNW_GRANT_PRIVATE_KEY_PEM",
-  "GNW_GRANT_PUBLIC_KEY_PEM", "GNW_LEASE_PRIVATE_KEY_PEM", "GNW_EGRESS_ALLOW_LIST"
+  "GNW_GRANT_PUBLIC_KEY_PEM", "GNW_LEASE_PRIVATE_KEY_PEM", "GNW_EGRESS_ALLOW_LIST",
+  "GNW_REQUIRE_TEE_ATTESTATION", "GNW_TEE_ATTESTATION_ISSUER", "GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM",
+  "GNW_TEE_ATTESTATION_MEASUREMENT"
 ];
 const failures = [];
 
@@ -18,6 +20,8 @@ for (const name of ["COOKIE_SECRET","SESSION_SECRET","EXECUTOR_SECRET"]) {
   if (value && value.length < 32) failures.push(name + " must be at least 32 characters");
 }
 if (env.GNW_REQUIRE_SIGNED_GRANTS !== "true") failures.push("GNW_REQUIRE_SIGNED_GRANTS must be true");
+if (env.GNW_REQUIRE_TEE_ATTESTATION !== "true") failures.push("GNW_REQUIRE_TEE_ATTESTATION must be true");
+if (!/^[0-9a-f]{64}$/i.test(env.GNW_TEE_ATTESTATION_MEASUREMENT ?? "")) failures.push("GNW_TEE_ATTESTATION_MEASUREMENT must be 64 hex characters");
 if (!env.GNW_EGRESS_ALLOW_LIST?.split(",").map(x => x.trim()).filter(Boolean).length) failures.push("GNW_EGRESS_ALLOW_LIST must contain at least one host");
 
 for (const name of ["DATABASE_URL"]) {
