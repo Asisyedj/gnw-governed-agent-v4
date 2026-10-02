@@ -51,6 +51,15 @@ export function validateSecrets(): void {
     if (!process.env.GNW_GRANT_PUBLIC_KEY_PEM) errors.push("GNW_GRANT_PUBLIC_KEY_PEM is required");
     if (!process.env.GNW_LEASE_PRIVATE_KEY_PEM) errors.push("GNW_LEASE_PRIVATE_KEY_PEM is required");
 
+    if (process.env.GNW_REQUIRE_TEE_ATTESTATION !== "true") {
+      errors.push("GNW_REQUIRE_TEE_ATTESTATION must be true in production");
+    }
+    if (!process.env.GNW_TEE_ATTESTATION_ISSUER) errors.push("GNW_TEE_ATTESTATION_ISSUER is required");
+    if (!process.env.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM) errors.push("GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM is required");
+    if (!/^[0-9a-f]{64}$/i.test(process.env.GNW_TEE_ATTESTATION_MEASUREMENT ?? "")) {
+      errors.push("GNW_TEE_ATTESTATION_MEASUREMENT must be a 64-hex expected measurement");
+    }
+
     const allowList=(process.env.GNW_EGRESS_ALLOW_LIST ?? "").split(",").map(x=>x.trim()).filter(Boolean);
     if (!allowList.length) errors.push("GNW_EGRESS_ALLOW_LIST must not be empty in production");
 
