@@ -17,9 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
-    "db:studio": "drizzle-kit studio",
     "verify:production": "node scripts/verify-production-closure.mjs",
     "verify:rls": "node scripts/test-rls.mjs",
     "start": "node dist/server/app.js"
@@ -44,17 +42,16 @@
     "@types/pg": "^8.11.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "@vitest/coverage-v8": "^2.0.5",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^2.1.9",
     "concurrently": "^9.0.1",
-    "drizzle-kit": "^0.23.0",
     "eslint": "^9.9.0",
     "pino-pretty": "^11.2.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
-    "vite": "^5.4.2",
-    "vitest": "^2.0.5"
+    "vite": "^6.4.3",
+    "vitest": "^2.1.9"
   }
 }
