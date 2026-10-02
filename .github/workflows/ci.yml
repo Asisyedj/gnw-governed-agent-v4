@@ -18,8 +18,8 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_DB: gnw_test
-          POSTGRES_USER: gnw
-          POSTGRES_PASSWORD: gnw_test_pw
+          POSTGRES_USER: gnw_admin
+          POSTGRES_PASSWORD: gnw_admin_pw
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U gnw -d gnw_test"
@@ -28,7 +28,8 @@ jobs:
           --health-retries 5
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://gnw:gnw_test_pw@localhost:5432/gnw_test
+      DATABASE_URL: postgresql://gnw_app:gnw_app_pw@localhost:5432/gnw_test
+      MIGRATION_DATABASE_URL: postgresql://gnw_admin:gnw_admin_pw@localhost:5432/gnw_test
       COOKIE_SECRET: ci-test-cookie-secret-minimum-32-chars-ok
       LOG_LEVEL: silent
     steps:
@@ -46,8 +47,11 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Harden test database role
-        run: PGPASSWORD=gnw_test_pw psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE gnw NOSUPERUSER NOBYPASSRLS;"
+      - name: Create restricted runtime database role
+        run: |
+          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS;"
+          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE gnw_test TO gnw_app; GRANT USAGE, CREATE ON SCHEMA public TO gnw_app;"
+          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO gnw_app; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO gnw_app;"
       - name: Run migrations
         run: npm run db:migrate
       - name: Verify production closure static gate
@@ -56,7 +60,7 @@ jobs:
         run: npm run test
       - name: Reset test database for independent coverage run
         run: |
-          PGPASSWORD=gnw_test_pw psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;"
+          PGPASSWORD=gnw_admin_pw psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
           npm run db:migrate
       - name: Tests with coverage
         run: npm run test:coverage
