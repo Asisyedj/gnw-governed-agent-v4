@@ -10,7 +10,7 @@ import { recordRequest, renderMetrics } from "../../server/metrics.js";
 import { assertEgressUrl, assertHttpsUrl, canonicalize, governedFetch, isPrivateOrLocalHost, sha256, signGrant, verifyGrantSignature } from "../../server/security.js";
 
 const keys=generateKeyPairSync("ed25519",{privateKeyEncoding:{type:"pkcs8",format:"pem"},publicKeyEncoding:{type:"spki",format:"pem"}});
-const now=1_700_000_000_000;
+const now=Date.now();
 const baseRequest=():GovernanceRequest=>({
   requestId:"req-1",subject:"1",tenant:"1",role:"operator",purpose:"test",classification:"public",
   operation:"search",resource:"knowledge",agent:"research",tool:"knowledge.search",scope:"knowledge.search",
