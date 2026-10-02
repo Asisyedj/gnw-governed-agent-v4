@@ -2,30 +2,39 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: gnw
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-gnw_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}
       POSTGRES_DB: gnw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U gnw -d gnw"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_ADMIN_USER:-gnw_admin} -d gnw"]
       interval: 5s
       timeout: 5s
       retries: 20
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
-      - ${POSTGRES_TLS_DIR:?set POSTGRES_TLS_DIR}:/tls:ro
-    command: >-
-      postgres
-      -c ssl=on
-      -c ssl_cert_file=/tls/server.crt
-      -c ssl_key_file=/tls/server.key
-      -c ssl_ca_file=/tls/ca.crt
 
-  app-a:
+  migrate:
     build: .
     depends_on:
       db:
         condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?set MIGRATION_DATABASE_URL}
+      GNW_POSTGRES_SSL_REQUIRED: "true"
+      GNW_APP_DB_USER: ${GNW_APP_DB_USER:-gnw_app}
+      GNW_APP_DB_PASSWORD: ${GNW_APP_DB_PASSWORD:?set GNW_APP_DB_PASSWORD}
+    command: ["sh","-c","node scripts/provision-db-role.mjs && node scripts/migrate.mjs"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  app-a:
+    build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment: &app-env
       NODE_ENV: production
       PORT: 3000
@@ -49,7 +58,7 @@ services:
       GNW_GRANT_PUBLIC_KEY_PEM: ${GNW_GRANT_PUBLIC_KEY_PEM:?set GNW_GRANT_PUBLIC_KEY_PEM}
       GNW_LEASE_PRIVATE_KEY_PEM: ${GNW_LEASE_PRIVATE_KEY_PEM:?set GNW_LEASE_PRIVATE_KEY_PEM}
       GNW_REQUIRE_SIGNED_GRANTS: "true"
-      GNW_EGRESS_ALLOW_LIST: ${GNW_EGRESS_ALLOW_LIST:-}
+      GNW_EGRESS_ALLOW_LIST: ${GNW_EGRESS_ALLOW_LIST:?set GNW_EGRESS_ALLOW_LIST}
     volumes:
       - app-a-data:/data
     read_only: true
@@ -60,12 +69,13 @@ services:
     security_opt: [no-new-privileges:true]
     pids_limit: 256
     mem_limit: 1g
+    restart: unless-stopped
 
   app-b:
     build: .
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment: *app-env
     volumes:
       - app-b-data:/data
@@ -77,6 +87,7 @@ services:
     security_opt: [no-new-privileges:true]
     pids_limit: 256
     mem_limit: 1g
+    restart: unless-stopped
 
 volumes:
   db-data:
