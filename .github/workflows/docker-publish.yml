@@ -68,6 +68,32 @@ jobs:
           provenance: true
           sbom: true
 
+      - name: Production container smoke test
+        env:
+          IMAGE_TAG: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+        run: |
+          set -eu
+          COOKIE_SECRET="$(printf "x%.0s" $(seq 1 64))"
+          docker run -d --rm --name gnw-production-smoke \
+            -e NODE_ENV=production \
+            -e DATABASE_URL=postgresql://127.0.0.1:5432/gnw \
+            -e COOKIE_SECRET="$COOKIE_SECRET" \
+            -p 18080:3000 \
+            "$IMAGE_TAG"
+          cleanup() {
+            docker logs gnw-production-smoke || true
+            docker stop gnw-production-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/api/health >/tmp/gnw-health.json; then
+              grep -q '"ok":true' /tmp/gnw-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "production container health check did not become ready"
+          exit 1
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
