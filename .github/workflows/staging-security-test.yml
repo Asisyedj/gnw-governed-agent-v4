@@ -14,6 +14,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:781a2bdae47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+
 jobs:
   preflight:
     name: Staging scope preflight
@@ -40,7 +43,7 @@ jobs:
           TARGET: ${{ secrets.GNW_STAGING_BASE_URL }}
         run: |
           mkdir -p zap-results
-          docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+          docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" "$ZAP_IMAGE" \
             zap-baseline.py -t "$TARGET" -m 2 -I -r staging-baseline.html -J staging-baseline.json -w staging-baseline.md
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -62,7 +65,7 @@ jobs:
           TARGET: ${{ secrets.GNW_STAGING_BASE_URL }}
         run: |
           mkdir -p zap-results
-          docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+          docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" "$ZAP_IMAGE" \
             zap-full-scan.py -t "$TARGET" -m 5 -I -r staging-active.html -J staging-active.json -w staging-active.md
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
