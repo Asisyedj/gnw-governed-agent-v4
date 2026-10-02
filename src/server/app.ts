@@ -127,11 +127,14 @@ export async function buildApp() {
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {
-    const status = (error as { statusCode?: number }).statusCode ?? 500;
+    const record = typeof error === "object" && error !== null ? error as { statusCode?: unknown; code?: unknown } : {};
+    const status = typeof record.statusCode === "number" ? record.statusCode : 500;
+    const code = typeof record.code === "string" ? record.code : "internal_error";
+    const message = error instanceof Error ? error.message : String(error);
     if (status >= 500) app.log.error({ err: error, reqId: req.id }, "Internal server error");
     return reply.status(status).send({
-      error: status >= 500 ? "Internal server error" : error.message,
-      code:  (error as { code?: string }).code ?? "internal_error",
+      error: status >= 500 ? "Internal server error" : message,
+      code,
       reqId: req.id,
     });
   });
