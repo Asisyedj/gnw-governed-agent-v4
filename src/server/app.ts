@@ -92,9 +92,14 @@ export async function buildApp() {
         return reply.status(403).send({ error: "Cross-site request refused.", code: "csrf_protected" });
       }
       const origin = req.headers.origin;
-      const configuredOrigin = process.env.CORS_ORIGIN ?? "same-origin";
-      if (origin && configuredOrigin !== "same-origin" && origin !== configuredOrigin) {
-        return reply.status(403).send({ error: "Origin not allowed.", code: "origin_not_allowed" });
+      if (origin) {
+        const configuredOrigin = process.env.CORS_ORIGIN ?? "same-origin";
+        const expectedOrigin = configuredOrigin === "same-origin"
+          ? req.protocol + "://" + req.hostname
+          : configuredOrigin;
+        if (origin !== expectedOrigin) {
+          return reply.status(403).send({ error: "Origin not allowed.", code: "origin_not_allowed" });
+        }
       }
     }
   });
