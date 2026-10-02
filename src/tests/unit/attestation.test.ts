@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { verifyRuntimeAttestation } from "../../server/attestation.js";
-import { GovernanceService, MemoryGovernanceStores, type GovernanceRequest } from "../../server/governance.js";
+import { GovernanceService, MemoryGovernanceStores, digestRequest, type GovernanceRequest } from "../../server/governance.js";
 
 const keys=generateKeyPairSync("ed25519",{privateKeyEncoding:{type:"pkcs8",format:"pem"},publicKeyEncoding:{type:"spki",format:"pem"}});
 const now=1_800_000_000_000;
@@ -30,6 +30,11 @@ describe("runtime attestation",()=>{
    expect(verifyRuntimeAttestation({...a,measurement:"c".repeat(64)},{issuer:"tee-verifier",publicKeyPem:keys.publicKey,expectedMeasurement:measurement},now)).toBe(false);
    expect(verifyRuntimeAttestation({...a,expiresAt:now-1},{issuer:"tee-verifier",publicKeyPem:keys.publicKey},now)).toBe(false);
    expect(verifyRuntimeAttestation({...a,nonce:"c".repeat(32)},{issuer:"tee-verifier",publicKeyPem:keys.publicKey},now)).toBe(false);
+ });
+ it("binds attestation evidence into the action digest",()=>{
+   const a=makeAttestation();
+   const r=base();
+   expect(digestRequest({...r,runtimeAttestation:a})).not.toBe(digestRequest({...r,runtimeAttestation:{...a,nonce:"c".repeat(32)}}));
  });
  it("fails closed for restricted governance when attestation is missing",async()=>{
    const g=new GovernanceService(new MemoryGovernanceStores(),undefined,()=>now,undefined,undefined,{issuer:"tee-verifier",publicKeyPem:keys.publicKey,expectedMeasurement:measurement,maxAgeMs:120000},true);
