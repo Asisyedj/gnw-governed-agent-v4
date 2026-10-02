@@ -106,16 +106,15 @@ vi.mock("../../server/repo.js",()=>({
  reserveBudget:vi.fn(async()=>true),
 }));
 describe("governed execution boundary",()=>{
- it("runs handler only after governance admission",async()=>{
+ it("issues and persists a signed capability lease when configured",async()=>{
    const {executeWithGovernance}=await import("../../server/execution.js");
+   const repo=await import("../../server/repo.js");
    const handler=vi.fn(async()=>({ok:true}));
-   const ctx={
-     db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
-     taskId:1,tenantId:1,actorId:1,requestId:"req-1",grantId:"g",
-     governanceRequest:baseRequest(),
-   } as any;
-   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-1",issuedAt:now},handler);
+   const env={requireSignedGrants:false,grantIssuer:"gnw-test",grantPublicKeyPem:keys.publicKey,leasePrivateKeyPem:keys.privateKey,executorSecret:"",executorUrl:""} as any;
+   const ctx={db:{},env,taskId:1,tenantId:1,actorId:1,requestId:"req-lease",grantId:"g",governanceRequest:{...baseRequest(),requestId:"req-lease",nonce:"grant-lease"}} as any;
+   const result=await executeWithGovernance(ctx,{taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-lease",issuedAt:now},handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
+   expect(vi.mocked(repo.createCapabilityLease)).toHaveBeenCalledTimes(1);
  });
 });
