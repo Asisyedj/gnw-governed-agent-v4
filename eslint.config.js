@@ -24,6 +24,7 @@ export default [
       "@typescript-eslint/explicit-function-return-type": "off",
       "no-console": ["warn", { allow: ["error", "warn"] }],
       "eqeqeq":     ["error", "always"],
+      "no-undef":   "off",
     },
   },
   {
