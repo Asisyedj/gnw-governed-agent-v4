@@ -14,7 +14,7 @@ export type ExecutionContext={
 };
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
 
-function commandFromParameters(tool:string, parameters:unknown): { command:string[]; cwd?:string; timeoutMs?:number } {
+function commandFromParameters(tool:string, parameters:unknown): { command:string[]; cwd?:string; timeoutMs:number } {
   if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) throw new Error("execution_parameters_invalid");
   const p=parameters as Record<string, unknown>;
   const rawCommand=p.command;
