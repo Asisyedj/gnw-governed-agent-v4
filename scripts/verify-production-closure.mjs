@@ -7,7 +7,7 @@ const required=[
   "docs/PRODUCTION_CLOSURE.md","docs/CONTINUOUS_SECURITY_PROGRAM.md","docs/TRUST_ANCHOR_AND_PENTEST_PLAN.md",
   "src/server/db/schema.ts","src/server/db/index.ts",
   "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts","src/server/trust-anchor.ts",
-  "src/server/execution.ts","src/server/audit.ts","src/server/invariants.ts",
+  "src/server/execution.ts","src/server/routes/execution.ts","src/server/audit.ts","src/server/invariants.ts",
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts","src/server/verified-data.ts","src/tests/unit/verified-data.test.ts",
   "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md",
   "compliance/applicability.json","compliance/control-matrix.json","compliance/release-evidence.schema.json",
@@ -28,7 +28,12 @@ for(const token of ["users_id_tenant_uq","tasks_id_tenant_uq","task_steps_id_ten
 const db=read("src/server/db/index.ts");
 if(!db.includes("set_config('app.tenant_id'")) failures.push("db:tenant-context-missing");
 if(!/\.transaction\(async tx/.test(db)) failures.push("db:tenant-context-not-transactional");
+const app=read("src/server/app.ts");
+const route=read("src/server/routes/execution.ts");
 const exec=read("src/server/execution.ts");
+if(!app.includes("executionRoutes")||!app.includes('prefix: "/api/tasks"')) failures.push("execution:route-not-registered");
+if(!route.includes("executeWithGovernance")||!route.includes('app.post("/:id/execute"')) failures.push("execution:authenticated-route-missing");
+if(!route.includes("executeGovernedTool(ctx")) failures.push("execution:external-dispatch-not-bound");
 if(!exec.includes("governance.authorize")) failures.push("execution:governance-not-enforced");
 const authzIndex=exec.indexOf("governance.authorize"),handlerIndex=exec.indexOf("const output=await handler(");
 if(authzIndex<0||handlerIndex<0||authzIndex>handlerIndex) failures.push("execution:handler-before-governance");
@@ -108,7 +113,13 @@ for(const token of ["pod-security.kubernetes.io/enforce: restricted","pod-securi
 const crypto=read("scripts/verify-cryptographic-closure.mjs");
 if(!crypto) failures.push("crypto:verifier-missing");
 else for(const token of ["GNW-ACTION-ENVELOPE-V1","GNW-TEE-ATTESTATION-V1","GNW-TRUST-ANCHOR-V1","executor_action_digest_required"]){if(!crypto.includes(token)) failures.push(`crypto:verifier-control-missing:${token}`);}
+const dockerfile=read("Dockerfile");
+if(!dockerfile.includes("COPY scripts/preflight-production.mjs ./scripts/preflight-production.mjs")) failures.push("deploy:runtime-preflight-not-packaged");
+const compose=read("docker-compose.production.yml");
+if(!compose.includes("node scripts/preflight-production.mjs && exec node dist/server/app.js")) failures.push("deploy:compose-preflight-not-enforced");
 const deployment=read("k8s/deployment.yaml");
+if(!deployment.includes("initContainers")||!deployment.includes('command: ["node","scripts/preflight-production.mjs"]')) failures.push("deploy:k8s-preflight-not-enforced");
+if(!read("k8s/configmap.yaml").includes("GNW_RELEASE_COMMIT_SHA")) failures.push("deploy:release-commit-binding-missing");
 for(const token of ["runAsNonRoot: true","readOnlyRootFilesystem: true","allowPrivilegeEscalation: false","drop: [\"ALL\"]","seccompProfile:","emptyDir:","sizeLimit: 128Mi"]){if(!deployment.includes(token)) failures.push(`k8s:deployment-hardening-missing:${token}`);}
 try{execFileSync("git",["rev-parse","--is-inside-work-tree"],{stdio:"ignore"});execFileSync("git",["diff","--check"],{stdio:"ignore"});}catch{failures.push("git:checkout-or-diff-check-unavailable");}
 if(failures.length){console.error("GNW production closure: DENY");for(const failure of failures) console.error(` - ${failure}`);process.exit(1);}

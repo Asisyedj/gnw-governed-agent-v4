@@ -8,6 +8,7 @@ import { validateSecrets } from "./lib/secretsCheck.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { taskRoutes } from "./routes/tasks.js";
+import { executionRoutes } from "./routes/execution.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { interlockRoutes } from "./routes/interlock.js";
 import { auditRoutes } from "./routes/audit.js";
@@ -140,6 +141,7 @@ export async function buildApp() {
   await app.register(meRoutes,       { prefix: "/api" });
   await app.register(summaryRoutes,  { prefix: "/api" });
   await app.register(taskRoutes,     { prefix: "/api/tasks" });
+  await app.register(executionRoutes, { prefix: "/api/tasks" });
   await app.register(approvalRoutes, { prefix: "/api/approvals" });
   await app.register(interlockRoutes,{ prefix: "/api/interlock" });
   await app.register(auditRoutes,    { prefix: "/api/audit" });

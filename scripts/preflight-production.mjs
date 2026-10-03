@@ -13,6 +13,8 @@ const required = [
 const failures = [];
 const env = process.env;
 const req = name => (env[name] ?? "").trim();
+const releaseSubject = req("GNW_RELEASE_COMMIT_SHA") || req("GITHUB_SHA");
+if (!releaseSubject) failures.push("GNW_RELEASE_COMMIT_SHA or GITHUB_SHA missing");
 
 for (const name of required) {
   if (!req(name)) failures.push(name + " missing");
@@ -76,7 +78,7 @@ function verifyReleaseTeeEvidence() {
   const issuedAt = Number(evidence.issuedAt);
   const expiresAt = Number(evidence.expiresAt);
   const signature = typeof evidence.signature === "string" ? evidence.signature : "";
-  if (subject !== (env.GITHUB_SHA ?? "")) failures.push("TEE evidence subject must equal GITHUB_SHA");
+  if (subject !== releaseSubject) failures.push("TEE evidence subject must equal GNW_RELEASE_COMMIT_SHA/GITHUB_SHA");
   if (issuer !== env.GNW_TEE_ATTESTATION_ISSUER) failures.push("TEE evidence issuer mismatch");
   if (measurement !== (env.GNW_TEE_ATTESTATION_MEASUREMENT ?? "").toLowerCase()) failures.push("TEE evidence measurement mismatch");
   if (!/^[0-9a-f]{64}$/i.test(measurement)) failures.push("TEE evidence measurement invalid");
@@ -106,11 +108,11 @@ function verifyMpcReleaseEvidence() {
   const measurement = typeof evidence.measurement === "string" ? evidence.measurement.toLowerCase() : "";
   const nonce = typeof evidence.nonce === "string" ? evidence.nonce : "";
   const signatures = Array.isArray(evidence.signatures) ? evidence.signatures : [];
-  if (subject !== (env.GITHUB_SHA ?? "")) failures.push("MPC evidence subject must equal GITHUB_SHA");
+  if (subject !== releaseSubject) failures.push("MPC evidence subject must equal GNW_RELEASE_COMMIT_SHA/GITHUB_SHA");
   if (measurement !== (env.GNW_TEE_ATTESTATION_MEASUREMENT ?? "").toLowerCase()) failures.push("MPC evidence measurement mismatch");
   if (!/^[0-9a-f]{64}$/i.test(measurement)) failures.push("MPC evidence measurement invalid");
   if (!/^[0-9a-f]{32,128}$/i.test(nonce)) failures.push("MPC evidence nonce invalid");
-  const releaseDigest = createHash("sha256").update(`GNW-RELEASE-V1|${subject}`).digest("hex");
+  const releaseDigest = createHash("sha256").update(`GNW-RELEASE-V1|${releaseSubject}`).digest("hex");
   const payload = `GNW-TRUST-ANCHOR-V1|${releaseDigest}|${measurement}|${nonce}`;
   const seen = new Set();
   let valid = 0;

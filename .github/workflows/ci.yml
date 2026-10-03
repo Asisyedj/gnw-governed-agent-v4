@@ -116,11 +116,15 @@ jobs:
           GNW_GRANT_PRIVATE_KEY_PEM: ci-smoke-private-key
           GNW_GRANT_PUBLIC_KEY_PEM: ci-smoke-public-key
           GNW_LEASE_PRIVATE_KEY_PEM: ci-smoke-lease-private-key
+          GNW_LEASE_PUBLIC_KEY_PEM: ci-smoke-lease-public-key
+          GNW_RELEASE_COMMIT_SHA: ${{ github.sha }}
           GNW_REQUIRE_TEE_ATTESTATION: "true"
           GNW_TEE_ATTESTATION_ISSUER: ci-smoke-tee-verifier
           GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ci-smoke-tee-public-key
           GNW_TEE_ATTESTATION_MEASUREMENT: "0000000000000000000000000000000000000000000000000000000000000000"
           GNW_TEE_ATTESTATION_MAX_AGE_MS: "120000"
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
+          GNW_MPC_TRUST_ANCHOR_JSON: '{"threshold":1,"participants":{"ci":"ci"},"requireTee":true}'
           GNW_EGRESS_ALLOW_LIST: api.openai.com
           LLM_BASE_URL: https://api.openai.com/v1
           LLM_API_KEY: ci-smoke-api-key
@@ -133,7 +137,7 @@ jobs:
         run: |
           set -euo pipefail
           docker rm -f gnw-production-smoke >/dev/null 2>&1 || true
-          docker run -d --network host --name gnw-production-smoke -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
+          docker run -d --network host --name gnw-production-smoke -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_LEASE_PUBLIC_KEY_PEM -e GNW_RELEASE_COMMIT_SHA -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_REQUIRE_MPC_TRUST_ANCHOR -e GNW_MPC_TRUST_ANCHOR_JSON -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
           trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true' EXIT
           for _ in {1..30}; do
             if curl -fsS http://127.0.0.1:3000/api/health >/tmp/gnw-health.json && curl -fsS http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json; then
