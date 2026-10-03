@@ -85,6 +85,7 @@ services:
       db:
         condition: service_healthy
     environment: *app-env
+    command: ["sh","-ec","node scripts/preflight-production.mjs && exec node dist/server/app.js"]
     volumes:
       - app-b-data:/data
       - ${POSTGRES_TLS_DIR:?set POSTGRES_TLS_DIR}:/tls:ro
