@@ -62,16 +62,6 @@ verifyKeyPair("GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GRANT");
 verifyKeyPair("GNW_LEASE_PRIVATE_KEY_PEM","GNW_LEASE_PUBLIC_KEY_PEM","LEASE");
 
 function parseJson(name) {
-  try{
-    const priv=createPrivateKey(req(privateName)),pub=createPublicKey(req(publicName));
-    const payload=Buffer.from("GNW-"+label+"-KEY-PAIR-V1");
-    const signature=sign(null,payload,priv);
-    if(!cryptoVerify(null,payload,pub,signature)) failures.push(label+" key pair verification failed");
-  }catch{ failures.push(label+" key pair parse/verification failed"); }
-}
-verifyKeyPair("GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GRANT");
-verifyKeyPair("GNW_LEASE_PRIVATE_KEY_PEM","GNW_LEASE_PUBLIC_KEY_PEM","LEASE");
-
   try { return JSON.parse(env[name] ?? ""); }
   catch { failures.push(name + " invalid JSON"); return undefined; }
 }

@@ -59,6 +59,8 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
       - name: Typecheck
         run: npm run typecheck
+      - name: Syntax-check production preflight
+        run: node --check scripts/preflight-production.mjs
       - name: Lint
         run: npm run lint
       - name: Run migrations with dedicated migrator role
