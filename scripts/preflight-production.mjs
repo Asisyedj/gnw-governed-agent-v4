@@ -7,7 +7,8 @@ const required = [
   "GNW_GRANT_PUBLIC_KEY_PEM", "GNW_LEASE_PRIVATE_KEY_PEM", "GNW_LEASE_PUBLIC_KEY_PEM", "GNW_EGRESS_ALLOW_LIST",
   "GNW_REQUIRE_TEE_ATTESTATION", "GNW_TEE_ATTESTATION_ISSUER", "GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM",
   "GNW_TEE_ATTESTATION_MEASUREMENT", "GNW_TEE_ATTESTATION_EVIDENCE_JSON",
-  "GNW_REQUIRE_MPC_TRUST_ANCHOR", "GNW_MPC_TRUST_ANCHOR_JSON", "GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON"
+  "GNW_REQUIRE_MPC_TRUST_ANCHOR", "GNW_MPC_TRUST_ANCHOR_JSON", "GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON",
+  "LLM_BASE_URL", "LLM_API_KEY", "STORAGE_DRIVER", "GNW_SHARED_STORAGE_CONFIRMED"
 ];
 const failures = [];
 const env = process.env;
@@ -44,6 +45,9 @@ for (const name of ["EXECUTOR_URL","LLM_BASE_URL","GNW_DEEP_RESEARCH_BASE_URL","
 
 const databaseUrl = env.DATABASE_URL ?? "";
 if (databaseUrl && !/[?&]sslmode=verify-full(?:&|$)/i.test(databaseUrl)) failures.push("DATABASE_URL must use sslmode=verify-full");
+if (!env.LLM_BASE_URL) failures.push("LLM_BASE_URL missing");
+if (!env.LLM_API_KEY) failures.push("LLM_API_KEY missing");
+if (!["local","s3"].includes((env.STORAGE_DRIVER ?? "").toLowerCase())) failures.push("STORAGE_DRIVER must be local or s3");
 if ((env.STORAGE_DRIVER ?? "local") === "local" && env.GNW_SHARED_STORAGE_CONFIRMED !== "true") failures.push("GNW_SHARED_STORAGE_CONFIRMED must be true for local shared storage");
 if (env.GNW_HOST && /example\.com$/i.test(env.GNW_HOST)) failures.push("GNW_HOST is still an example domain");
 function verifyKeyPair(privateName,publicName,label){
