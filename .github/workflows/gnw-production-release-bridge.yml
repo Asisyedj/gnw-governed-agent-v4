@@ -1,0 +1,98 @@
+name: gnw-production-release-bridge
+
+on:
+  push:
+    branches:
+      - release/gnw-production-v1.0.0
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  gate-and-tag:
+    name: Gate exact reviewed commit and create release tag
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_SHA: ba1bd6ed1c65569556af1c2b8c4b48b18f23ef8a
+      NODE_ENV: production
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      EXECUTOR_URL: ${{ secrets.EXECUTOR_URL }}
+      EXECUTOR_SECRET: ${{ secrets.EXECUTOR_SECRET }}
+      GNW_REQUIRE_SIGNED_GRANTS: ${{ secrets.GNW_REQUIRE_SIGNED_GRANTS }}
+      GNW_GRANT_ISSUER: ${{ secrets.GNW_GRANT_ISSUER }}
+      GNW_GRANT_PRIVATE_KEY_PEM: ${{ secrets.GNW_GRANT_PRIVATE_KEY_PEM }}
+      GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
+      GNW_LEASE_PRIVATE_KEY_PEM: ${{ secrets.GNW_LEASE_PRIVATE_KEY_PEM }}
+      GNW_LEASE_PUBLIC_KEY_PEM: ${{ secrets.GNW_LEASE_PUBLIC_KEY_PEM }}
+      GNW_EGRESS_ALLOW_LIST: ${{ secrets.GNW_EGRESS_ALLOW_LIST }}
+      GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
+      STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      GNW_REQUIRE_TEE_ATTESTATION: "true"
+      GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+      GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+      GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+      GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+      GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}
+      GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
+      GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
+      GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with:
+          node-version: "22.x"
+          cache: npm
+      - name: Assert exact reviewed commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test -z "$(git status --porcelain)"
+          git diff --check
+      - name: Install from committed lockfile
+        run: npm ci
+      - name: Validate canonical release metadata
+        run: npm run verify:git-release-metadata
+      - name: Validate compliance
+        run: npm run verify:compliance
+      - name: Validate production closure
+        run: npm run verify:production
+      - name: Validate production environment
+        env:
+          GNW_RELEASE_COMMIT_SHA: ${{ env.RELEASE_SHA }}
+        run: npm run verify:production:env
+      - name: Cryptographic closure
+        run: npm run verify:crypto
+      - name: Database RLS verification
+        run: npm run verify:rls
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit and integration tests
+        run: npm run test
+      - name: Coverage
+        run: npm run test:coverage
+      - name: Build
+        run: npm run build
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: Create immutable release tag
+        shell: bash
+        env:
+          TAG_NAME: v1.0.0
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code origin "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            echo "release tag already exists; refusing to move it"
+            exit 1
+          fi
+          git tag -a "$TAG_NAME" "$RELEASE_SHA" -m "GNW governed production release v1.0.0"
+          git push origin "refs/tags/$TAG_NAME"
