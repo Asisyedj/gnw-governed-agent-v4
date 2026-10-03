@@ -13,6 +13,7 @@ const APP_VERSION = (JSON.parse(
 ) as { version?: string }).version ?? "unknown";
 
 function executionDependenciesReady():boolean {
+  if (!ENV.isProduction) return true;
   const executorReady=Boolean(ENV.executorUrl&&ENV.executorSecret);
   const grantsReady=!ENV.requireSignedGrants || Boolean(ENV.grantPrivateKeyPem&&ENV.grantPublicKeyPem&&ENV.leasePrivateKeyPem&&ENV.leasePublicKeyPem);
   const teeReady=!ENV.teeAttestationRequired || Boolean(ENV.teeAttestationIssuer&&ENV.teeAttestationPublicKeyPem&&/^[0-9a-f]{64}$/.test(ENV.teeAttestationMeasurement));
