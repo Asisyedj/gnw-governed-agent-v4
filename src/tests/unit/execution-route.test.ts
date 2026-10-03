@@ -60,7 +60,6 @@ describe("authenticated governed execution route",()=>{
     const app=await makeApp();
     const {grant,envelope}=makeRequest();
     const response=await app.inject({method:"POST",url:"/api/tasks/1/execute",payload:{grant,envelope}});
-    console.error("EXECUTE_TEST_RESPONSE",response.statusCode,response.body);
     expect(response.statusCode).toBe(200);
     expect(executeWithGovernance).toHaveBeenCalledTimes(1);
     expect(executeGovernedTool).not.toHaveBeenCalled();
