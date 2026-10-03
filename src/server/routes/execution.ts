@@ -33,8 +33,8 @@ const envelopeSchema=z.object({
 
 const grantSchema=z.object({
   requestId:z.string().min(1).max(200),
-  subject:z.string().regex(/^\\d+$/),
-  tenant:z.string().regex(/^\\d+$/),
+  subject:z.string().regex(/^\d+$/),
+  tenant:z.string().regex(/^\d+$/),
   role:z.string().min(1).max(50),
   purpose:z.string().min(1).max(200),
   classification:z.enum(CLASSIFICATIONS),
