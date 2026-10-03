@@ -1,6 +1,7 @@
 import type { Db } from "./db/index.js";
 import type { Env } from "./env.js";
 import { audit } from "./audit.js";
+import { callExecutor } from "./executor-client.js";
 import { governedFetch, assertEgressUrl } from "./security.js";
 import { claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
@@ -12,6 +13,38 @@ export type ExecutionContext={
   governanceRequest:GovernanceRequest; approval?:ApprovalRecord; grantId:string;
 };
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
+
+function commandFromParameters(tool:string, parameters:unknown): { command:string[]; cwd?:string; timeoutMs?:number } {
+  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) throw new Error("execution_parameters_invalid");
+  const p=parameters as Record<string, unknown>;
+  const rawCommand=p.command;
+  let command:string[];
+  if (tool==="exec.python") {
+    if(typeof p.code!=="string"||!p.code.trim()) throw new Error("execution_python_code_required");
+    command=["python3","-c",p.code];
+  } else {
+    if(!Array.isArray(rawCommand)||rawCommand.length<1||rawCommand.length>64||rawCommand.some(x=>typeof x!=="string"||!x.trim()||x.length>4000)) {
+      throw new Error("execution_command_invalid");
+    }
+    command=rawCommand;
+  }
+  const cwd=typeof p.cwd==="string"?p.cwd:undefined;
+  if(cwd&&cwd.length>500) throw new Error("execution_cwd_invalid");
+  const timeoutMs=p.timeoutMs===undefined?30_000:p.timeoutMs;
+  if(typeof timeoutMs!=="number"||!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>60_000) throw new Error("execution_timeout_invalid");
+  return cwd===undefined?{command,timeoutMs}:{command,cwd,timeoutMs};
+}
+
+export async function executeGovernedTool(ctx:ExecutionContext,tool:string,parameters:unknown,actionDigest:string):Promise<unknown>{
+  const spec=commandFromParameters(tool,parameters);
+  if (tool!=="exec.command" && tool!=="exec.test" && tool!=="exec.python") throw new Error("unsupported_governed_tool");
+  return callExecutor(ctx.env,spec.command,{
+    ...(spec.cwd===undefined?{}:{cwd:spec.cwd}),
+    timeoutMs:spec.timeoutMs,
+    requestId:ctx.requestId,
+    actionDigest,
+  });
+}
 
 export async function executeWithGovernance(
   ctx:ExecutionContext,
@@ -65,28 +98,20 @@ export async function executeWithGovernance(
   );
 
   try{
-    if(ctx.governanceRequest.requestId!==ctx.requestId || Number(ctx.governanceRequest.subject)!==ctx.actorId || Number(ctx.governanceRequest.tenant)!==ctx.tenantId || ctx.governanceRequest.taskId!==ctx.taskId || ctx.governanceRequest.role!==ctx.role){
+    if(ctx.governanceRequest.requestId!==ctx.requestId || Number(ctx.governanceRequest.subject)!==ctx.actorId || Number(ctx.governanceRequest.tenant)!==ctx.tenantId || ctx.governanceRequest.taskId!==ctx.taskId || ctx.governanceRequest.role!==ctx.role) {
       throw new Error("governance_context_mismatch");
     }
-    validateEnvelope(
-      envelope,
-      Date.now(),
-      300_000,
-      {
-        taskId:ctx.taskId,
-        tenantId:ctx.tenantId,
-        actorId:ctx.actorId,
-        grantId:ctx.grantId,
-        nonce:ctx.governanceRequest.nonce,
-        operation:ctx.governanceRequest.operation,
-        tool:ctx.governanceRequest.tool
-      }
-    );
-
+    validateEnvelope(envelope,Date.now(),300_000,{
+      taskId:ctx.taskId,
+      tenantId:ctx.tenantId,
+      actorId:ctx.actorId,
+      grantId:ctx.grantId,
+      nonce:ctx.governanceRequest.nonce,
+      operation:ctx.governanceRequest.operation,
+      tool:ctx.governanceRequest.tool
+    });
     const envelopeDigest=digestEnvelope(envelope);
-    if(ctx.governanceRequest.envelopeDigest!==envelopeDigest){
-      throw new Error("ActionEnvelope: governance_digest_mismatch");
-    }
+    if(ctx.governanceRequest.envelopeDigest!==envelopeDigest) throw new Error("ActionEnvelope: governance_digest_mismatch");
 
     const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
     if(!d.allowed){
@@ -96,9 +121,7 @@ export async function executeWithGovernance(
     const digest=digestEnvelope(envelope);
     await audit(ctx.db,{eventType:"tool.invoke",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,actionDigest:d.actionDigest,operation:envelope.operation,capabilityLeaseId:d.capabilityLease?.leaseId},requestId:ctx.requestId},{required:true});
     if(d.capabilityLease){
-      if(!ctx.env.leasePublicKeyPem || d.capabilityLease.issuer!==ctx.env.grantIssuer || !verifyCapabilityLeaseSignature(d.capabilityLease,ctx.env.leasePublicKeyPem)){
-        throw new Error("capability_lease_signature_invalid");
-      }
+      if(!ctx.env.leasePublicKeyPem || d.capabilityLease.issuer!==ctx.env.grantIssuer || !verifyCapabilityLeaseSignature(d.capabilityLease,ctx.env.leasePublicKeyPem)) throw new Error("capability_lease_signature_invalid");
       await audit(ctx.db,{eventType:"capability.signature_verified",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"capability_lease",resourceId:d.capabilityLease.leaseId,outcome:"success",detail:{actionDigest:d.actionDigest,issuer:d.capabilityLease.issuer},requestId:ctx.requestId},{required:true});
       const consumed=await consumeCapabilityLease(ctx.db,{leaseId:d.capabilityLease.leaseId,tenantId:ctx.tenantId,taskId:ctx.taskId,actorUserId:ctx.actorId,actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration,signature:d.capabilityLease.signature,publicKeyPem:ctx.env.leasePublicKeyPem});
       if(!consumed) throw new Error("capability_lease_invalid_or_replayed");
@@ -109,7 +132,7 @@ export async function executeWithGovernance(
     return{success:true,output,durationMs:Date.now()-start};
   }catch(e){
     const m=e instanceof Error?e.message:String(e);
-    try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch{/* required audit failure already triggers the safety interlock */}
+    try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch{}
     return{success:false,error:m,durationMs:Date.now()-start};
   }
 }
