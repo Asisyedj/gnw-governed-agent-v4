@@ -49,6 +49,12 @@ jobs:
         with:
           node-version: "22.x"
           cache: npm
+      - name: Checkout exact reviewed commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$RELEASE_SHA"
+          git checkout --detach "$RELEASE_SHA"
       - name: Assert exact reviewed commit
         shell: bash
         run: |
