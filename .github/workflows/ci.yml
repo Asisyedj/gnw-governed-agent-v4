@@ -116,11 +116,15 @@ jobs:
           GNW_GRANT_PRIVATE_KEY_PEM: ci-smoke-private-key
           GNW_GRANT_PUBLIC_KEY_PEM: ci-smoke-public-key
           GNW_LEASE_PRIVATE_KEY_PEM: ci-smoke-lease-private-key
+          GNW_LEASE_PUBLIC_KEY_PEM: ci-smoke-lease-public-key
+          GNW_RELEASE_COMMIT_SHA: ${{ github.sha }}
           GNW_REQUIRE_TEE_ATTESTATION: "true"
           GNW_TEE_ATTESTATION_ISSUER: ci-smoke-tee-verifier
           GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ci-smoke-tee-public-key
           GNW_TEE_ATTESTATION_MEASUREMENT: "0000000000000000000000000000000000000000000000000000000000000000"
           GNW_TEE_ATTESTATION_MAX_AGE_MS: "120000"
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
+          GNW_MPC_TRUST_ANCHOR_JSON: '{"threshold":1,"participants":{"ci":"ci"},"requireTee":true}'
           GNW_EGRESS_ALLOW_LIST: api.openai.com
           LLM_BASE_URL: https://api.openai.com/v1
           LLM_API_KEY: ci-smoke-api-key
