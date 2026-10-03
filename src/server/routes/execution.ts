@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { SPECIALIST_AGENTS, CLASSIFICATIONS, type Classification } from "../../shared/types.js";
 import { ENV } from "../env.js";
@@ -106,7 +106,7 @@ function buildApprovalRecord(row:Awaited<ReturnType<typeof findApprovalById>>, r
   };
 }
 
-async function authenticate(app:{db:Db},req:any){
+async function authenticate(app:{db:Db},req:FastifyRequest){
   const session=await resolveSession(app.db,req.cookies as Record<string,string>);
   if(!session) return {error:{status:401,body:{error:"Unauthenticated",code:"unauthenticated"}} as const};
   const user=await findUserById(app.db,session.userId,session.tenantId);
