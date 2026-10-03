@@ -6,6 +6,7 @@ metadata:
 data:
   NODE_ENV: "production"
   PORT: "3000"
+  GNW_RELEASE_COMMIT_SHA: "REPLACE_WITH_VERIFIED_RELEASE_COMMIT_SHA"
   LOG_LEVEL: "info"
   TRUST_PROXY: "true"
   CORS_ORIGIN: "https://gnw.example.com"
