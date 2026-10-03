@@ -94,7 +94,7 @@ function buildApprovalRecord(row:Awaited<ReturnType<typeof findApprovalById>>, r
   if(!row) return undefined;
   return {
     approvalId:row.id,
-    requestId:row.requestId??undefined,
+    ...(row.requestId===null||row.requestId===undefined?{}:{requestId:row.requestId}),
     actionDigest:row.actionDigest,
     tenant:String(row.tenantId),
     status:row.status as ApprovalRecord["status"],
@@ -186,12 +186,13 @@ export const executionRoutes:FastifyPluginAsync=async(app)=>{
         const reviewer=row.reviewedByUserId===null||row.reviewedByUserId===undefined?undefined:await findUserById(app.db,row.reviewedByUserId,auth.session.tenantId);
         approval=buildApprovalRecord(row,reviewer?.role);
         if(approval?.status==="denied") return reply.status(409).send({error:"Approval denied.",code:"approval_denied"});
-        if(approval?.status==="expired"||approval?.expiresAt<=Date.now()) return reply.status(410).send({error:"Approval expired.",code:"approval_expired"});
+        if(approval?.status==="expired" || (approval?.expiresAt!==undefined && approval.expiresAt<=Date.now())) return reply.status(410).send({error:"Approval expired.",code:"approval_expired"});
       }
 
       const ctx={
         db:app.db,env:ENV,taskId,tenantId:auth.session.tenantId,actorId:auth.session.userId,role:auth.user.role,requestId:grant.requestId,
-        governanceRequest:grant,approval,grantId:envelope.grantId,
+        governanceRequest:grant,grantId:envelope.grantId,
+        ...(approval===undefined?{}:{approval}),
       };
       const result=await executeWithGovernance(ctx,envelope,async()=> {
         await updateTaskStatus(app.db,taskId,auth.session.tenantId,"running");
