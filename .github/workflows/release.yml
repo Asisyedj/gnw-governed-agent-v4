@@ -47,6 +47,8 @@ jobs:
         run: npm run verify:git-release-metadata
       - name: Validate Pakistan compliance matrix
         run: npm run verify:compliance
+      - name: Syntax-check production preflight
+        run: node --check scripts/preflight-production.mjs
       - name: Production environment preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
