@@ -34,7 +34,7 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   videoProvider:source.VIDEO_PROVIDER??"stub",videoProviderUrl:source.VIDEO_PROVIDER_URL??"",videoProviderApiKey:source.VIDEO_PROVIDER_API_KEY??"",
   notifyWebhookUrl:source.NOTIFY_WEBHOOK_URL??"",corsOrigin:source.CORS_ORIGIN??"same-origin",
   executorUrl:(source.EXECUTOR_URL??(isProduction?"":"http://localhost:8788")).replace(/\/$/,""),executorSecret:source.EXECUTOR_SECRET??source.GNW_EXECUTOR_SHARED_TOKEN??"",
-  grantIssuer:source.GNW_GRANT_ISSUER??"gnw-dev",grantPrivateKeyPem:source.GNW_GRANT_PRIVATE_KEY_PEM??"",grantPublicKeyPem:source.GNW_GRANT_PUBLIC_KEY_PEM??"",leasePrivateKeyPem:source.GNW_LEASE_PRIVATE_KEY_PEM??"",
+  grantIssuer:source.GNW_GRANT_ISSUER??"gnw-dev",grantPrivateKeyPem:source.GNW_GRANT_PRIVATE_KEY_PEM??"",grantPublicKeyPem:source.GNW_GRANT_PUBLIC_KEY_PEM??"",leasePrivateKeyPem:source.GNW_LEASE_PRIVATE_KEY_PEM??"",leasePublicKeyPem:source.GNW_LEASE_PUBLIC_KEY_PEM??"",
   requireSignedGrants:bool(source.GNW_REQUIRE_SIGNED_GRANTS,isProduction),councilMode:(source.GNW_COUNCIL_MODE??"disabled") as "disabled"|"shadow",
   teeAttestationRequired:bool(source.GNW_REQUIRE_TEE_ATTESTATION,isProduction),
   teeAttestationIssuer:source.GNW_TEE_ATTESTATION_ISSUER??"",
