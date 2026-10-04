@@ -1,41 +1,95 @@
-// ESLint v9 flat config
+// GNW ESLint v9 flat config
 import js from "@eslint/js";
-import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+import globals from "globals";
 
 export default [
-  js.configs.recommended,
   {
-    files: ["src/**/*.ts", "src/**/*.tsx"],
+    ignores: ["dist/**", "node_modules/**", "coverage/**", "drizzle/**"],
+  },
+
+  js.configs.recommended,
+
+  {
+    files: ["src/server/**/*.ts", "src/executor/**/*.ts", "scripts/**/*.{js,mjs,cjs}"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         project: "./tsconfig.json",
-        ecmaVersion: 2022,
+        ecmaVersion: "latest",
         sourceType: "module",
       },
+      globals: {
+        ...globals.node,
+      },
     },
-    plugins: { "@typescript-eslint": tsPlugin },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
     rules: {
-      ...tsPlugin.configs["recommended"].rules,
-      "@typescript-eslint/no-unused-vars":         ["warn", { argsIgnorePattern: "^_" }],
-      "@typescript-eslint/no-explicit-any":         "warn",
-      "@typescript-eslint/no-floating-promises":    "error",
+      ...tsPlugin.configs.recommended.rules,
+      "no-undef": "off",
+      "no-console": "off",
+      "eqeqeq": ["error", "always"],
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/explicit-function-return-type": "off",
-      "no-console": ["warn", { allow: ["error", "warn"] }],
-      "eqeqeq":     ["error", "always"],
-      "no-undef":   "off",
     },
   },
+
   {
-    files: ["src/tests/**/*.ts"],
+    files: ["src/client/**/*.{ts,tsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        project: "./tsconfig.json",
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+      globals: {
+        ...globals.browser,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
     rules: {
-      "no-console":                       "off",
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-floating-promises": "off",
+      ...tsPlugin.configs.recommended.rules,
+      "no-undef": "off",
+      "no-console": "off",
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/explicit-function-return-type": "off",
     },
   },
+
   {
-    ignores: ["dist/**", "node_modules/**", "coverage/**", "drizzle/**"],
+    files: ["src/tests/**/*.{ts,tsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        project: "./tsconfig.json",
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      "no-undef": "off",
+      "no-console": "off",
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    },
   },
 ];

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gnw-artifacts
+  namespace: gnw
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Production prerequisite: the cluster storage class must support RWX.
+# For multi-node production, replace the default StorageClass with an approved
+# shared filesystem/object-backed CSI class that provides ReadWriteMany.

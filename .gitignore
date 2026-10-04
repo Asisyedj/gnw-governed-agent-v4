@@ -12,5 +12,8 @@ coverage/
 .DS_Store
 test-artifacts/
 release/evidence/
+tools/
+artifacts/*
+!artifacts/baseline-2026-10-04.txt
 *.tgz
 *.tar.gz

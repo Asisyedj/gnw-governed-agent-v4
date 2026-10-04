@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { signGrant, sha256, verifyGrantSignature } from "./security.js";
+import { signGrant, sha256 } from "./security.js";
 
 export type CapabilityLease={
   leaseId:string; requestId:string; actionDigest:string; subject:string; tenant:string;
@@ -20,11 +20,6 @@ export function issueCapabilityLease(input:{
   const base={leaseId,requestId:input.requestId,actionDigest:input.actionDigest,subject:input.subject,tenant:input.tenant,taskId:input.taskId,actorUserId:input.actorUserId,capability:input.capability,destination:input.destination,issuedAt:now,expiresAt:now+input.ttlMs,interlockGeneration:input.interlockGeneration,issuer:input.issuer};
   const {signature}=signGrant(base,input.issuer,input.privateKeyPem);
   return {...base,signature};
-}
-
-export function verifyCapabilityLeaseSignature(lease:CapabilityLease,publicKeyPem:string){
-  if(!publicKeyPem||!lease.signature||!lease.issuer)return false;
-  return verifyGrantSignature(lease,lease.issuer,lease.signature,publicKeyPem);
 }
 
 export function capabilityLeaseDigest(lease:CapabilityLease){return sha256(JSON.stringify([lease.leaseId,lease.requestId,lease.actionDigest,lease.subject,lease.tenant,lease.taskId,lease.actorUserId,lease.capability,lease.destination,lease.issuedAt,lease.expiresAt,lease.interlockGeneration,lease.issuer]));}

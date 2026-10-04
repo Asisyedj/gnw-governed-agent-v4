@@ -4,8 +4,9 @@ import Workspace from "./views/Workspace";
 import ApprovalsView from "./views/Approvals";
 import AuditView from "./views/Audit";
 import ControlsView from "./views/Controls";
+import GovernanceView from "./views/Governance";
 
-type View = "workspace" | "approvals" | "audit" | "controls";
+type View = "workspace" | "approvals" | "audit" | "controls" | "governance";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -27,17 +28,10 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        try {
-          const me = await api.me();
-          setBootstrap(me.bootstrap);
-          setAllowRegistration(me.allowSelfRegistration);
-          if (me.user) await refresh();
-        } catch (error) {
-          const boot = await api.bootstrap();
-          setBootstrap(boot.bootstrap);
-          setAllowRegistration(boot.allowSelfRegistration);
-          if (!(error instanceof ApiError && error.status === 401)) throw error;
-        }
+        const me = await api.me();
+        setBootstrap(me.bootstrap);
+        setAllowRegistration(me.allowSelfRegistration);
+        if (me.user) await refresh();
       } catch (err) {
         console.error("session error:", err);
       } finally {
@@ -68,6 +62,7 @@ export default function App() {
           </button>
           <button className={view === "audit" ? "active" : ""} onClick={() => setView("audit")}>Audit Trail</button>
           <button className={view === "controls" ? "active" : ""} onClick={() => setView("controls")}>Safety Controls</button>
+          <button className={view === "governance" ? "active" : ""} onClick={() => setView("governance")}>Governance</button>
         </nav>
         <div className="topbar-actions">
           {interlockEngaged && <span className="badge" style={{ background: "var(--danger)" }}>INTERLOCK</span>}
@@ -80,6 +75,7 @@ export default function App() {
         {view === "approvals" && <ApprovalsView summary={summary} onRefresh={refresh} />}
         {view === "audit" && <AuditView />}
         {view === "controls" && <ControlsView summary={summary} onRefresh={refresh} />}
+        {view === "governance" && <GovernanceView />}
       </div>
     </div>
   );

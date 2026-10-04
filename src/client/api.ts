@@ -12,24 +12,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     let msg = res.statusText;
-    try { const b = await res.json(); msg = b.error ?? b.message ?? msg; } catch { /* response body is not JSON */ }
+    try { const b = await res.json(); msg = b.error ?? b.message ?? msg; } catch { /* non-JSON error response */ }
     throw new ApiError(res.status, msg);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
-export type MeResponse = { user: { id: number; email: string; role: string; tenantId: number }; bootstrap: boolean; allowSelfRegistration: boolean };
-export type BootstrapResponse = { bootstrap: boolean; allowSelfRegistration: boolean };
+export type MeResponse = { user: { id: number; email: string; role: string; tenantId: number } | null; bootstrap: boolean; allowSelfRegistration: boolean };
 export type Summary = { tasks: TaskSummary[]; approvals: ApprovalSummary[]; interlock: { killSwitch: boolean; circuitOpen: boolean; generation: number }; stats: { total: number; running: number; done: number; failed: number } };
 export type TaskSummary = { id: number; title: string; status: string; classification: string; createdAt: string; updatedAt: string };
 export type ApprovalSummary = { id: number; taskId: number | null; actionDigest: string; status: string; expiresAt: string; createdAt: string };
 export type Task = TaskSummary & { description: string | null; budgetTokensAllocated: number; budgetTokensUsed: number; budgetBytesAllocated: number; budgetBytesUsed: number; trajectoryRootHash: string | null; trajectorySteps: number; steps: StepSummary[] };
 export type StepSummary = { id: number; stepIndex: number; agentRole: string; toolName: string; operation: string; status: string; durationMs: number | null; errorMessage: string | null };
+export type GovernanceContract = { roles: { role: string; capabilities: string[] }[]; pipeline: string[]; justiceDimensions: string[]; invariants: Record<string, boolean> };
 
 export const api = {
   me: () => request<MeResponse>("/api/me"),
-  bootstrap: () => request<BootstrapResponse>("/api/auth/bootstrap"),
   login: (email: string, password: string) => request<{ ok: boolean }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string) => request<{ ok: boolean }>("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
@@ -38,4 +37,5 @@ export const api = {
   approvals: { list: () => request<ApprovalSummary[]>("/api/approvals"), review: (id: number, status: "approved" | "denied", reason?: string) => request<{ ok: boolean }>(`/api/approvals/${id}`, { method: "PATCH", body: JSON.stringify({ status, reason }) }) },
   interlock: { get: () => request<{ killSwitch: boolean; circuitOpen: boolean; generation: number }>("/api/interlock"), set: (patch: { killSwitch?: boolean; circuitOpen?: boolean }) => request<{ ok: boolean }>("/api/interlock", { method: "PATCH", body: JSON.stringify(patch) }) },
   audit: { list: (limit?: number) => request<Record<string, unknown>[]>(`/api/audit?limit=${limit ?? 100}`) },
+  governance: { contract: () => request<GovernanceContract>("/api/governance/contract") },
 };

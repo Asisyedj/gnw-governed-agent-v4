@@ -24,7 +24,7 @@ export default function Workspace({ summary, onRefresh }: { summary: Summary; on
   };
 
   const cancel = async (id: number) => {
-    try { await api.tasks.cancel(id); await onRefresh(); } catch { /* cancellation failure leaves current state intact */ }
+    try { await api.tasks.cancel(id); await onRefresh(); } catch { /* preserve current workspace state */ }
   };
 
   return (

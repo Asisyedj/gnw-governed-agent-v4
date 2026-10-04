@@ -15,7 +15,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     const bootstrap = !tenant || count === 0;
 
     if (!session) {
-      return reply.status(401).send({ error: "Unauthenticated", code: "unauthenticated", bootstrap, allowSelfRegistration: bootstrap || ALLOW_SELF_REGISTRATION });
+      return reply.send({ user: null, bootstrap, allowSelfRegistration: bootstrap || ALLOW_SELF_REGISTRATION });
     }
 
     const user = await findUserById(app.db, session.userId, session.tenantId);

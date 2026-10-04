@@ -1,68 +1,48 @@
 # GNW Governed Agent v4 — Architecture
 
-## Overview
+## Governance topology
+Human Principal -> Central Governor -> Research / Specialist Workers -> Evidence Auditor -> Red Team -> Bias Auditor -> Justice Reviewer -> Final Arbiter.
 
-```
-Client
-  |
- HTTPS
-  v
-Fastify control plane
-  |
-  +-- authentication / RBAC
-  +-- tenant context
-  +-- interlock
-  +-- governance + action digest
-  +-- human approval
-  +-- capability lease
-  +-- budget reservation
-  +-- audit / trajectory evidence
-  |
-  +-------------------+---------------------+
-  |                   |                     |
-PostgreSQL       governed egress       executor sandbox
-  |                   |                     |
-FORCE RLS        LLM/provider          authenticated tool execution
-tenant FKs        allowlist/SSRF        isolated resources
-```
+Software roles are governance controls; historical justice principles are design inspiration, not religious offices.
 
-## Security boundaries
+## Mandatory control path
+1. Authenticate actor and bind tenant, actor, task, request and capability context.
+2. Canonicalize and hash the intended action.
+3. Evaluate governance and interlocks before any side effect.
+4. Require human approval for classified/high-impact operations and bind approval to the exact action digest, tenant, request and nonce.
+5. Reserve budgets before execution and reject replay/expired grants.
+6. Execute only through the governed executor/tool path.
+7. Persist append-only audit, evidence, review, challenge and decision records.
+8. Persist and verify the trajectory chain/root before task completion.
+9. Enforce PostgreSQL tenant isolation with FORCE ROW LEVEL SECURITY and transaction-scoped app.tenant_id.
+10. Release only when static, unit, integration, database/RLS, security, evaluation and deployment evidence pass.
 
-The model is not the authorization boundary. A model may propose an action, but the control plane must independently validate identity, tenant, scope, purpose, classification, action digest, approval, budget, capability lease and interlock state before a side effect.
+## Role permissions
+| Role | Allowed capabilities | Forbidden |
+|---|---|---|
+| Human Principal | all | none |
+| Central Governor | read, route | final decision |
+| Research Worker | read, append evidence | permissions, side effects |
+| Evidence Auditor | read, append, provenance | permissions, side effects |
+| Specialist Worker | read, analyze | writes, final decision |
+| Red Team | read, challenge | writes, side effects |
+| Bias Auditor | read, challenge | writes, side effects |
+| Justice Reviewer | read, review | final decision |
+| Final Arbiter | read, final decision | permissions, evidence mutation |
 
-## Data isolation
+## Evidence chain
+Context -> Principle -> Policy -> Implementation -> Experience/Distribution -> Outcome -> Correction.
 
-Every tenant-owned resource is protected with PostgreSQL RLS and transaction-local tenant context. Child resources additionally carry tenant identity and use composite foreign keys to prevent a row from referencing a parent from another tenant.
+Normative text is not implementation proof. Repeated derivative reports are not independent witnesses. Unknown is valid. The same evidence standard applies to Ali and every comparator. Resilience is contextual, not a justice score.
 
-## Execution
+## Justice review
+The reviewer must cover exactly six dimensions:
+- Rule-bound and accessible justice
+- Material and social justice
+- Impartial administration
+- Protection from arbitrary coercion
+- Voice, accountability and correction
+- Equal civic standing and group protection
 
-```
-Action request
- -> envelope validation
- -> governance
- -> approval when required
- -> nonce/replay check
- -> budget reservation
- -> capability lease
- -> required pre-invocation audit
- -> side effect
- -> required result audit
- -> trajectory evidence
-```
-A required audit persistence failure trips the circuit breaker and prevents continued governed execution.
-
-## Egress
-
-Production LLM egress uses HTTPS, an explicit host allowlist, DNS resolution and private-address blocking, with redirects handled manually and response size bounded. Executor URLs are deployment-controlled and must use HTTPS in production.
-
-## Container and Kubernetes
-
-Production containers run non-root with a read-only root filesystem, no privilege escalation, all Linux capabilities dropped and RuntimeDefault seccomp. Kubernetes namespace policy is configured for the Restricted Pod Security Standard; NetworkPolicy limits ingress and database/DNS paths.
-
-## Storage
-
-Artifact storage must be shared across replicas and must reject path traversal. Production startup fails closed unless the selected shared-storage model is explicitly confirmed. Object storage integration should remain private and access-controlled.
-
-## Assurance
-
-Technical evidence is retained per release SHA and mapped to ISO/IEC 27001, ISO/IEC 42001, SOC 2, NIST AI RMF and OWASP agentic security guidance. The mappings support audit readiness; they are not certifications.
+## Production enforcement
+Model providers are adapters, not authority. External side effects are disabled by default. The authorization and execution boundaries enforce controls outside the model.

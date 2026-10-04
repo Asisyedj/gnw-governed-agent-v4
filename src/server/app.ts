@@ -3,20 +3,18 @@ import fastifyCookie from "@fastify/cookie";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { createDb, closeDb } from "./db/index.js";
+import { pathToFileURL } from "node:url";
 import { getInterlock, insertAuditLog } from "./repo.js";
 import { validateSecrets } from "./lib/secretsCheck.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { taskRoutes } from "./routes/tasks.js";
-import { executionRoutes } from "./routes/execution.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { interlockRoutes } from "./routes/interlock.js";
 import { auditRoutes } from "./routes/audit.js";
 import { healthRoutes } from "./routes/health.js";
 import { summaryRoutes } from "./routes/summary.js";
-import { metricsRoutes } from "./routes/metrics.js";
-import { recordRequest } from "./metrics.js";
-import type { FastifyRequest } from "fastify";
+import { governanceRoutes } from "./routes/governance.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 
@@ -24,8 +22,6 @@ export async function buildApp() {
   validateSecrets();
 
   const db = createDb();
-
-  const requestStarts = new WeakMap<FastifyRequest, bigint>();
 
   const app = Fastify({
     logger: {
@@ -36,15 +32,6 @@ export async function buildApp() {
     },
     trustProxy: process.env.TRUST_PROXY === "true",
     genReqId: () => crypto.randomUUID(),
-  });
-
-  app.addHook("onRequest", async (req) => { requestStarts.set(req, process.hrtime.bigint()); });
-  app.addHook("onResponse", async (req, reply) => {
-    const started = requestStarts.get(req);
-    if (!started) return;
-    const route = req.routeOptions?.url ?? req.url.split("?")[0] ?? "unknown";
-    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-    recordRequest(req.method, route, reply.statusCode, elapsedMs);
   });
 
   // ── Security headers ──────────────────────────────────────────────────────
@@ -85,26 +72,6 @@ export async function buildApp() {
   // ── Cookies ───────────────────────────────────────────────────────────────
   await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET! });
 
-  // ── Browser cross-site request protection ─────────────────────────────────
-  app.addHook("preHandler", async (req, reply) => {
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
-      const fetchSite = req.headers["sec-fetch-site"];
-      if (fetchSite === "cross-site") {
-        return reply.status(403).send({ error: "Cross-site request refused.", code: "csrf_protected" });
-      }
-      const origin = req.headers.origin;
-      if (origin) {
-        const configuredOrigin = process.env.CORS_ORIGIN ?? "same-origin";
-        const expectedOrigin = configuredOrigin === "same-origin"
-          ? req.protocol + "://" + req.hostname
-          : configuredOrigin;
-        if (origin !== expectedOrigin) {
-          return reply.status(403).send({ error: "Origin not allowed.", code: "origin_not_allowed" });
-        }
-      }
-    }
-  });
-
   // ── DB decoration ─────────────────────────────────────────────────────────
   app.decorate("db", db);
 
@@ -127,12 +94,12 @@ export async function buildApp() {
   });
 
   // ── Serve built client in production ──────────────────────────────────────
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
     const { default: fastifyStatic } = await import("@fastify/static");
     const { join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const dir = fileURLToPath(new URL(".", import.meta.url));
-    await app.register(fastifyStatic, { root: join(dir, "../../dist/client"), prefix: "/", decorateReply: false });
+    await app.register(fastifyStatic, { root: join(dir, "../../../dist/client"), prefix: "/", decorateReply: false });
     app.setNotFoundHandler(async (_req, reply) => reply.sendFile("index.html"));
   }
 
@@ -140,23 +107,19 @@ export async function buildApp() {
   await app.register(healthRoutes,   { prefix: "/api" });
   await app.register(meRoutes,       { prefix: "/api" });
   await app.register(summaryRoutes,  { prefix: "/api" });
+  await app.register(governanceRoutes,{ prefix: "/api" });
   await app.register(taskRoutes,     { prefix: "/api/tasks" });
-  await app.register(executionRoutes, { prefix: "/api/tasks" });
   await app.register(approvalRoutes, { prefix: "/api/approvals" });
   await app.register(interlockRoutes,{ prefix: "/api/interlock" });
   await app.register(auditRoutes,    { prefix: "/api/audit" });
-  await app.register(metricsRoutes,  { prefix: "" });
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {
-    const record = typeof error === "object" && error !== null ? error as { statusCode?: unknown; code?: unknown } : {};
-    const status = typeof record.statusCode === "number" ? record.statusCode : 500;
-    const code = typeof record.code === "string" ? record.code : "internal_error";
-    const message = error instanceof Error ? error.message : String(error);
+    const status = (error as { statusCode?: number }).statusCode ?? 500;
     if (status >= 500) app.log.error({ err: error, reqId: req.id }, "Internal server error");
     return reply.status(status).send({
-      error: status >= 500 ? "Internal server error" : message,
-      code,
+      error: status >= 500 ? "Internal server error" : error.message,
+      code:  (error as { code?: string }).code ?? "internal_error",
       reqId: req.id,
     });
   });
@@ -182,6 +145,6 @@ async function main() {
   app.log.info(`GNW server ready on :${PORT}`);
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }

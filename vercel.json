@@ -2,13 +2,7 @@
   "version": 2,
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist/public",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    }
-  ],
+  "outputDirectory": "dist/client",
   "headers": [
     {
       "source": "/(.*)",

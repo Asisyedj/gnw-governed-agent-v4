@@ -1,9 +1,7 @@
-# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
+# syntax=docker/dockerfile:1.7
+FROM node:22-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache tini \
-    && npm install --global npm@12.2.0 --no-fund --no-audit \
-    && npm --version
+RUN apk add --no-cache tini
 
 FROM base AS deps
 COPY package.json package-lock.json ./
@@ -25,7 +23,6 @@ RUN addgroup -S gnw && adduser -S gnw -G gnw
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json ./
-COPY scripts/preflight-production.mjs ./scripts/preflight-production.mjs
 RUN chown -R gnw:gnw /app
 USER gnw
 EXPOSE 3000
