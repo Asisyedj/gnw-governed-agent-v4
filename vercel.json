@@ -2,7 +2,7 @@
   "version": 2,
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist/public",
+  "outputDirectory": "dist/client",
   "rewrites": [
     {
       "source": "/api/(.*)",

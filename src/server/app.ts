@@ -127,7 +127,7 @@ export async function buildApp() {
   });
 
   // ── Serve built client in production ──────────────────────────────────────
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && process.env.VERCEL !== "1") {
     const { default: fastifyStatic } = await import("@fastify/static");
     const { join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
