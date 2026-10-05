@@ -51,7 +51,7 @@ describe("immutable progress ledger", () => {
     const source = new ImmutableLedger();
     const parent = source.append({ eventId: "EVT-A", eventType: "MISSION_CREATED", missionId: "MISSION-A", timestamp: at(0) });
     const target = new ImmutableLedger();
-    const targetMission = target.append({ eventId: "EVT-B", eventType: "MISSION_CREATED", missionId: "MISSION-B", timestamp: at(0) });
+    const targetMission = target.append({ eventId: "EVT-B", eventType: "MISSION_CREATED", missionId: "MISSION-B", timestamp: at(1) });
 
     const crossMission = createLedgerEvent({
       eventId: "EVT-C",
@@ -59,10 +59,10 @@ describe("immutable progress ledger", () => {
       missionId: "MISSION-B",
       taskId: "TASK-B",
       causedBy: [parent.eventId],
-      timestamp: at(1),
-    }, 2, targetMission.hash);
+      timestamp: at(2),
+    }, 3, targetMission.hash);
 
-    expect(() => reduceLedger([targetMission, crossMission])).toThrowError("causal_parent_cross_mission:EVT-A");
+    expect(() => reduceLedger([parent, targetMission, crossMission])).toThrowError("causal_parent_cross_mission:EVT-A");
   });
 
   it("enforces one active task per mission", () => {
