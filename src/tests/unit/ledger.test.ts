@@ -50,9 +50,12 @@ describe("immutable progress ledger", () => {
   it("rejects cross-mission causal parents during replay", () => {
     const source = new ImmutableLedger();
     const parent = source.append({ eventId: "EVT-A", eventType: "MISSION_CREATED", missionId: "MISSION-A", timestamp: at(0) });
-    const target = new ImmutableLedger();
-    const targetMission = target.append({ eventId: "EVT-B", eventType: "MISSION_CREATED", missionId: "MISSION-B", timestamp: at(1) });
-
+    const targetMission = createLedgerEvent({
+      eventId: "EVT-B",
+      eventType: "MISSION_CREATED",
+      missionId: "MISSION-B",
+      timestamp: at(1),
+    }, 2, parent.hash);
     const crossMission = createLedgerEvent({
       eventId: "EVT-C",
       eventType: "TASK_SELECTED",
