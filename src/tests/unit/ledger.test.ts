@@ -65,6 +65,15 @@ describe("immutable progress ledger", () => {
     expect(() => reduceLedger([targetMission, crossMission])).toThrowError("causal_parent_cross_mission:EVT-A");
   });
 
+  it("enforces one active task per mission", () => {
+    const ledger = new ImmutableLedger();
+    appendMission(ledger);
+    ledger.append({ eventId: "EVT-002", eventType: "TASK_SELECTED", missionId: mission, taskId: "TASK-001", timestamp: at(1), causedBy: ["EVT-001"] });
+
+    expect(() => ledger.append({ eventId: "EVT-003", eventType: "TASK_SELECTED", missionId: mission, taskId: "TASK-002", timestamp: at(2), causedBy: ["EVT-002"] }))
+      .toThrowError("another_task_is_already_active");
+  });
+
   it("rejects duplicate ids and invalid completion without verified proof", () => {
     const ledger = new ImmutableLedger();
     appendMission(ledger);
