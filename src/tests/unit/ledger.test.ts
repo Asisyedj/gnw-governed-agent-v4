@@ -89,7 +89,7 @@ describe("immutable progress ledger", () => {
   it("does not expose mutable internal events", () => {
     const ledger = new ImmutableLedger();
     appendMission(ledger);
-    const events = [...ledger.events] as Array<Record<string, unknown>>;
+    const events = [...ledger.events] as unknown as Array<Record<string, unknown>>;
     events[0]!.eventId = "TAMPERED";
     expect(ledger.events[0]?.eventId).toBe("EVT-001");
     expect(ledger.verify().valid).toBe(true);
