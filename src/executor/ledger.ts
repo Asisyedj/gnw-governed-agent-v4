@@ -201,8 +201,7 @@ function validateEventIntegrity(
   validateTimestamp(event.timestamp);
   validateCausality(allEvents.slice(0, event.sequence - 1), event, event.sequence);
   if (event.previousHash !== previousHash) throw new LedgerValidationError("HASH_MISMATCH", `previous_hash_mismatch:${event.eventId}`);
-  const eventWithoutHash = { ...event };
-  delete eventWithoutHash.hash;
+  const eventWithoutHash = Object.fromEntries(Object.entries(event).filter(([key]) => key !== "hash")) as Omit<LedgerEvent, "hash">;
   if (event.hash !== hashEvent(eventWithoutHash)) {
     throw new LedgerValidationError("HASH_MISMATCH", `event_hash_mismatch:${event.eventId}`);
   }
