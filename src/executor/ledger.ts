@@ -225,6 +225,7 @@ function applyEvent(state: LedgerState, event: LedgerEvent): LedgerState {
     switch (event.eventType) {
       case "TASK_SELECTED":
         if (current.state === "VERIFIED_COMPLETE") throw new LedgerValidationError("INVALID_TRANSITION", "verified_task_cannot_be_selected");
+        if (mission.activeTaskId && mission.activeTaskId !== event.taskId) throw new LedgerValidationError("INVALID_TRANSITION", "another_task_is_already_active");
         nextTask = { ...current, state: "IN_PROGRESS" };
         nextMission = { ...nextMission, activeTaskId: event.taskId };
         break;
