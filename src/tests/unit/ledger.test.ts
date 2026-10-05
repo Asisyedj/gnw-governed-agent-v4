@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ImmutableLedger, LedgerValidationError, reduceLedger } from "../../executor/ledger.js";
+import { createLedgerEvent, ImmutableLedger, LedgerValidationError, reduceLedger } from "../../executor/ledger.js";
 
 const mission = "MISSION-001";
 const at = (second: number) => `2026-10-05T20:00:${String(second).padStart(2, "0")}.000Z`;
@@ -48,22 +48,21 @@ describe("immutable progress ledger", () => {
   });
 
   it("rejects cross-mission causal parents during replay", () => {
-    const first = new ImmutableLedger();
-    const parent = first.append({ eventId: "EVT-A", eventType: "MISSION_CREATED", missionId: "MISSION-A", timestamp: at(0) });
-    const other = new ImmutableLedger();
-    other.append({ eventId: "EVT-B", eventType: "MISSION_CREATED", missionId: "MISSION-B", timestamp: at(0) });
+    const source = new ImmutableLedger();
+    const parent = source.append({ eventId: "EVT-A", eventType: "MISSION_CREATED", missionId: "MISSION-A", timestamp: at(0) });
+    const target = new ImmutableLedger();
+    const targetMission = target.append({ eventId: "EVT-B", eventType: "MISSION_CREATED", missionId: "MISSION-B", timestamp: at(0) });
 
-    const candidate = {
-      ...other.events[0],
+    const crossMission = createLedgerEvent({
       eventId: "EVT-C",
-      eventType: "TASK_SELECTED" as const,
+      eventType: "TASK_SELECTED",
+      missionId: "MISSION-B",
       taskId: "TASK-B",
       causedBy: [parent.eventId],
-      sequence: 2,
-      previousHash: other.events[0]!.hash,
-    };
-    const tampered = { ...candidate, hash: candidate.hash };
-    expect(() => reduceLedger([other.events[0]!, tampered])).toThrowError("causal_parent_cross_mission:EVT-A");
+      timestamp: at(1),
+    }, 2, targetMission.hash);
+
+    expect(() => reduceLedger([targetMission, crossMission])).toThrowError("causal_parent_cross_mission:EVT-A");
   });
 
   it("rejects duplicate ids and invalid completion without verified proof", () => {
@@ -81,7 +80,7 @@ describe("immutable progress ledger", () => {
   it("does not expose mutable internal events", () => {
     const ledger = new ImmutableLedger();
     appendMission(ledger);
-    const events = ledger.events as Array<Record<string, unknown>>;
+    const events = [...ledger.events] as Array<Record<string, unknown>>;
     events[0]!.eventId = "TAMPERED";
     expect(ledger.events[0]?.eventId).toBe("EVT-001");
     expect(ledger.verify().valid).toBe(true);
