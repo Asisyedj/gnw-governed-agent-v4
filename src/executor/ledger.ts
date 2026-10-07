@@ -88,8 +88,44 @@ export interface LedgerDependencies {
 /**
  * Canonical JSON representation for hashing (stable key order).
  */
-function canonicalJson(obj: unknown): string {
-  return JSON.stringify(obj, Object.keys(obj as object).sort());
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+
+  return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+}
+
+function deepClone<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(item => deepClone(item)) as T;
+
+  const cloned: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    cloned[key] = deepClone(item);
+  }
+  return cloned as T;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  Object.freeze(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreeze(item);
+  } else {
+    for (const item of Object.values(value as Record<string, unknown>)) {
+      deepFreeze(item);
+    }
+  }
+  return value;
 }
 
 /**
@@ -161,10 +197,10 @@ export class Ledger {
     this.validateTransition(event);
 
     // 6. Construct final event with computed hash
-    const finalEvent: LedgerEvent = {
+    const finalEvent: LedgerEvent = deepFreeze(deepClone({
       ...event,
       event_hash: computedHash,
-    };
+    }));
 
     // 7. Append (immutable: never modify existing events)
     this.events.push(finalEvent);
@@ -254,14 +290,14 @@ export class Ledger {
   getEvent(eventId: string): LedgerEvent | undefined {
     const idx = this.eventIndex.get(eventId);
     if (idx === undefined) return undefined;
-    return this.events[idx];
+    return deepClone(this.events[idx]);
   }
 
   /**
    * Read-only retrieval: get all events (immutable copy).
    */
   getAllEvents(): LedgerEvent[] {
-    return [...this.events];
+    return this.events.map(event => deepClone(event));
   }
 
   /**
