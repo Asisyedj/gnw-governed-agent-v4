@@ -12,7 +12,8 @@ const required=[
   "scripts/migrate.mjs","scripts/test-rls.mjs","src/server/metrics.ts","docs/RUNTIME_EXECUTION_POLICY.md",
   "compliance/applicability.json","compliance/control-matrix.json","compliance/release-evidence.schema.json",
   "scripts/verify-compliance-matrix.mjs","scripts/verify-release-evidence.mjs","scripts/verify-cryptographic-closure.mjs","scripts/verify-git-release-metadata.mjs",
-  "docs/PAKISTAN_COMPLIANCE_RELEASE.md"
+  "docs/PAKISTAN_COMPLIANCE_RELEASE.md",
+  "src/core/ledger/CanonicalDigest.ts","src/core/ledger/ImmutableLedger.ts","src/core/orchestrator/ApexOrchestrator.ts","src/core/outbox/StaleOutboxRecovery.ts","src/api/gpu/GpuEndpoint.ts","drizzle/0003_apex_ledger_outbox.sql","src/tests/unit/apex-orchestrator.test.ts","src/tests/unit/outbox-recovery.test.ts","src/tests/unit/gpu-endpoint.test.ts"
 ];
 
 const failures=[];
@@ -28,6 +29,8 @@ for(const token of ["users_id_tenant_uq","tasks_id_tenant_uq","task_steps_id_ten
 const db=read("src/server/db/index.ts");
 if(!db.includes("set_config('app.tenant_id'")) failures.push("db:tenant-context-missing");
 if(!/\.transaction\(async tx/.test(db)) failures.push("db:tenant-context-not-transactional");
+const app=read("src/server/app.ts");
+if(!app.includes("gpuEndpoint")) failures.push("gpu:route-not-registered");
 const exec=read("src/server/execution.ts");
 if(!exec.includes("governance.authorize")) failures.push("execution:governance-not-enforced");
 const authzIndex=exec.indexOf("governance.authorize"),handlerIndex=exec.indexOf("const output=await handler(");
@@ -105,6 +108,8 @@ if(existsSync(workflowDir)){
 }
 const ns=read("k8s/namespace.yaml");
 for(const token of ["pod-security.kubernetes.io/enforce: restricted","pod-security.kubernetes.io/audit: restricted","pod-security.kubernetes.io/warn: restricted"]){if(!ns.includes(token)) failures.push(`k8s:pod-security-label-missing:${token}`);}
+const outbox=read("src/core/outbox/StaleOutboxRecovery.ts");
+for(const token of ["QUARANTINED","markSent","recoverStale"]) if(!outbox.includes(token)) failures.push(`outbox:control-missing:${token}`);
 const crypto=read("scripts/verify-cryptographic-closure.mjs");
 if(!crypto) failures.push("crypto:verifier-missing");
 else for(const token of ["GNW-ACTION-ENVELOPE-V1","GNW-TEE-ATTESTATION-V1","GNW-TRUST-ANCHOR-V1","executor_action_digest_required"]){if(!crypto.includes(token)) failures.push(`crypto:verifier-control-missing:${token}`);}
