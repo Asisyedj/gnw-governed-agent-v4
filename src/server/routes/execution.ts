@@ -7,6 +7,7 @@ import { executeGovernedTool, executeWithGovernance } from "../execution.js";
 import { digestRequest, requiresHumanApproval, type ApprovalRecord, type GovernanceRequest } from "../governance.js";
 import { verifyGrantSignature } from "../security.js";
 import {
+  appendTaskLedgerEvent,
   createApproval,
   ensureTaskLedger,
   findApprovalById,
@@ -197,22 +198,53 @@ export const executionRoutes:FastifyPluginAsync=async(app)=>{
         governanceRequest:grant,grantId:envelope.grantId,missionId,
         ...(approval===undefined?{}:{approval}),
       };
-      const result=await executeWithGovernance(ctx,envelope,async()=> {
-        await updateTaskStatus(app.db,taskId,auth.session.tenantId,"running");
-        return executeGovernedTool(ctx,envelope.tool,envelope.parameters,digestRequest(grant));
+      await updateTaskStatus(app.db,taskId,auth.session.tenantId,"running");
+      const started=await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
+        eventId:`ledger:${grant.requestId}:started`,
+        taskId:String(taskId),missionId,eventType:"TASK_STARTED",
+        causalParentId:`ledger:${missionId}:created`,
+        payload:{requestId:grant.requestId,actionDigest:digestRequest(grant)},
+      });
+      const ctxWithParent={...ctx,ledgerParentEventId:started.eventId};
+      const result=await executeWithGovernance(ctxWithParent,envelope,async()=> {
+        return executeGovernedTool(ctxWithParent,envelope.tool,envelope.parameters,digestRequest(grant));
       });
 
       if(result.success){
+        const proofMaterial=result.output===undefined?null:JSON.parse(JSON.stringify(result.output));
+        const proofId=digestCanonical({actionDigest:digestRequest(grant),output:proofMaterial});
+        const proof=await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
+          eventId:`ledger:${grant.requestId}:proof`,taskId:String(taskId),missionId,eventType:"PROOF_RECORDED",
+          causalParentId:ctxWithParent.ledgerParentEventId,proofId,payload:{proofId,actionDigest:digestRequest(grant)},
+        });
+        const verified=await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
+          eventId:`ledger:${grant.requestId}:verified`,taskId:String(taskId),missionId,eventType:"TASK_VERIFIED",
+          causalParentId:proof.eventId,proofId,payload:{proofId},
+        });
+        await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
+          eventId:`ledger:${grant.requestId}:completed`,taskId:String(taskId),missionId,eventType:"TASK_COMPLETED",
+          causalParentId:verified.eventId,payload:{proofId},
+        });
         await updateTaskStatus(app.db,taskId,auth.session.tenantId,"done");
         await insertAuditLog(app.db,{eventType:"task.complete",actorId:auth.session.userId,tenantId:auth.session.tenantId,taskId,resourceType:"task",resourceId:String(taskId),outcome:"success",detail:{tool:envelope.tool,requestId:grant.requestId},requestId:grant.requestId,ipAddress:req.ip});
         return reply.send({ok:true,taskId,result});
       }
 
       if(result.error==="approval_required"){
+        await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
+          eventId:`ledger:${grant.requestId}:waiting-approval`,taskId:String(taskId),missionId,eventType:"TASK_WAITING_APPROVAL",
+          causalParentId:ctxWithParent.ledgerParentEventId,payload:{requestId:grant.requestId},
+        });
         await updateTaskStatus(app.db,taskId,auth.session.tenantId,"waiting_approval");
         return reply.status(428).send({ok:false,taskId,code:"approval_required",actionDigest:digestRequest(grant),message:"Human approval is required before execution."});
       }
 
+      if(ctxWithParent.ledgerParentEventId){
+        await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
+          eventId:`ledger:${grant.requestId}:failed`,taskId:String(taskId),missionId,eventType:"TASK_FAILED",
+          causalParentId:ctxWithParent.ledgerParentEventId,payload:{error:result.error},
+        });
+      }
       await updateTaskStatus(app.db,taskId,auth.session.tenantId,"failed",result.error);
       return reply.status(result.error==="safety_interlock"?503:409).send({ok:false,taskId,error:result.error,durationMs:result.durationMs});
     }catch(error){
