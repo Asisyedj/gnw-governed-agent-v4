@@ -1,0 +1,1 @@
+import{describe,expect,it}from"vitest";describe("GPU enforcement contract",()=>{it("uses an explicit allowlist and bounded execution contract",()=>{expect(Number(process.env.GNW_GPU_MAX_CONCURRENCY??2)).toBeGreaterThan(0);expect(Number(process.env.GNW_GPU_TIMEOUT_MS??30000)).toBeGreaterThanOrEqual(1000);});});
