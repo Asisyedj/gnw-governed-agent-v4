@@ -8,6 +8,7 @@ import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capabili
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 import { randomUUID } from "node:crypto";
 import { ImmutableLedger } from "../core/ledger/ImmutableLedger.js";
+import { callExecutor } from "./executor-client.js";
 
 export type ExecutionContext={
   db:Db; env:Env; taskId:number; tenantId:number; actorId:number; role:string; requestId:string;
@@ -134,6 +135,34 @@ export async function executeWithGovernance(
     try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch{/* required audit failure already triggers the safety interlock */}
     return{success:false,error:m,durationMs:Date.now()-start};
   }
+}
+
+export async function executeGovernedTool(
+  ctx: ExecutionContext,
+  tool: string,
+  parameters: unknown,
+  actionDigest: string,
+): Promise<unknown> {
+  if (tool !== "executor.command") throw new Error("tool_not_allowlisted");
+  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) throw new Error("executor_parameters_invalid");
+  const p = parameters as Record<string, unknown>;
+  const command = p.command;
+  if (!Array.isArray(command) || command.length < 1 || command.length > 64 || command.some(x => typeof x !== "string" || x.length === 0 || x.length > 4096)) {
+    throw new Error("executor_command_invalid");
+  }
+  const cwd = p.cwd;
+  if (cwd !== undefined && (typeof cwd !== "string" || cwd.length > 4096)) throw new Error("executor_cwd_invalid");
+  const timeoutMs = p.timeoutMs;
+  if (timeoutMs !== undefined && (typeof timeoutMs !== "number" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 60000)) {
+    throw new Error("executor_timeout_invalid");
+  }
+  const result = await callExecutor(ctx.env, command as string[], {
+    ...(cwd === undefined ? {} : { cwd }),
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    requestId: ctx.requestId,
+    actionDigest,
+  });
+  return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }
 
 export async function safeEgressFetch(url:string,init:RequestInit,allowedHosts:readonly string[],maxBytes:number){assertEgressUrl(url,allowedHosts);return governedFetch(url,init,maxBytes);}
