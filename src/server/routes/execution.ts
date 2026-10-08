@@ -243,11 +243,11 @@ export const executionRoutes:FastifyPluginAsync=async(app)=>{
       if(ctxWithParent.ledgerParentEventId){
         await appendTaskLedgerEvent(app.db,auth.session.tenantId,taskId,missionId,{
           eventId:`ledger:${grant.requestId}:failed`,taskId:String(taskId),missionId,eventType:"TASK_FAILED",
-          causalParentId:ctxWithParent.ledgerParentEventId,payload:{error:result.error},
+          causalParentId:ctxWithParent.ledgerParentEventId,payload:{error:result.error ?? "execution_failed"},
         });
       }
-      await updateTaskStatus(app.db,taskId,auth.session.tenantId,"failed",result.error);
-      return reply.status(result.error==="safety_interlock"?503:409).send({ok:false,taskId,error:result.error,durationMs:result.durationMs});
+      await updateTaskStatus(app.db,taskId,auth.session.tenantId,"failed",result.error ?? "execution_failed");
+      return reply.status(result.error==="safety_interlock"?503:409).send({ok:false,taskId,error:result.error ?? "execution_failed",durationMs:result.durationMs});
     }catch(error){
       const message=error instanceof Error?error.message:String(error);
       await updateTaskStatus(app.db,taskId,auth.session.tenantId,"failed",message).catch(()=>undefined);
