@@ -15,6 +15,7 @@ import { auditRoutes } from "./routes/audit.js";
 import { healthRoutes } from "./routes/health.js";
 import { summaryRoutes } from "./routes/summary.js";
 import { metricsRoutes } from "./routes/metrics.js";
+import { gpuEndpoint } from "../api/gpu/GpuEndpoint.js";
 import { recordRequest } from "./metrics.js";
 import type { FastifyRequest } from "fastify";
 
@@ -146,6 +147,7 @@ export async function buildApp() {
   await app.register(interlockRoutes,{ prefix: "/api/interlock" });
   await app.register(auditRoutes,    { prefix: "/api/audit" });
   await app.register(metricsRoutes,  { prefix: "" });
+  await app.register(gpuEndpoint, { prefix: "/api/gpu" });
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {
