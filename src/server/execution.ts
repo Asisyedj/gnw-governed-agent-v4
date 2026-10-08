@@ -2,17 +2,16 @@ import type { Db } from "./db/index.js";
 import type { Env } from "./env.js";
 import { audit } from "./audit.js";
 import { governedFetch, assertEgressUrl } from "./security.js";
-import { claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
+import { appendTaskLedgerEvent, claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
 import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 import { randomUUID } from "node:crypto";
-import { ImmutableLedger } from "../core/ledger/ImmutableLedger.js";
 
 export type ExecutionContext={
   db:Db; env:Env; taskId:number; tenantId:number; actorId:number; role:string; requestId:string;
   governanceRequest:GovernanceRequest; approval?:ApprovalRecord; grantId:string;
-  ledger?:ImmutableLedger; missionId?:string; ledgerParentEventId?:string;
+  missionId?:string; ledgerParentEventId?:string;
 };
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
 
@@ -22,19 +21,15 @@ export async function executeWithGovernance(
   handler:(lease?:CapabilityLease)=>Promise<unknown>
 ):Promise<ExecutionResult>{
   const start=Date.now();
-  let ledgerParentEventId=ctx.ledgerParentEventId;
-  const appendLedgerEvent= (eventType:"EXECUTION_REQUESTED"|"EXECUTION_ADMITTED"|"EXECUTION_DENIED"|"EXECUTION_COMPLETED"|"EXECUTION_FAILED", payload:unknown):void => {
-    if(!ctx.ledger) return;
-    if(!ctx.missionId || !ledgerParentEventId) throw new Error("ledger_execution_context_missing");
-    const event=ctx.ledger.append({
-      eventId:`${ctx.requestId}:${eventType}:${randomUUID()}`,
-      taskId:String(ctx.taskId),
-      missionId:ctx.missionId,
-      eventType,
-      causalParentId:ledgerParentEventId,
-      payload:typeof payload === "object" && payload !== null ? JSON.parse(JSON.stringify(payload)) : String(payload),
+  const appendLedgerEvent=async (eventType:"EXECUTION_REQUESTED"|"EXECUTION_ADMITTED"|"EXECUTION_DENIED"|"EXECUTION_COMPLETED"|"EXECUTION_FAILED", payload:unknown):Promise<void> => {
+    if(!ctx.missionId) return;
+    const prior=ctx.ledgerParentEventId;
+    if(eventType!=="EXECUTION_REQUESTED" && !prior) throw new Error("ledger_execution_parent_missing");
+    const event=await appendTaskLedgerEvent(ctx.db,ctx.tenantId,ctx.taskId,ctx.missionId,{
+      eventId: `${ctx.requestId}:${eventType}:${randomUUID()}`, taskId:String(ctx.taskId), missionId:ctx.missionId, eventType,
+      ...(prior?{causalParentId:prior}:{}), payload:typeof payload === "object" && payload !== null ? JSON.parse(JSON.stringify(payload)) : String(payload),
     });
-    ledgerParentEventId=event.eventId;
+    ctx.ledgerParentEventId=event.eventId;
   };
   const leaseTtlMs=Math.min(300_000, Math.max(1, ctx.governanceRequest.expiresAt-Date.now()));
   const attestationVerifier=ctx.env.teeAttestationIssuer&&ctx.env.teeAttestationPublicKeyPem
@@ -105,14 +100,14 @@ export async function executeWithGovernance(
       throw new Error("ActionEnvelope: governance_digest_mismatch");
     }
 
-    appendLedgerEvent("EXECUTION_REQUESTED",{requestId:ctx.requestId,actionDigest:envelopeDigest,tool:envelope.tool});
+    await appendLedgerEvent("EXECUTION_REQUESTED",{requestId:ctx.requestId,actionDigest:envelopeDigest,tool:envelope.tool});
     const d=await governance.authorize(ctx.governanceRequest,ctx.approval);
     if(!d.allowed){
-      appendLedgerEvent("EXECUTION_DENIED",{reason:d.reason,actionDigest:d.actionDigest});
+      await appendLedgerEvent("EXECUTION_DENIED",{reason:d.reason,actionDigest:d.actionDigest});
       await audit(ctx.db,{eventType:"governance.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"denied",detail:{reason:d.reason,actionDigest:d.actionDigest},requestId:ctx.requestId},{required:true});
       return{success:false,error:d.reason,durationMs:Date.now()-start};
     }
-    appendLedgerEvent("EXECUTION_ADMITTED",{actionDigest:d.actionDigest,tool:envelope.tool});
+    await appendLedgerEvent("EXECUTION_ADMITTED",{actionDigest:d.actionDigest,tool:envelope.tool});
     const digest=digestEnvelope(envelope);
     await audit(ctx.db,{eventType:"tool.invoke",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,actionDigest:d.actionDigest,operation:envelope.operation,capabilityLeaseId:d.capabilityLease?.leaseId},requestId:ctx.requestId},{required:true});
     if(d.capabilityLease){
@@ -125,12 +120,12 @@ export async function executeWithGovernance(
       await audit(ctx.db,{eventType:"capability.consume",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"capability_lease",resourceId:d.capabilityLease.leaseId,outcome:"success",detail:{actionDigest:d.actionDigest,interlockGeneration:d.capabilityLease.interlockGeneration},requestId:ctx.requestId},{required:true});
     }
     const output=await handler(d.capabilityLease);
-    appendLedgerEvent("EXECUTION_COMPLETED",{actionDigest:d.actionDigest,tool:envelope.tool});
+    await appendLedgerEvent("EXECUTION_COMPLETED",{actionDigest:d.actionDigest,tool:envelope.tool});
     await audit(ctx.db,{eventType:"tool.result",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"success",detail:{digest,actionDigest:d.actionDigest,capabilityLeaseId:d.capabilityLease?.leaseId},requestId:ctx.requestId},{required:true});
     return{success:true,output,durationMs:Date.now()-start};
   }catch(e){
     const m=e instanceof Error?e.message:String(e);
-    try{appendLedgerEvent("EXECUTION_FAILED",{error:m.slice(0,200),tool:envelope.tool});}catch{/* preserve the original fail-closed error */}
+    try{await appendLedgerEvent("EXECUTION_FAILED",{error:m.slice(0,200),tool:envelope.tool});}catch{/* preserve the original fail-closed error */}
     try{await audit(ctx.db,{eventType:"tool.deny",actorId:ctx.actorId,tenantId:ctx.tenantId,taskId:ctx.taskId,resourceType:"tool",resourceId:envelope.tool,outcome:"failure",detail:{error:m},requestId:ctx.requestId},{required:true});}catch{/* required audit failure already triggers the safety interlock */}
     return{success:false,error:m,durationMs:Date.now()-start};
   }

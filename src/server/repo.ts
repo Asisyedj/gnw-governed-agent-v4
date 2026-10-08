@@ -4,6 +4,7 @@ import { schema } from "./db/index.js";
 import type { Interlock } from "./governance.js";
 import { randomUUID } from "node:crypto";
 import { verifyCapabilityLeaseSignature } from "./capability.js";
+import { ImmutableLedger, type LedgerEvent, type LedgerEventInput } from "../core/ledger/ImmutableLedger.js";
 
 const { tenants, users, sessions, tasks, taskSteps, approvals, nonces, interlocks, auditLog, budgetReservations, artifacts, capabilityLeases } = schema;
 
@@ -22,6 +23,34 @@ export async function findSessionByTokenHash(db: Db, tokenHash: string) { return
 export async function deleteSession(db: Db, id: string, tenantId?: number) { await db.delete(sessions).where(tenantId === undefined ? eq(sessions.id, id) : and(eq(sessions.id, id), eq(sessions.tenantId, tenantId))); }
 export async function deleteExpiredSessions(db: Db) { await db.delete(sessions).where(lt(sessions.expiresAt, new Date())); }
 
+type PersistedLedgerDetail = { ledgerEvent?: unknown };
+function ledgerLockKey(tenantId: number, taskId: number): string { return `gnw:ledger:${tenantId}:${taskId}`; }
+function decodeLedgerEvents(rows: Array<{ detail: unknown }>): LedgerEvent[] {
+  return rows.map(row => { const detail = row.detail as PersistedLedgerDetail | null; if (!detail?.ledgerEvent || typeof detail.ledgerEvent !== "object") throw new Error("ledger_persistence_corrupt"); return detail.ledgerEvent as LedgerEvent; });
+}
+
+export async function ensureTaskLedger(db: Db, tenantId: number, taskId: number, missionId: string): Promise<void> {
+  await withTenant(db, tenantId, async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${ledgerLockKey(tenantId, taskId)}))`);
+    const rows = await tx.select({ detail: auditLog.detail }).from(auditLog).where(and(eq(auditLog.tenantId, tenantId), eq(auditLog.taskId, taskId), eq(auditLog.eventType, "ledger.event"))).orderBy(asc(auditLog.id));
+    if (rows.length > 0) { const events = decodeLedgerEvents(rows); if (events[0]?.missionId !== missionId) throw new Error("ledger_mission_binding_mismatch"); ImmutableLedger.replay(events); return; }
+    const ledger = new ImmutableLedger();
+    const event = ledger.append({ eventId: `ledger:${missionId}:created`, taskId: String(taskId), missionId, eventType: "TASK_CREATED", payload: { taskId, missionId } });
+    await tx.insert(auditLog).values({ eventType: "ledger.event", tenantId, taskId, outcome: "success", detail: { ledgerEvent: event }, requestId: event.eventId });
+  });
+}
+
+export async function appendTaskLedgerEvent(db: Db, tenantId: number, taskId: number, missionId: string, input: LedgerEventInput): Promise<LedgerEvent> {
+  return withTenant(db, tenantId, async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${ledgerLockKey(tenantId, taskId)}))`);
+    const rows = await tx.select({ detail: auditLog.detail }).from(auditLog).where(and(eq(auditLog.tenantId, tenantId), eq(auditLog.taskId, taskId), eq(auditLog.eventType, "ledger.event"))).orderBy(asc(auditLog.id));
+    const events = decodeLedgerEvents(rows); if (!events.length) throw new Error("ledger_not_initialized");
+    if (events[0]?.missionId !== missionId) throw new Error("ledger_mission_binding_mismatch");
+    const ledger = ImmutableLedger.replay(events); const event = ledger.append(input);
+    await tx.insert(auditLog).values({ eventType: "ledger.event", tenantId, taskId, outcome: "success", detail: { ledgerEvent: event }, requestId: event.eventId });
+    return event;
+  });
+}
 export async function createTask(db: Db, input: { tenantId: number; createdByUserId: number; title: string; description?: string; classification?: string; budgetTokensAllocated?: number; budgetBytesAllocated?: number; metadata?: unknown }) { return withTenant(db, input.tenantId, async tx => { const [row] = await tx.insert(tasks).values({ tenantId: input.tenantId, createdByUserId: input.createdByUserId, title: input.title, description: input.description ?? null, classification: input.classification ?? "standard", budgetTokensAllocated: input.budgetTokensAllocated ?? 10000, budgetBytesAllocated: input.budgetBytesAllocated ?? 10485760, metadata: input.metadata ?? null }).returning(); return row!; }); }
 export async function findTaskById(db: Db, id: number, tenantId: number) { return withTenant(db, tenantId, async tx => { const [row] = await tx.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.tenantId, tenantId))).limit(1); return row; }); }
 export async function listTasksByTenant(db: Db, tenantId: number, limit = 50, offset = 0) { return withTenant(db, tenantId, tx => tx.select().from(tasks).where(eq(tasks.tenantId, tenantId)).orderBy(desc(tasks.createdAt)).limit(limit).offset(offset)); }
