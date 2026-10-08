@@ -7,11 +7,12 @@ import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "
 import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 import { randomUUID } from "node:crypto";
+import { ImmutableLedger } from "../core/ledger/ImmutableLedger.js";
 
 export type ExecutionContext={
   db:Db; env:Env; taskId:number; tenantId:number; actorId:number; role:string; requestId:string;
   governanceRequest:GovernanceRequest; approval?:ApprovalRecord; grantId:string;
-  missionId?:string; ledgerParentEventId?:string;
+  ledger?:ImmutableLedger; missionId?:string; ledgerParentEventId?:string;
 };
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
 
@@ -22,13 +23,17 @@ export async function executeWithGovernance(
 ):Promise<ExecutionResult>{
   const start=Date.now();
   const appendLedgerEvent=async (eventType:"EXECUTION_REQUESTED"|"EXECUTION_ADMITTED"|"EXECUTION_DENIED"|"EXECUTION_COMPLETED"|"EXECUTION_FAILED", payload:unknown):Promise<void> => {
+    if(ctx.ledger){
+      const prior=ctx.ledgerParentEventId;
+      if(!ctx.missionId || (eventType!=="EXECUTION_REQUESTED" && !prior)) throw new Error("ledger_execution_context_missing");
+      const event=ctx.ledger.append({ eventId:`${ctx.requestId}:${eventType}:${randomUUID()}`, taskId:String(ctx.taskId), missionId:ctx.missionId, eventType, ...(prior?{causalParentId:prior}:{}), payload:typeof payload === "object" && payload !== null ? JSON.parse(JSON.stringify(payload)) : String(payload) });
+      ctx.ledgerParentEventId=event.eventId;
+      return;
+    }
     if(!ctx.missionId) return;
     const prior=ctx.ledgerParentEventId;
     if(eventType!=="EXECUTION_REQUESTED" && !prior) throw new Error("ledger_execution_parent_missing");
-    const event=await appendTaskLedgerEvent(ctx.db,ctx.tenantId,ctx.taskId,ctx.missionId,{
-      eventId: `${ctx.requestId}:${eventType}:${randomUUID()}`, taskId:String(ctx.taskId), missionId:ctx.missionId, eventType,
-      ...(prior?{causalParentId:prior}:{}), payload:typeof payload === "object" && payload !== null ? JSON.parse(JSON.stringify(payload)) : String(payload),
-    });
+    const event=await appendTaskLedgerEvent(ctx.db,ctx.tenantId,ctx.taskId,ctx.missionId,{ eventId:`${ctx.requestId}:${eventType}:${randomUUID()}`, taskId:String(ctx.taskId), missionId:ctx.missionId, eventType, ...(prior?{causalParentId:prior}:{}), payload:typeof payload === "object" && payload !== null ? JSON.parse(JSON.stringify(payload)) : String(payload) });
     ctx.ledgerParentEventId=event.eventId;
   };
   const leaseTtlMs=Math.min(300_000, Math.max(1, ctx.governanceRequest.expiresAt-Date.now()));
