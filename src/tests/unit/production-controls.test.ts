@@ -8,6 +8,7 @@ import { GovernanceService, MemoryGovernanceStores, newGrant, requiresHumanAppro
 import { buildTrajectoryChain, computeTrajectoryRoot, verifyTrajectoryIntegrity } from "../../server/invariants.js";
 import { recordRequest, renderMetrics } from "../../server/metrics.js";
 import { assertEgressUrl, assertHttpsUrl, canonicalize, governedFetch, isPrivateOrLocalHost, sha256, signGrant, verifyGrantSignature } from "../../server/security.js";
+import { ImmutableLedger } from "../../core/ledger/ImmutableLedger.js";
 
 const keys=generateKeyPairSync("ed25519",{privateKeyEncoding:{type:"pkcs8",format:"pem"},publicKeyEncoding:{type:"spki",format:"pem"}});
 const now=Date.now();
@@ -125,6 +126,41 @@ describe("governed execution boundary",()=>{
    const result=await executeWithGovernance(ctx,envelope,handler);
    expect(result.success).toBe(true);
    expect(handler).toHaveBeenCalledTimes(1);
+ });
+
+ it("records governed execution in the immutable ledger",async()=>{
+   const {executeWithGovernance}=await import("../../server/execution.js");
+   const handler=vi.fn(async()=>({ok:true}));
+   const ledger=new ImmutableLedger();
+   const created=ledger.append({eventId:"task-created",taskId:"1",missionId:"mission-1",eventType:"TASK_CREATED",payload:{}});
+   const started=ledger.append({eventId:"task-started",taskId:"1",missionId:"mission-1",eventType:"TASK_STARTED",causalParentId:created.eventId,payload:{}});
+   const ctx={
+     db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
+     taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-ledger",grantId:"g",missionId:"mission-1",ledger,ledgerParentEventId:started.eventId,
+     governanceRequest:{...baseRequest(),requestId:"req-ledger",nonce:"grant-ledger",envelopeDigest:"0".repeat(64)},
+   } as any;
+   const envelope={taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-ledger",issuedAt:now};
+   (ctx.governanceRequest as GovernanceRequest).envelopeDigest=digestEnvelope(envelope);
+   const result=await executeWithGovernance(ctx,envelope,handler);
+   expect(result.success, result.error).toBe(true);
+   expect(ledger.export().map(event=>event.eventType)).toEqual(["TASK_CREATED","TASK_STARTED","EXECUTION_REQUESTED","EXECUTION_ADMITTED","EXECUTION_COMPLETED"]);
+   expect(ledger.verify().valid).toBe(true);
+ });
+
+ it("fails closed before the handler when ledger context is invalid",async()=>{
+   const {executeWithGovernance}=await import("../../server/execution.js");
+   const handler=vi.fn(async()=>({ok:true}));
+   const ctx={
+     db:{},env:{requireSignedGrants:false,grantIssuer:"x",grantPublicKeyPem:"",executorSecret:"",executorUrl:"",} as any,
+     taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-ledger-invalid",grantId:"g",missionId:"mission-1",ledger:new ImmutableLedger(),ledgerParentEventId:"missing",
+     governanceRequest:{...baseRequest(),requestId:"req-ledger-invalid",nonce:"grant-ledger-invalid"},
+   } as any;
+   const envelope={taskId:"1",tenantId:"1",actorId:"1",operation:"search",tool:"knowledge.search",parameters:{},grantId:"g",nonce:"grant-ledger-invalid",issuedAt:now};
+   (ctx.governanceRequest as GovernanceRequest).envelopeDigest=digestEnvelope(envelope);
+   const result=await executeWithGovernance(ctx,envelope,handler);
+   expect(result.success).toBe(false);
+   expect(result.error).toContain("ledger_causal_parent_missing");
+   expect(handler).not.toHaveBeenCalled();
  });
 
  it("refuses an envelope changed after the governance request was created",async()=>{
