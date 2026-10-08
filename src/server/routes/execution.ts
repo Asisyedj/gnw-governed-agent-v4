@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SPECIALIST_AGENTS, CLASSIFICATIONS, type Classification } from "../../shared/types.js";
 import { ENV } from "../env.js";
 import { digestEnvelope, validateEnvelope, type ActionEnvelope } from "../action-envelope.js";
+import { digestCanonical } from "../../core/ledger/CanonicalDigest.js";
 import { executeGovernedTool, executeWithGovernance } from "../execution.js";
 import { digestRequest, requiresHumanApproval, type ApprovalRecord, type GovernanceRequest } from "../governance.js";
 import { verifyGrantSignature } from "../security.js";
