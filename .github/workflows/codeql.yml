@@ -26,7 +26,7 @@ jobs:
       - uses: github/codeql-action/init@b6d38e563b1e0a61fa4ebfaab8128732f5ed1bd4
         with:
           languages: ${{ matrix.language }}
-      - uses: github/codeql-action/autobuild@b6d38e563b1e0a61fa4ebfaab8128732f5ed1bd4
+      - uses: github/codeql-action/autobuild@e4e9b269fe9e43436f85977fce7d47d4d4d94fdd
       - uses: github/codeql-action/analyze@b6d38e563b1e0a61fa4ebfaab8128732f5ed1bd4
         with:
           category: /language:${{ matrix.language }}
