@@ -59,31 +59,9 @@ CREATE TABLE IF NOT EXISTS job_queue (
 );
 CREATE INDEX IF NOT EXISTS job_queue_claim_idx ON job_queue(status,run_after,lease_expires_at,created_at);
 CREATE INDEX IF NOT EXISTS job_queue_tenant_idx ON job_queue(tenant_id,status);
-CREATE TABLE IF NOT EXISTS action_approvals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  task_id INTEGER,
-  actor_id INTEGER NOT NULL REFERENCES users(id),
-  approver_id INTEGER NOT NULL REFERENCES users(id),
-  action_type TEXT NOT NULL,
-  tool_id TEXT NOT NULL,
-  target TEXT NOT NULL,
-  payload_digest TEXT NOT NULL CHECK (payload_digest ~ '^[a-f0-9]{64}$'),
-  nonce UUID NOT NULL UNIQUE,
-  status TEXT NOT NULL DEFAULT 'granted' CHECK (status IN ('pending','granted','denied','consumed','expired')),
-  expires_at TIMESTAMPTZ NOT NULL,
-  consumed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (actor_id <> approver_id),
-  FOREIGN KEY (actor_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE CASCADE,
-  FOREIGN KEY (approver_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE CASCADE,
-  CHECK ((status = 'consumed') = (consumed_at IS NOT NULL))
-);
-CREATE INDEX IF NOT EXISTS action_approvals_tenant_digest_idx ON action_approvals(tenant_id,payload_digest,status);
-CREATE INDEX IF NOT EXISTS action_approvals_expiry_idx ON action_approvals(expires_at) WHERE status='granted';
 -- RLS on all new tenant-owned tables. app.tenant_id must be set transaction-locally.
 DO $$ DECLARE t TEXT; BEGIN
-  FOREACH t IN ARRAY ARRAY['workflow_runs','workflow_steps','workflow_events','job_queue','action_approvals'] LOOP
+  FOREACH t IN ARRAY ARRAY['workflow_runs','workflow_steps','workflow_events','job_queue'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I',t || '_tenant_isolation',t);
