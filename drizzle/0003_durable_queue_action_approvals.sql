@@ -12,10 +12,12 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS workflow_runs_tenant_state_idx ON workflow_runs(tenant_id,state);
+CREATE UNIQUE INDEX IF NOT EXISTS workflow_runs_id_tenant_uq ON workflow_runs(id,tenant_id);
 CREATE TABLE IF NOT EXISTS workflow_steps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  workflow_id UUID NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  workflow_id UUID NOT NULL,
+  CONSTRAINT workflow_steps_same_tenant_fk FOREIGN KEY (workflow_id,tenant_id) REFERENCES workflow_runs(id,tenant_id) ON DELETE CASCADE,
   agent_role TEXT NOT NULL,
   state TEXT NOT NULL,
   input_digest TEXT NOT NULL CHECK (input_digest ~ '^[a-f0-9]{64}$'),
@@ -28,7 +30,8 @@ CREATE INDEX IF NOT EXISTS workflow_steps_tenant_workflow_idx ON workflow_steps(
 CREATE TABLE IF NOT EXISTS workflow_events (
   id BIGSERIAL PRIMARY KEY,
   tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  workflow_id UUID NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  workflow_id UUID NOT NULL,
+  CONSTRAINT workflow_events_same_tenant_fk FOREIGN KEY (workflow_id,tenant_id) REFERENCES workflow_runs(id,tenant_id) ON DELETE CASCADE,
   event_type TEXT NOT NULL,
   actor TEXT NOT NULL,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -38,7 +41,8 @@ CREATE INDEX IF NOT EXISTS workflow_events_tenant_workflow_idx ON workflow_event
 CREATE TABLE IF NOT EXISTS job_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  workflow_id UUID REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  workflow_id UUID,
+  CONSTRAINT job_queue_workflow_same_tenant_fk FOREIGN KEY (workflow_id,tenant_id) REFERENCES workflow_runs(id,tenant_id) ON DELETE CASCADE,
   job_type TEXT NOT NULL,
   payload JSONB NOT NULL,
   payload_digest TEXT NOT NULL CHECK (payload_digest ~ '^[a-f0-9]{64}$'),
