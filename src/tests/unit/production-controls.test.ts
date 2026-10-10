@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import { digestEnvelope, validateEnvelope } from "../../server/action-envelope.js";
 import { capabilityLeaseDigest, generateNonce, issueCapabilityLease, isLeaseValid, verifyCapabilityLeaseSignature } from "../../server/capability.js";
-import { callExecutor } from "../../server/executor-client.js";
+import { callExecutor, cancelExecutor } from "../../server/executor-client.js";
 import { executorBodyDigest, makeExecutorToken, verifyExecutorToken } from "../../executor/auth.js";
 import { GovernanceService, MemoryGovernanceStores, newGrant, requiresHumanApproval, type GovernanceRequest } from "../../server/governance.js";
 import { buildTrajectoryChain, computeTrajectoryRoot, verifyTrajectoryIntegrity } from "../../server/invariants.js";
@@ -94,6 +94,30 @@ describe("production control primitives",()=>{
    await expect(callExecutor(env,["echo","x"],{actionDigest:"a".repeat(64)})).rejects.toThrow("executor_https_required");
    await expect(callExecutor({...env,executorUrl:"https://executor.local"},["echo","x"])).rejects.toThrow("executor_action_digest_required");
    expect(generateNonce()).toHaveLength(32);
+ });
+ it("requires an authenticated, request-bound confirmation from the executor cancellation endpoint",async()=>{
+   const oldFetch=globalThis.fetch;
+   const requestId="cancel-req-7";
+   const env={executorUrl:"https://executor.example",executorSecret:"test-executor-secret",isProduction:true} as any;
+   const fetchMock=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+     const url=String(input);
+     expect(url).toBe("https://executor.example/cancel");
+     expect(init?.method).toBe("POST");
+     const body=JSON.parse(String(init?.body)) as {requestId:string;actionDigest:string;reason:string;issuedAt:number};
+     expect(body.requestId).toBe(requestId);
+     expect(body.actionDigest).toBe("a".repeat(64));
+     expect(init?.headers).toMatchObject({"x-gnw-request-id":requestId,"x-gnw-body-sha256":expect.any(String)});
+     return new Response(JSON.stringify({cancelled:true,requestId}),{status:200,headers:{"content-type":"application/json"}});
+   });
+   vi.stubGlobal("fetch",fetchMock);
+   try {
+     await expect(cancelExecutor(env,{requestId,actionDigest:"a".repeat(64),reason:"test cancellation"})).resolves.toBeUndefined();
+     expect(fetchMock).toHaveBeenCalledTimes(1);
+     fetchMock.mockImplementationOnce(async()=>new Response(JSON.stringify({cancelled:false,requestId}),{status:200,headers:{"content-type":"application/json"}}));
+     await expect(cancelExecutor(env,{requestId,actionDigest:"a".repeat(64),reason:"test cancellation"})).rejects.toThrow("executor_cancel_unconfirmed");
+   } finally {
+     vi.stubGlobal("fetch",oldFetch);
+   }
  });
  it("renders metrics and records HTTP observations",()=>{
    recordRequest("GET","/api/health",200,100);
