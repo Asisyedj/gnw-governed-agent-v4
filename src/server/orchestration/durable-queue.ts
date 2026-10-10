@@ -41,7 +41,7 @@ export async function enqueueJob(pool: Pool, input: {
   });
 }
 
-export async function claimJob(pool: Pool, tenantId: number, workerId: string, leaseSeconds = 30): Promise<ClaimedJob | null> {
+export async function claimJob(pool: Pool, tenantId: number, workerId: string, leaseSeconds = 30, jobType?: string): Promise<ClaimedJob | null> {
   if (!workerId.trim() || !Number.isInteger(leaseSeconds) || leaseSeconds < 5 || leaseSeconds > 300) throw new Error("INVALID_LEASE");
   return tenantTx(pool,tenantId,async c => {
     const token = randomUUID();
@@ -51,6 +51,7 @@ export async function claimJob(pool: Pool, tenantId: number, workerId: string, l
          WHERE tenant_id=$1 AND attempts < max_attempts AND run_after <= now()
            AND (status IN ('pending','retryable') OR (status='leased' AND lease_expires_at < now()))
            AND cancel_requested_at IS NULL
+           AND ($5::text IS NULL OR job_type=$5)
          ORDER BY run_after,created_at
          FOR UPDATE SKIP LOCKED LIMIT 1
        )
@@ -59,7 +60,7 @@ export async function claimJob(pool: Pool, tenantId: number, workerId: string, l
          attempts=j.attempts+1,updated_at=now()
        FROM candidate c WHERE j.id=c.id
        RETURNING j.*`,
-      [tenantId,workerId,token,leaseSeconds]);
+      [tenantId,workerId,token,leaseSeconds,jobType ?? null]);
     return r.rowCount ? r.rows[0] as ClaimedJob : null;
   });
 }
@@ -77,13 +78,14 @@ export async function heartbeatJob(pool: Pool, input: { tenantId:number; jobId:s
   });
 }
 
-export async function requestJobCancellation(pool: Pool, tenantId:number, jobId:string) {
+export async function requestJobCancellation(pool: Pool, tenantId:number, jobId:string, taskId?: number) {
   return tenantTx(pool,tenantId,async c => {
     const r=await c.query(
       `UPDATE job_queue SET cancel_requested_at=COALESCE(cancel_requested_at,now()),
        status=CASE WHEN status IN ('pending','retryable') THEN 'cancelled' ELSE 'cancel_requested' END,
-       updated_at=now() WHERE id=$1 AND tenant_id=$2 AND status IN ('pending','retryable','leased','cancel_requested') RETURNING id,status`,
-      [jobId,tenantId]);
+       updated_at=now() WHERE id=$1 AND tenant_id=$2 AND status IN ('pending','retryable','leased','cancel_requested')
+         AND ($3::integer IS NULL OR payload->>'taskId'=$3::text) RETURNING id,status`,
+      [jobId,tenantId,taskId ?? null]);
     return r.rows[0] ?? null;
   });
 }
@@ -112,16 +114,30 @@ export async function finishJob(pool: Pool, input:{tenantId:number;jobId:string;
   });
 }
 
-/** Reconcile jobs after worker restart. Cancelled work is never resurrected. */
+/** Return cancellation state for the worker that owns the live lease. */
+export async function jobCancellationRequested(pool: Pool, input: {tenantId:number; jobId:string; workerId:string; leaseToken:string}) {
+  return tenantTx(pool,input.tenantId,async c => {
+    const r=await c.query(
+      `SELECT status,cancel_requested_at FROM job_queue
+       WHERE id=$1 AND tenant_id=$2 AND lease_owner=$3 AND lease_token=$4::uuid
+       AND status IN ('leased','cancel_requested')`,
+      [input.jobId,input.tenantId,input.workerId,input.leaseToken]);
+    if(!r.rowCount) return {leaseValid:false,cancelRequested:true};
+    return {leaseValid:true,cancelRequested:r.rows[0].status==='cancel_requested' || r.rows[0].cancel_requested_at!==null};
+  });
+}
+
+/** Reconcile expired leases after restart without claiming unconfirmed cancellation succeeded. */
 export async function recoverExpiredJobs(pool: Pool, tenantId: number) {
   return tenantTx(pool,tenantId,async c => {
-    const cancelled = await c.query(
-      `UPDATE job_queue SET status='cancelled',lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=now()
+    const unconfirmed = await c.query(
+      `UPDATE job_queue SET status='failed',lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,
+       last_error_code='CANCEL_UNCONFIRMED',updated_at=now()
        WHERE tenant_id=$1 AND status='cancel_requested' AND lease_expires_at < now() RETURNING id`, [tenantId]);
     const retried = await c.query(
       `UPDATE job_queue SET status=CASE WHEN attempts < max_attempts THEN 'retryable' ELSE 'failed' END,
        lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_error_code='LEASE_EXPIRED',updated_at=now()
        WHERE tenant_id=$1 AND status='leased' AND lease_expires_at < now() AND cancel_requested_at IS NULL RETURNING id,status`, [tenantId]);
-    return {cancelled: cancelled.rows.map(r=>r.id as string), recovered: retried.rows};
+    return {cancellationUnconfirmed: unconfirmed.rows.map(r=>r.id as string), recovered: retried.rows};
   });
 }
