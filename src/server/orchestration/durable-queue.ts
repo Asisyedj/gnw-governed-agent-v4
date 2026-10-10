@@ -78,14 +78,15 @@ export async function heartbeatJob(pool: Pool, input: { tenantId:number; jobId:s
   });
 }
 
-export async function requestJobCancellation(pool: Pool, tenantId:number, jobId:string, taskId?: number) {
+export async function requestJobCancellation(pool: Pool, tenantId:number, jobId:string, taskId?: number, actorId?: number) {
   return tenantTx(pool,tenantId,async c => {
     const r=await c.query(
       `UPDATE job_queue SET cancel_requested_at=COALESCE(cancel_requested_at,now()),
        status=CASE WHEN status IN ('pending','retryable') THEN 'cancelled' ELSE 'cancel_requested' END,
        updated_at=now() WHERE id=$1 AND tenant_id=$2 AND status IN ('pending','retryable','leased','cancel_requested')
-         AND ($3::integer IS NULL OR payload->>'taskId'=$3::text) RETURNING id,status`,
-      [jobId,tenantId,taskId ?? null]);
+         AND ($3::integer IS NULL OR payload->>'taskId'=$3::text)
+         AND ($4::integer IS NULL OR payload->>'actorId'=$4::text) RETURNING id,status`,
+      [jobId,tenantId,taskId ?? null,actorId ?? null]);
     return r.rows[0] ?? null;
   });
 }
