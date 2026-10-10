@@ -12,10 +12,12 @@ export function canonicalJson(value: unknown): string {
   const obj=value as Record<string,unknown>;
   return "{" + Object.keys(obj).sort().map(k => JSON.stringify(k)+":"+canonicalJson(obj[k])).join(",") + "}";
 }
-export function actionDigest(binding: Pick<ActionBinding,"actionType"|"toolId"|"target"|"tenantId"|"actorId"|"payload">): string {
+export function actionDigest(binding: ActionBinding): string {
   return createHash("sha256").update(canonicalJson({
-    actionType:binding.actionType,toolId:binding.toolId,target:binding.target,
-    tenantId:binding.tenantId,actorId:binding.actorId,payload:binding.payload
+    tenantId:binding.tenantId, taskId:binding.taskId ?? null,
+    actorId:binding.actorId, approverId:binding.approverId,
+    actionType:binding.actionType, toolId:binding.toolId,
+    target:binding.target, payload:binding.payload
   })).digest("hex");
 }
 function equalDigest(a:string,b:string) {
@@ -46,10 +48,11 @@ export async function consumeActionApproval(pool:Pool,binding:ActionBinding,appr
     const r=await c.query(
       `UPDATE action_approvals SET status='consumed',consumed_at=now()
        WHERE id=$1::uuid AND tenant_id=$2 AND task_id IS NOT DISTINCT FROM $3
-         AND actor_id=$4 AND approver_id<>actor_id AND action_type=$5 AND tool_id=$6 AND target=$7
-         AND payload_digest=$8 AND nonce=$9::uuid AND status='granted' AND expires_at>now()
+         AND actor_id=$4 AND approver_id=$5 AND approver_id<>actor_id
+         AND action_type=$6 AND tool_id=$7 AND target=$8
+         AND payload_digest=$9 AND nonce=$10::uuid AND status='granted' AND expires_at>now()
        RETURNING id`,
-      [approvalId,binding.tenantId,binding.taskId??null,binding.actorId,binding.actionType,binding.toolId,binding.target,digest,nonce]);
+      [approvalId,binding.tenantId,binding.taskId??null,binding.actorId,binding.approverId,binding.actionType,binding.toolId,binding.target,digest,nonce]);
     if(r.rowCount!==1) throw new Error("APPROVAL_INVALID_EXPIRED_REPLAYED_OR_DIGEST_MISMATCH");
     return {consumed:true,payloadDigest:digest};
   });
