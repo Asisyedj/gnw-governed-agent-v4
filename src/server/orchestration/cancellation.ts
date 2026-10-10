@@ -55,10 +55,7 @@ export class ExecutionCancellation {
   get signal(): AbortSignal { return this.controller.signal; }
 
   register(resource: CancelResource): () => void {
-    if (this.controller.signal.aborted) {
-      void Promise.resolve(resource.close(String(this.controller.signal.reason ?? "cancelled")));
-      return () => undefined;
-    }
+    if (this.controller.signal.aborted) throw new Error("CANCELLATION_ALREADY_STARTED");
     if (this.resources.has(resource.name)) throw new Error("DUPLICATE_CANCEL_RESOURCE");
     this.resources.set(resource.name,resource);
     return () => { this.resources.delete(resource.name); };
