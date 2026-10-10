@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS job_queue (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, idempotency_key),
-  CHECK ((status = 'leased') = (lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL))
+  CHECK ((status IN ('leased','cancel_requested') AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR (status NOT IN ('leased','cancel_requested') AND lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL))
 );
 CREATE INDEX IF NOT EXISTS job_queue_claim_idx ON job_queue(status,run_after,lease_expires_at,created_at);
 CREATE INDEX IF NOT EXISTS job_queue_tenant_idx ON job_queue(tenant_id,status);
@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS action_approvals (
   consumed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (actor_id <> approver_id),
+  FOREIGN KEY (actor_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (approver_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE CASCADE,
   CHECK ((status = 'consumed') = (consumed_at IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS action_approvals_tenant_digest_idx ON action_approvals(tenant_id,payload_digest,status);
