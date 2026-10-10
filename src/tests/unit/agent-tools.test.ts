@@ -66,5 +66,3 @@ describe("governed read-only agent tools", () => {
     await expect(executeReadOnlyAgentTool(ctx, "exec.command", {})).rejects.toThrow("unsupported_read_only_agent_tool");
   });
 });
-
-[executed on device: cloud-pc-6nly3e7f (c1e53d3a-bb1c-4963-9a97-d44ce659fb63)]
