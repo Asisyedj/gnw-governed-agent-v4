@@ -118,7 +118,8 @@ export class ImmutableLedger {
     if (this.entries.length === 0) {
       return this.getGenesisHash();
     }
-    return this.entries[this.entries.length - 1].hash;
+    const latest = this.entries.at(-1);
+    return latest ? latest.hash : this.getGenesisHash();
   }
 
   /**

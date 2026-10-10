@@ -1,7 +1,7 @@
 // GNW Adaptive Immune Defense - Containment First Workflow
 // STOP → ISOLATE → PRESERVE EVIDENCE → REVOKE → FREEZE → VERIFY → RECOVER
 
-import type { SecurityState, ThreatMemory } from "./types.ts";
+import type { SecurityState, ThreatMemory } from "./types.js";
 
 export interface ContainmentResult {
   state_before: SecurityState;

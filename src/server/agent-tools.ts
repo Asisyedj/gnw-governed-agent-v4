@@ -62,6 +62,7 @@ function snippet(text: string, queryTerms: string[], max = 320) {
   const positions = queryTerms.map(term => lower.indexOf(term)).filter(index => index >= 0);
   const start = positions.length ? Math.max(0, Math.min(...positions) - 80) : 0;
   // eslint-disable-next-line no-control-regex -- sanitize control bytes from untrusted artifact text.
+  // eslint-disable-next-line no-control-regex -- sanitize control bytes from untrusted artifact text.
   const excerpt = text.slice(start, start + max).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ").trim();
   return (start > 0 ? "…" : "") + excerpt + (start + max < text.length ? "…" : "");
 }
