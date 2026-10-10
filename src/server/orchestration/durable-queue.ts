@@ -65,12 +65,14 @@ export async function claimJob(pool: Pool, tenantId: number, workerId: string, l
 }
 
 export async function heartbeatJob(pool: Pool, input: { tenantId:number; jobId:string; workerId:string; leaseToken:string; leaseSeconds?:number }) {
+  const leaseSeconds = input.leaseSeconds ?? 30;
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds < 5 || leaseSeconds > 300) throw new Error("INVALID_LEASE");
   return tenantTx(pool,input.tenantId,async c => {
     const r=await c.query(
       `UPDATE job_queue SET lease_expires_at=now()+(($5::text || ' seconds')::interval),updated_at=now()
        WHERE id=$1 AND tenant_id=$2 AND lease_owner=$3 AND lease_token=$4::uuid
          AND status='leased' AND lease_expires_at>now() AND cancel_requested_at IS NULL RETURNING id`,
-      [input.jobId,input.tenantId,input.workerId,input.leaseToken,input.leaseSeconds ?? 30]);
+      [input.jobId,input.tenantId,input.workerId,input.leaseToken,leaseSeconds]);
     return r.rowCount===1;
   });
 }
@@ -107,5 +109,19 @@ export async function finishJob(pool: Pool, input:{tenantId:number;jobId:string;
       [input.jobId,input.tenantId,input.workerId,input.leaseToken,input.success,input.errorCode ?? null]);
     if (!r.rowCount) throw new Error("LEASE_LOST_OR_CANCELLED");
     return r.rows[0].status as string;
+  });
+}
+
+/** Reconcile jobs after worker restart. Cancelled work is never resurrected. */
+export async function recoverExpiredJobs(pool: Pool, tenantId: number) {
+  return tenantTx(pool,tenantId,async c => {
+    const cancelled = await c.query(
+      `UPDATE job_queue SET status='cancelled',lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=now()
+       WHERE tenant_id=$1 AND status='cancel_requested' AND lease_expires_at < now() RETURNING id`, [tenantId]);
+    const retried = await c.query(
+      `UPDATE job_queue SET status=CASE WHEN attempts < max_attempts THEN 'retryable' ELSE 'failed' END,
+       lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_error_code='LEASE_EXPIRED',updated_at=now()
+       WHERE tenant_id=$1 AND status='leased' AND lease_expires_at < now() AND cancel_requested_at IS NULL RETURNING id,status`, [tenantId]);
+    return {cancelled: cancelled.rows.map(r=>r.id as string), recovered: retried.rows};
   });
 }
