@@ -21,7 +21,7 @@ export class ExecutionCancellation {
   registerChildProcess(name: string, child: ChildProcess, graceMs=1500): () => void {
     if (!Number.isInteger(graceMs) || graceMs < 100 || graceMs > 10000) throw new Error("INVALID_CANCEL_GRACE");
     return this.register({name,close:async()=>{
-      if (child.exitCode !== null || child.signalCode !== null || child.killed) return;
+      if (child.exitCode !== null || child.signalCode !== null) return;
       try {
         if (process.platform !== "win32" && child.pid) process.kill(-child.pid,"SIGTERM");
         else child.kill("SIGTERM");
