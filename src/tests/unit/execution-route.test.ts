@@ -131,7 +131,7 @@ describe("authenticated governed execution route",()=>{
   it("rejects high-impact queue requests when the stored approval digest differs",async()=>{
     const app=await makeApp();
     const {grant,envelope}=makeRequest();
-    const approvalGrant={...grant,operation:"provider_job",tool:"video.provider_job",scope:"video.provider_job",agent:"video_producer"};
+    const approvalGrant:GovernanceRequest={...grant,operation:"provider_job",tool:"video.provider_job",scope:"video.provider_job",agent:"video_producer"};
     const approvalEnvelope={...envelope,operation:"provider_job",tool:"video.provider_job"};
     approvalGrant.envelopeDigest=digestEnvelope(approvalEnvelope as never);
     findApprovalById.mockResolvedValue({
@@ -158,7 +158,7 @@ describe("authenticated governed execution route",()=>{
   it("creates an approval record without consuming the grant",async()=>{
     const app=await makeApp();
     const {grant,envelope}=makeRequest();
-    const approvalGrant={...grant,operation:"provider_job",tool:"video.provider_job",scope:"video.provider_job",agent:"video_producer"};
+    const approvalGrant:GovernanceRequest={...grant,operation:"provider_job",tool:"video.provider_job",scope:"video.provider_job",agent:"video_producer"};
     const approvalEnvelope={...envelope,operation:"provider_job",tool:"video.provider_job"};
     approvalGrant.envelopeDigest=digestEnvelope(approvalEnvelope as never);
     createApproval.mockResolvedValue({id:10,status:"pending",expiresAt:new Date(Date.now()+300000)});
