@@ -7,10 +7,11 @@ import { claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
 import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
+import type { ExecutionCancellation } from "./orchestration/cancellation.js";
 
 export type ExecutionContext={
   db:Db; env:Env; taskId:number; tenantId:number; actorId:number; role:string; requestId:string;
-  governanceRequest:GovernanceRequest; approval?:ApprovalRecord; grantId:string;
+  governanceRequest:GovernanceRequest; approval?:ApprovalRecord; grantId:string; cancellation?:ExecutionCancellation;
 };
 export type ExecutionResult={success:boolean;output?:unknown;error?:string;durationMs:number};
 
@@ -43,6 +44,7 @@ export async function executeGovernedTool(ctx:ExecutionContext,tool:string,param
     timeoutMs:spec.timeoutMs,
     requestId:ctx.requestId,
     actionDigest,
+    ...(ctx.cancellation ? { signal: ctx.cancellation.signal } : {}),
   });
 }
 
