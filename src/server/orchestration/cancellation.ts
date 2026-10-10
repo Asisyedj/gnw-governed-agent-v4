@@ -45,7 +45,7 @@ export class ExecutionCancellation {
     this.cancellationPromise=(async()=>{
       const outcomes=await Promise.allSettled(resources.map(r=>Promise.resolve().then(()=>r.close(reason))));
       this.resources.clear();
-      const failures=outcomes.flatMap((o,i)=>o.status==="rejected"?[resources[i].name]:[]);
+      const failures=outcomes.flatMap((o,i)=>o.status==="rejected"?[resources[i]?.name ?? "unknown-resource"]:[]);
       if(failures.length) throw new Error("CANCELLATION_INCOMPLETE:"+failures.join(","));
     })();
     return this.cancellationPromise;
