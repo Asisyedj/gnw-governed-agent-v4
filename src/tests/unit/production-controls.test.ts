@@ -111,7 +111,16 @@ vi.mock("../../server/repo.js",()=>({
  reserveBudget:vi.fn(async()=>true),
  createCapabilityLease:vi.fn(async()=>undefined),
 }));
+vi.mock("../../server/agent-tools.js",()=>({
+ isReadOnlyAgentTool:(tool:string)=>["files.read","documents.search","documents.summarize","knowledge.retrieve","task.status"].includes(tool),
+ executeReadOnlyAgentTool:async (_ctx:unknown,tool:string,parameters:unknown)=>({tool,parameters}),
+}));
 describe("governed execution boundary",()=>{
+ it("dispatches read-only agent tools through the governed dispatcher",async()=>{
+   const {executeGovernedTool}=await import("../../server/execution.js");
+   const ctx={db:{},env:{} as any,taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-readonly",grantId:"g",governanceRequest:baseRequest()} as any;
+   await expect(executeGovernedTool(ctx,"task.status",{},"digest")).resolves.toEqual({tool:"task.status",parameters:{}});
+ });
  it("runs handler only after governance admission",async()=>{
    const {executeWithGovernance}=await import("../../server/execution.js");
    const handler=vi.fn(async()=>({ok:true}));
