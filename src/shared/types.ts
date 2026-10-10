@@ -12,25 +12,25 @@ export type VideoStatus = (typeof VIDEO_STATUSES)[number];
 
 export const AGENT_TOOL_SCOPES: Record<SpecialistAgent, readonly string[]> = {
   research: [
-    "knowledge.search", "evidence.summarize", "browser.fetch",
+    "knowledge.search", "knowledge.retrieve", "evidence.summarize", "documents.summarize", "documents.search", "files.read", "task.status", "browser.fetch",
     "browser.visual", "browser.screenshot", "memory.query",
     "research.clarify", "research.prompt_rewrite", "deep.research", "deep.research.status"
   ],
   analysis: [
-    "analysis.compare", "analysis.model", "memory.query"
+    "analysis.compare", "analysis.model", "documents.search", "documents.summarize", "knowledge.retrieve", "task.status", "memory.query"
   ],
   engineering: [
     "code.review", "code.plan", "exec.command", "exec.python",
-    "file.read", "file.write", "file.patch", "file.list",
+    "file.read", "files.read", "file.write", "file.patch", "file.list", "task.status",
     "browser.visual", "browser.screenshot",
     "git.status", "git.diff", "git.commit", "git.branch", "github.pr",
     "memory.store", "memory.query", "code.symbols", "code.definition"
   ],
   qa: [
-    "qa.evaluate", "qa.report", "exec.test",
+    "qa.evaluate", "qa.report", "exec.test", "documents.search", "documents.summarize", "task.status",
     "browser.visual", "browser.screenshot", "code.symbols"
   ],
-  video_producer: ["video.brief", "video.storyboard", "video.provider_job"],
+  video_producer: ["video.brief", "video.storyboard", "video.provider_job", "task.status"],
 };
 
 export const DEFAULT_AGENT_TOOL: Record<SpecialistAgent, string> = {
