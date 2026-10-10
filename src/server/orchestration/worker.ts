@@ -168,7 +168,7 @@ async function processClaimedJob(pool:Pool,job:ClaimedJob,workerId:string,signal
     let outcome:{success:boolean;error?:string;taskId:number;requestId:string}|undefined;
     if(cancellationReason===null) outcome=await executeQueuedJob(job,cancellation);
     if(cancellationReason!==null){
-      await cancellationPromise?.catch(()=>undefined);
+      await (cancellationPromise as Promise<void>|null)?.catch(()=>undefined);
       if(cancellationReason==="lease_lost") return;
       if(cancellationReason==="requested"&&!cancellationError){
         const acknowledged=await acknowledgeCancelledJob(pool,{tenantId:job.tenant_id,jobId:job.id,workerId,leaseToken:job.lease_token});
@@ -187,7 +187,7 @@ async function processClaimedJob(pool:Pool,job:ClaimedJob,workerId:string,signal
     if(!outcome) throw new Error("WORKER_OUTCOME_MISSING");
     await finishJob(pool,{
       tenantId:job.tenant_id,jobId:job.id,workerId,leaseToken:job.lease_token,
-      success:outcome.success,errorCode:outcome.error,
+      success:outcome.success,...(outcome.error===undefined?{}:{errorCode:outcome.error}),
     });
     await auditWorkerEvent(job,outcome.success?"execution.queue.complete":"execution.queue.failed",outcome.success?"success":(outcome.error==="approval_required"?"denied":"failure"),{
       error:outcome.error??null,attempt:job.attempts,
