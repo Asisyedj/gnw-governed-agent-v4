@@ -68,6 +68,8 @@ jobs:
         run: npm run verify:crypto
       - name: RLS regression gate
         run: npm run verify:rls
+      - name: Durable queue PostgreSQL RLS and lease verification
+        run: npm run verify:queue-rls
       - name: Adversarial governance regression suite
         run: npm test -- --run src/tests/unit/production-controls.test.ts src/tests/unit/attestation.test.ts
       - name: Dependency audit
