@@ -1,7 +1,7 @@
 // GNW Adaptive Immune Defense - Public API
 // BUILD DEFENSE, NOT OFFENSE. VERIFY EVERYTHING. FAIL CLOSED.
 
-import { classifyAnomaly, type ClassificationInput } from "./classifier";
+import { classifyAnomaly, type ClassificationInput } from "./classifier.js";
 
 export type {
   AttackClass,
@@ -10,22 +10,22 @@ export type {
   ThreatMemory,
   DefensiveRule,
   ImmuneState,
-} from "./types";
+} from "./types.js";
 
-export { classifyAnomaly, type ClassificationInput } from "./classifier";
-export { executeContainment, type ContainmentResult } from "./containment";
+export { classifyAnomaly, type ClassificationInput } from "./classifier.js";
+export { executeContainment, type ContainmentResult } from "./containment.js";
 export {
   createThreatMemory,
   getVerifiedThreats,
   getThreatByClass,
   markMemoryResolved,
-} from "./memory";
+} from "./memory.js";
 export {
   proposeDefensiveRule,
   approveRule,
   generateRegressionTestFromThreat,
   getDefensiveLearningSummary,
-} from "./learning";
+} from "./learning.js";
 
 // Integration hook: call this from security.ts pre-checks
 export function immunePreCheck(input: ClassificationInput): { allowed: boolean; reason: string; state: "NORMAL" | "SUSPICIOUS" | "CONTAINED" } {
