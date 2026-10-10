@@ -1,7 +1,7 @@
 // GNW Adaptive Immune Defense - Immune Memory
 // Only verified evidence may create durable defensive memory.
 
-import type { ThreatMemory, AttackClass } from "./types";
+import type { ThreatMemory, AttackClass } from "./types.js";
 
 let memoryStore: ThreatMemory[] = [];
 
