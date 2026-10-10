@@ -32,6 +32,10 @@ try {
     await b.query("BEGIN"); await b.query("SELECT set_config('app.tenant_id',$1,true)",[String(t2)]);
     const hidden=await b.query("SELECT id FROM job_queue WHERE tenant_id=$1",[t1]);
     assert(hidden.rowCount===0,"cross-tenant job read leak");
+    const updated=await b.query("UPDATE job_queue SET last_error_code=$1 WHERE id=$2 RETURNING id",["tenant-b-tamper",crossTenantJobId]);
+    assert(updated.rowCount===0,"cross-tenant job update was not filtered");
+    const deleted=await b.query("DELETE FROM job_queue WHERE id=$1 RETURNING id",[crossTenantJobId]);
+    assert(deleted.rowCount===0,"cross-tenant job delete was not filtered");
     let denied=false;
     try { await b.query("INSERT INTO job_queue(tenant_id,job_type,payload,payload_digest,idempotency_key) VALUES($1,'test.noop','{}'::jsonb,$2,$3)",[t1,"b".repeat(64),`cross-${runId}`]); } catch { denied=true; }
     assert(denied,"cross-tenant job insert allowed");
@@ -41,6 +45,32 @@ try {
     assert(missing.rowCount===0,"tenant context missing but rows visible");
     await b.query("ROLLBACK");
   } finally { a.release(); b.release(); }
+
+  const workflowClient=await pool.connect();
+  let workflowA,workflowB;
+  try {
+    await workflowClient.query("BEGIN");
+    await workflowClient.query("SELECT set_config('app.tenant_id',$1,true)",[String(t1)]);
+    workflowA=(await workflowClient.query("INSERT INTO workflow_runs(tenant_id,deadline_at) VALUES($1,now()+interval '10 minutes') RETURNING id",[t1])).rows[0].id;
+    await workflowClient.query("COMMIT");
+    await workflowClient.query("BEGIN");
+    await workflowClient.query("SELECT set_config('app.tenant_id',$1,true)",[String(t2)]);
+    workflowB=(await workflowClient.query("INSERT INTO workflow_runs(tenant_id,deadline_at) VALUES($1,now()+interval '10 minutes') RETURNING id",[t2])).rows[0].id;
+    await workflowClient.query("COMMIT");
+  } catch(error) { await workflowClient.query("ROLLBACK"); throw error; }
+  finally { workflowClient.release(); }
+
+  // RLS alone permits an A-owned row to reference a B-owned UUID unless the FK binds tenant_id too.
+  let crossWorkflowLinkDenied=false;
+  try {
+    const payload={tenantId:t1};
+    await enqueueJob(pool,{tenantId:t1,workflowId:workflowB,jobType:"test.foreign-key",payload,payloadDigest:expectedDigest(payload),idempotencyKey:`cross-workflow-${runId}`,maxAttempts:1});
+  } catch(error) { crossWorkflowLinkDenied=error instanceof Error; }
+  assert(crossWorkflowLinkDenied,"cross-tenant workflow reference was accepted by job_queue");
+
+  const protectedTables=(await pool.query(`SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class
+    WHERE relname=ANY($1::text[])`,[["workflow_runs","workflow_steps","workflow_events","job_queue"]])).rows;
+  assert(protectedTables.length===4&&protectedTables.every(row=>row.relrowsecurity&&row.relforcerowsecurity),"RLS and FORCE RLS are not enabled for all tenant-owned queue/workflow tables");
 
   const firstPayload={tenantId:t1,taskId:101,actorId:11,requestId:`worker-${runId}-1`};
   const secondPayload={tenantId:t1,taskId:102,actorId:12,requestId:`worker-${runId}-2`};
@@ -92,7 +122,15 @@ try {
   assert(await heartbeatJob(pool,{tenantId:t1,jobId:cancelClaim.id,workerId:`worker-C-${runId}`,leaseToken:cancelClaim.lease_token})===false,"cancelled job lease was renewed");
   assert(await acknowledgeCancelledJob(pool,{tenantId:t1,jobId:cancelClaim.id,workerId:`worker-C-${runId}`,leaseToken:cancelClaim.lease_token}),"worker could not acknowledge confirmed cancellation");
 
-  const finalStatuses=await pool.query("SELECT id,status FROM job_queue WHERE id=ANY($1::uuid[])",[[leaseA.id,stale.id,cancelClaim.id]]);
+  const statusClient=await pool.connect();
+  let finalStatuses;
+  try {
+    await statusClient.query("BEGIN");
+    await statusClient.query("SELECT set_config('app.tenant_id',$1,true)",[String(t1)]);
+    finalStatuses=await statusClient.query("SELECT id,status FROM job_queue WHERE id=ANY($1::uuid[])",[[leaseA.id,stale.id,cancelClaim.id]]);
+    await statusClient.query("COMMIT");
+  } catch(error) { await statusClient.query("ROLLBACK"); throw error; }
+  finally { statusClient.release(); }
   assert(finalStatuses.rows.some(row=>row.id===leaseA.id&&row.status==="leased"),"live job unexpectedly lost its lease");
   assert(finalStatuses.rows.some(row=>row.id===stale.id&&row.status==="retryable"),"recovered job did not return to retryable");
   assert(finalStatuses.rows.some(row=>row.id===cancelClaim.id&&row.status==="cancelled"),"acknowledged cancellation status was not persisted");
@@ -107,8 +145,8 @@ try {
   } finally { verify.release(); }
 
   console.log(JSON.stringify({
-    ok:true,tenantCount:2,rlsTables:5,
-    checks:["cross-tenant read/write blocked","missing context sees no rows","idempotent enqueue","payload conflict denied","concurrent SKIP LOCKED claims distinct jobs","lease heartbeat","expired lease restart recovery","durable cancellation request/ack"],
+    ok:true,tenantCount:2,rlsTables:4,
+    checks:["cross-tenant read/write/update/delete blocked","missing context sees no rows","RLS+FORCE enabled on queue/workflow tables","cross-tenant workflow references blocked","idempotent enqueue","payload conflict denied","concurrent SKIP LOCKED claims distinct jobs","lease heartbeat","expired lease restart recovery","durable cancellation request/ack"],
   }));
 } finally {
   await pool.end();
