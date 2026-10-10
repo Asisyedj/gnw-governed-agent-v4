@@ -1,7 +1,7 @@
 // GNW Adaptive Immune Defense - Attack/Anomaly Classifier
 // Behavior + Authorization + Provenance + Evidence determine trust.
 
-import type { AttackClass, TrustSignal } from "./types.ts";
+import type { AttackClass, TrustSignal } from "./types.js";
 
 export interface ClassificationInput {
   behavior_signals: TrustSignal[];
