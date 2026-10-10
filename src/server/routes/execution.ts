@@ -171,7 +171,7 @@ export const executionRoutes:FastifyPluginAsync=async(app)=>{
       const job=await enqueueJob(pgPool,{
         tenantId:auth.session.tenantId,jobType:GOVERNED_EXECUTION_JOB,
         payload,payloadDigest:digestQueuePayload(payload),
-        idempotencyKey:`execution:${grant.requestId}`,maxAttempts:3,
+        idempotencyKey:`execution:${grant.requestId}`,maxAttempts:1,
       });
       await insertAuditLog(app.db,{eventType:"execution.queue.enqueue",actorId:auth.session.userId,tenantId:auth.session.tenantId,taskId,resourceType:"job",resourceId:String(job.id),outcome:"success",detail:{jobType:GOVERNED_EXECUTION_JOB,payloadDigest:job.payload_digest,actionDigest},requestId:grant.requestId,ipAddress:req.ip});
       return reply.status(202).send({ok:true,queued:true,taskId,jobId:job.id,status:job.status,payloadDigest:job.payload_digest,actionDigest});
