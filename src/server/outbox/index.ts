@@ -7,4 +7,4 @@ export {
   OutboxEvent,
   outboxTable,
   migrationSql,
-} from './OutboxLedger';
+} from './OutboxLedger.js';
