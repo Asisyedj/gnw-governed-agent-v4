@@ -152,7 +152,7 @@ export class Ledger {
     }
 
     // 4. Previous hash chain validation
-    const expectedPreviousHash = this.events.length > 0 ? this.events[this.events.length - 1].event_hash : null;
+    const expectedPreviousHash = this.events.length > 0 ? this.events[this.events.length - 1]?.event_hash ?? null : null;
     if (event.previous_hash !== expectedPreviousHash) {
       throw new LedgerIntegrityError(`invalid previous_hash for event ${event.event_id}`);
     }
@@ -365,7 +365,7 @@ export class Ledger {
           state.tasks[event.task_id] = {
             ...(state.tasks[event.task_id] || { status: "NOT_STARTED" }),
             status: "VERIFIED_COMPLETE",
-            proof_id: event.proof_id,
+            ...(event.proof_id ? { proof_id: event.proof_id } : {}),
           };
         }
         break;
