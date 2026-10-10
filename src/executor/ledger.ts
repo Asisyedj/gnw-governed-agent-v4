@@ -92,6 +92,15 @@ function canonicalJson(obj: unknown): string {
   return JSON.stringify(obj, Object.keys(obj as object).sort());
 }
 
+/** Deep-freeze a private ledger snapshot so accidental internal writes fail closed. */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as object)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 /**
  * Compute event hash from its fields (excluding event_hash itself).
  */
@@ -130,47 +139,58 @@ export class Ledger {
   async append(
     event: Omit<LedgerEvent, "event_hash"> & { event_hash?: string }
   ): Promise<LedgerEvent> {
+    // Snapshot caller-owned data before the first await to prevent TOCTOU mutation.
+    const snapshot: Omit<LedgerEvent, "event_hash"> = {
+      event_id: event.event_id,
+      event_type: event.event_type,
+      mission_id: event.mission_id,
+      ...(event.task_id === undefined ? {} : { task_id: event.task_id }),
+      ...(event.proof_id === undefined ? {} : { proof_id: event.proof_id }),
+      caused_by: [...event.caused_by],
+      timestamp: event.timestamp,
+      payload: structuredClone(event.payload),
+      previous_hash: event.previous_hash,
+    };
+
     // 1. Duplicate event_id check
-    if (this.eventIndex.has(event.event_id)) {
-      throw new InvalidLedgerEventError(event.event_id, "duplicate event_id");
+    if (this.eventIndex.has(snapshot.event_id)) {
+      throw new InvalidLedgerEventError(snapshot.event_id, "duplicate event_id");
     }
 
     // 2. Causality validation
-    for (const parentId of event.caused_by) {
-      if (parentId === event.event_id) {
-        throw new InvalidLedgerEventError(event.event_id, "self-causation");
+    for (const parentId of snapshot.caused_by) {
+      if (parentId === snapshot.event_id) {
+        throw new InvalidLedgerEventError(snapshot.event_id, "self-causation");
       }
       if (!this.eventIndex.has(parentId)) {
-        throw new InvalidLedgerEventError(event.event_id, `missing causal parent ${parentId}`);
+        throw new InvalidLedgerEventError(snapshot.event_id, `missing causal parent ${parentId}`);
       }
     }
 
     // 3. Hash integrity: compute and compare (if provided)
-    const computedHash = await computeEventHash(event, this.hashFn);
+    const computedHash = await computeEventHash(snapshot, this.hashFn);
     if (event.event_hash !== undefined && event.event_hash !== computedHash) {
-      throw new LedgerIntegrityError(`hash mismatch for event ${event.event_id}`);
+      throw new LedgerIntegrityError(`hash mismatch for event ${snapshot.event_id}`);
     }
 
     // 4. Previous hash chain validation
     const expectedPreviousHash = this.events.length > 0 ? this.events[this.events.length - 1]?.event_hash ?? null : null;
-    if (event.previous_hash !== expectedPreviousHash) {
-      throw new LedgerIntegrityError(`invalid previous_hash for event ${event.event_id}`);
+    if (snapshot.previous_hash !== expectedPreviousHash) {
+      throw new LedgerIntegrityError(`invalid previous_hash for event ${snapshot.event_id}`);
     }
 
     // 5. State transition validation (fail-closed)
-    this.validateTransition(event);
+    this.validateTransition(snapshot);
 
-    // 6. Construct final event with computed hash
-    const finalEvent: LedgerEvent = {
-      ...event,
-      event_hash: computedHash,
-    };
+    // 6. Construct and freeze the internal event; never retain caller-owned objects.
+    const finalEvent = deepFreeze({ ...snapshot, event_hash: computedHash }) as LedgerEvent;
 
     // 7. Append (immutable: never modify existing events)
     this.events.push(finalEvent);
     this.eventIndex.set(finalEvent.event_id, this.events.length - 1);
 
-    return finalEvent;
+    // Never return the internal reference to a caller.
+    return structuredClone(finalEvent);
   }
 
   /**
@@ -254,14 +274,15 @@ export class Ledger {
   getEvent(eventId: string): LedgerEvent | undefined {
     const idx = this.eventIndex.get(eventId);
     if (idx === undefined) return undefined;
-    return this.events[idx];
+    const event = this.events[idx];
+    return event === undefined ? undefined : structuredClone(event);
   }
 
   /**
    * Read-only retrieval: get all events (immutable copy).
    */
   getAllEvents(): LedgerEvent[] {
-    return [...this.events];
+    return this.events.map(event => structuredClone(event));
   }
 
   /**
