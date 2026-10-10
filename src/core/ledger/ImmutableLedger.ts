@@ -118,7 +118,9 @@ export class ImmutableLedger {
     if (this.entries.length === 0) {
       return this.getGenesisHash();
     }
-    return this.entries[this.entries.length - 1].hash;
+    const latest = this.entries[this.entries.length - 1];
+    if (!latest) throw new Error("LEDGER_EMPTY");
+    return latest.hash;
   }
 
   /**
