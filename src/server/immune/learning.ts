@@ -1,8 +1,8 @@
 // GNW Adaptive Immune Defense - Learning Without Self-Corruption
 // RAW OBSERVATION → SANITIZATION → INDEPENDENT ANALYSIS → VERIFICATION → DEFENSIVE KNOWLEDGE → REGRESSION TEST → APPROVAL → ACTIVE RULE
 
-import type { ThreatMemory, DefensiveRule } from "./types";
-import { getVerifiedThreats } from "./memory";
+import type { ThreatMemory, DefensiveRule } from "./types.js";
+import { getVerifiedThreats } from "./memory.js";
 
 export function proposeDefensiveRule(fromMemories: ThreatMemory[], description: string): DefensiveRule {
   // Defense monotonicity: rules must not reduce security posture
