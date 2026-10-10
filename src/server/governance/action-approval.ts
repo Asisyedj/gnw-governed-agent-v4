@@ -3,7 +3,11 @@ import type { Pool, PoolClient } from "pg";
 
 export type ActionBinding = { tenantId:number; taskId?:number; actorId:number; approverId:number; actionType:string; toolId:string; target:string; payload:unknown };
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (value === undefined || typeof value === "function" || typeof value === "symbol" || typeof value === "bigint") {
+    throw new Error("NON_JSON_ACTION_PAYLOAD");
+  }
+  if (typeof value === "number" && !Number.isFinite(value)) throw new Error("NON_JSON_ACTION_PAYLOAD");
+  if (value === null || typeof value !== "object") return JSON.stringify(value) as string;
   if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
   const obj=value as Record<string,unknown>;
   return "{" + Object.keys(obj).sort().map(k => JSON.stringify(k)+":"+canonicalJson(obj[k])).join(",") + "}";
