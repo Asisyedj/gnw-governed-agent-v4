@@ -29,7 +29,7 @@
     "verify:compliance": "node scripts/verify-compliance-matrix.mjs",
     "verify:release:evidence": "node scripts/verify-release-evidence.mjs",
     "verify:git-release-metadata": "node scripts/verify-git-release-metadata.mjs",
-    "verify:queue-rls": "node scripts/test-durable-queue-rls.mjs",
+    "verify:queue-rls": "node --import tsx scripts/test-durable-queue-rls.mjs",
     "worker": "node dist/server/orchestration/worker-main.js"
   },
   "dependencies": {
