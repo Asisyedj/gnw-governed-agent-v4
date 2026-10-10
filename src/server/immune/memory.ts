@@ -1,7 +1,7 @@
 // GNW Adaptive Immune Defense - Immune Memory
 // Only verified evidence may create durable defensive memory.
 
-import type { ThreatMemory, AttackClass } from "./types.ts";
+import type { ThreatMemory, AttackClass } from "./types";
 
 let memoryStore: ThreatMemory[] = [];
 
@@ -51,5 +51,7 @@ export function getThreatByClass(attack_class: AttackClass): ThreatMemory[] {
 export function markMemoryResolved(memory_id: string, status: "verified" | "rejected" | "unresolved"): void {
   const idx = memoryStore.findIndex((m) => m.memory_id === memory_id);
   if (idx === -1) throw new Error(`Threat memory ${memory_id} not found`);
-  memoryStore[idx].status = status;
+  const memory = memoryStore[idx];
+  if (!memory) throw new Error(`Threat memory ${memory_id} not found`);
+  memory.status = status;
 }
