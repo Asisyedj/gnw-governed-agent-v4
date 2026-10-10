@@ -16,6 +16,9 @@ import {
 } from "../repo.js";
 import { resolveSession } from "./auth.js";
 import type { Db } from "../db/index.js";
+import { pgPool } from "../db/index.js";
+import { enqueueJob, requestJobCancellation } from "../orchestration/durable-queue.js";
+import { digestQueuePayload, GOVERNED_EXECUTION_JOB } from "../orchestration/queue-payload.js";
 
 declare module "fastify" { interface FastifyInstance { db: Db; } }
 
@@ -121,6 +124,80 @@ function validateSignedGrant(grant:GovernanceRequest){
 }
 
 export const executionRoutes:FastifyPluginAsync=async(app)=>{
+  app.post("/:id/execute/queued",async(req,reply)=>{
+    const auth=await authenticate(app,req);
+    if("error" in auth) return reply.status(auth.error.status).send(auth.error.body);
+    const taskId=Number((req.params as {id:string}).id);
+    if(!Number.isSafeInteger(taskId)||taskId<=0) return reply.status(400).send({error:"Invalid task ID",code:"invalid_task_id"});
+    const task=await findTaskById(app.db,taskId,auth.session.tenantId);
+    if(!task) return reply.status(404).send({error:"Task not found",code:"not_found"});
+    if(["done","failed","cancelled"].includes(task.status)) return reply.status(409).send({error:"Task is already terminal.",code:"task_terminal"});
+
+    const parsed=executionSchema.safeParse(req.body);
+    if(!parsed.success) return reply.status(400).send({error:"Invalid execution request",details:parsed.error.issues});
+    const envelope=parsed.data.envelope as ActionEnvelope;
+    const grant=parsed.data.grant as GovernanceRequest;
+
+    try{
+      if(grant.taskId!==taskId) throw new Error("task_binding");
+      if(Number(grant.tenant)!==auth.session.tenantId||Number(grant.subject)!==auth.session.userId||grant.role!==auth.user.role) throw new Error("identity_binding");
+      if(legacyTaskClassification(task.classification)!==grant.classification) throw new Error("classification_binding");
+      if(grant.budgetTokens>task.budgetTokensAllocated-task.budgetTokensUsed||grant.budgetBytes>task.budgetBytesAllocated-task.budgetBytesUsed) throw new Error("task_budget_exceeded");
+      validateEnvelope(envelope,Date.now(),300_000,{taskId,tenantId:auth.session.tenantId,actorId:auth.session.userId,grantId:envelope.grantId,nonce:grant.nonce,operation:grant.operation,tool:grant.tool});
+      const envelopeDigest=digestEnvelope(envelope);
+      if(envelopeDigest!==grant.envelopeDigest) throw new Error("governance_digest_mismatch");
+      if(!validateSignedGrant(grant)) throw new Error("invalid_grant_signature");
+
+      const actionDigest=digestRequest(grant);
+      if(requiresHumanApproval(grant)){
+        if(parsed.data.approvalId===undefined){
+          return reply.status(428).send({ok:false,code:"approval_required",actionDigest,message:"An approved, exact-digest approval record is required before queueing this action."});
+        }
+        const row=await findApprovalById(app.db,parsed.data.approvalId,auth.session.tenantId);
+        if(!row) return reply.status(404).send({error:"Approval not found",code:"approval_not_found"});
+        if(row.status==="denied") return reply.status(409).send({error:"Approval denied.",code:"approval_denied"});
+        if(row.status!=="approved") return reply.status(428).send({ok:false,code:"approval_required",actionDigest});
+        if(row.expiresAt.getTime()<=Date.now()) return reply.status(410).send({error:"Approval expired.",code:"approval_expired"});
+        if(row.actionDigest!==actionDigest||row.requestId!==grant.requestId||row.tenantId!==auth.session.tenantId) {
+          throw new Error("approval_binding");
+        }
+      }
+
+      const payload={
+        version:1 as const,taskId,tenantId:auth.session.tenantId,actorId:auth.session.userId,
+        role:auth.user.role,requestId:grant.requestId,grant,envelope,
+        ...(parsed.data.approvalId===undefined?{}:{approvalId:parsed.data.approvalId}),
+      };
+      const job=await enqueueJob(pgPool,{
+        tenantId:auth.session.tenantId,jobType:GOVERNED_EXECUTION_JOB,
+        payload,payloadDigest:digestQueuePayload(payload),
+        idempotencyKey:`execution:${grant.requestId}`,maxAttempts:1,
+      });
+      await insertAuditLog(app.db,{eventType:"execution.queue.enqueue",actorId:auth.session.userId,tenantId:auth.session.tenantId,taskId,resourceType:"job",resourceId:String(job.id),outcome:"success",detail:{jobType:GOVERNED_EXECUTION_JOB,payloadDigest:job.payload_digest,actionDigest},requestId:grant.requestId,ipAddress:req.ip});
+      return reply.status(202).send({ok:true,queued:true,taskId,jobId:job.id,status:job.status,payloadDigest:job.payload_digest,actionDigest});
+    }catch(error){
+      const message=error instanceof Error?error.message:String(error);
+      await insertAuditLog(app.db,{eventType:"governance.deny",actorId:auth.session.userId,tenantId:auth.session.tenantId,taskId,resourceType:"task",resourceId:String(taskId),outcome:"denied",detail:{reason:message,stage:"queue_enqueue"},requestId:grant.requestId,ipAddress:req.ip}).catch(()=>undefined);
+      return reply.status(message==="grant_expired"?410:400).send({error:"Queued execution request refused.",code:message});
+    }
+  });
+
+  app.post("/:id/execute/jobs/:jobId/cancel",async(req,reply)=>{
+    const auth=await authenticate(app,req);
+    if("error" in auth) return reply.status(auth.error.status).send(auth.error.body);
+    const taskId=Number((req.params as {id:string}).id);
+    const jobId=(req.params as {jobId:string}).jobId;
+    if(!Number.isSafeInteger(taskId)||taskId<=0) return reply.status(400).send({error:"Invalid task ID",code:"invalid_task_id"});
+    if(!z.string().uuid().safeParse(jobId).success) return reply.status(400).send({error:"Invalid job ID",code:"invalid_job_id"});
+    const task=await findTaskById(app.db,taskId,auth.session.tenantId);
+    if(!task) return reply.status(404).send({error:"Task not found",code:"not_found"});
+    const elevated=auth.user.role==="owner"||auth.user.role==="admin";
+    const result=await requestJobCancellation(pgPool,auth.session.tenantId,jobId,taskId,elevated?undefined:auth.session.userId);
+    if(!result) return reply.status(404).send({error:"Queued execution job not found.",code:"job_not_found"});
+    if(result.status==="cancelled") await updateTaskStatus(app.db,taskId,auth.session.tenantId,"cancelled","cancelled_before_worker_claim");
+    await insertAuditLog(app.db,{eventType:"execution.cancel_request",actorId:auth.session.userId,tenantId:auth.session.tenantId,taskId,resourceType:"job",resourceId:jobId,outcome:"success",detail:{status:result.status},requestId:req.id,ipAddress:req.ip});
+    return reply.send({ok:true,jobId,status:result.status,cancellationConfirmed:result.status==="cancelled"});
+  });
   app.post("/:id/execute/approval",async(req,reply)=>{
     const auth=await authenticate(app,req);
     if("error" in auth) return reply.status(auth.error.status).send(auth.error.body);

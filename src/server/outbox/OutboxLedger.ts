@@ -105,7 +105,9 @@ export class OutboxLedger {
       ]
     );
 
-    return result.rows[0];
+    const row = result.rows[0];
+    if (!row) throw new Error("OUTBOX_INSERT_RETURNED_NO_ROW");
+    return row;
   }
 
   /**
@@ -246,7 +248,9 @@ export class OutboxLedger {
       `
     );
 
-    return parseInt(result.rows[0].count, 10);
+    const row = result.rows[0];
+    if (!row) throw new Error("OUTBOX_COUNT_RETURNED_NO_ROW");
+    return parseInt(row.count, 10);
   }
 }
 

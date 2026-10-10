@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyAnomaly } from "../../server/immune/classifier.ts";
+import { classifyAnomaly } from "../../server/immune/classifier.js";
 
 describe("Adaptive Immune Defense - Classifier", () => {
   it("blocks unknown anomaly with no evidence (fail closed)", () => {

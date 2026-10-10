@@ -80,6 +80,8 @@ jobs:
         run: npm run verify:crypto
       - name: Database RLS verification
         run: npm run verify:rls
+      - name: Durable queue PostgreSQL RLS and lease verification
+        run: npm run verify:queue-rls
       - name: Backup and restore drill
         env:
           PGPASSWORD: gnw_admin_pw

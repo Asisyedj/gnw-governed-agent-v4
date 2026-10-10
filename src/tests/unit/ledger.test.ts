@@ -166,45 +166,30 @@ describe("Ledger", () => {
   });
 
   it("replays same events twice to identical state", async () => {
-    const events: Omit<LedgerEvent, "event_hash">[] = [
-      {
-        event_id: "EVT-000",
-        event_type: "MISSION_CREATED",
-        mission_id: "MISSION-001",
-        caused_by: [],
-        timestamp: "2026-10-05T00:00:00.000Z",
-        payload: {},
-        previous_hash: null,
-      },
-      {
-        event_id: "EVT-001",
-        event_type: "MISSION_PLANNED",
-        mission_id: "MISSION-001",
-        caused_by: ["EVT-000"],
-        timestamp: "2026-10-05T00:00:01.000Z",
-        payload: {},
-        previous_hash: "", // will be overwritten in replay
-      },
-    ];
+    const source = new Ledger(deps);
+    const evt0 = await source.append({
+      event_id: "EVT-000",
+      event_type: "MISSION_CREATED",
+      mission_id: "MISSION-001",
+      caused_by: [],
+      timestamp: "2026-10-05T00:00:00.000Z",
+      payload: {},
+      previous_hash: null,
+    });
+    await source.append({
+      event_id: "EVT-001",
+      event_type: "MISSION_PLANNED",
+      mission_id: "MISSION-001",
+      caused_by: ["EVT-000"],
+      timestamp: "2026-10-05T00:00:01.000Z",
+      payload: {},
+      previous_hash: evt0.event_hash,
+    });
 
-    // First replay
-    const ledger1 = await Ledger.replay(
-      events.map((e, i) => ({
-        ...e,
-        previous_hash: i === 0 ? null : "placeholder",
-      })) as LedgerEvent[],
-      deps
-    );
+    const events = source.export();
+    const ledger1 = await Ledger.replay(events, deps);
+    const ledger2 = await Ledger.replay(events, deps);
     const state1 = ledger1.reconstructState();
-
-    // Second replay with same events
-    const ledger2 = await Ledger.replay(
-      events.map((e, i) => ({
-        ...e,
-        previous_hash: i === 0 ? null : "placeholder",
-      })) as LedgerEvent[],
-      deps
-    );
     const state2 = ledger2.reconstructState();
 
     expect(state1.mission_status).toBe(state2.mission_status);
@@ -215,7 +200,7 @@ describe("Ledger", () => {
   it("rejects TASK_VERIFIED without prior VERIFICATION_COMPLETED", async () => {
     const ledger = new Ledger(deps);
 
-    await ledger.append({
+    const evt0 = await ledger.append({
       event_id: "EVT-000",
       event_type: "MISSION_CREATED",
       mission_id: "MISSION-001",
@@ -225,7 +210,7 @@ describe("Ledger", () => {
       previous_hash: null,
     });
 
-    await ledger.append({
+    const evt1 = await ledger.append({
       event_id: "EVT-001",
       event_type: "TASK_CREATED",
       mission_id: "MISSION-001",
@@ -233,7 +218,7 @@ describe("Ledger", () => {
       caused_by: ["EVT-000"],
       timestamp: deps.nowIso(),
       payload: {},
-      previous_hash: "placeholder",
+      previous_hash: evt0.event_hash,
     });
 
     await expect(
@@ -246,7 +231,7 @@ describe("Ledger", () => {
         caused_by: ["EVT-001"],
         timestamp: deps.nowIso(),
         payload: {},
-        previous_hash: "placeholder",
+        previous_hash: evt1.event_hash,
       })
     ).rejects.toThrow(InvalidLedgerEventError);
   });
@@ -254,7 +239,7 @@ describe("Ledger", () => {
   it("rejects MISSION_COMPLETED without satisfied DoD", async () => {
     const ledger = new Ledger(deps);
 
-    await ledger.append({
+    const evt0 = await ledger.append({
       event_id: "EVT-000",
       event_type: "MISSION_CREATED",
       mission_id: "MISSION-001",
@@ -272,7 +257,7 @@ describe("Ledger", () => {
         caused_by: ["EVT-000"],
         timestamp: deps.nowIso(),
         payload: {},
-        previous_hash: "placeholder",
+        previous_hash: evt0.event_hash,
       })
     ).rejects.toThrow(InvalidLedgerEventError);
   });
@@ -280,8 +265,7 @@ describe("Ledger", () => {
   it("rejects events after terminal mission state", async () => {
     const ledger = new Ledger(deps);
 
-    // Create mission and satisfy DoD
-    await ledger.append({
+    const evt0 = await ledger.append({
       event_id: "EVT-000",
       event_type: "MISSION_CREATED",
       mission_id: "MISSION-001",
@@ -291,27 +275,26 @@ describe("Ledger", () => {
       previous_hash: null,
     });
 
-    await ledger.append({
+    const evt1 = await ledger.append({
       event_id: "EVT-001",
       event_type: "DOD_RECALCULATED",
       mission_id: "MISSION-001",
       caused_by: ["EVT-000"],
       timestamp: deps.nowIso(),
       payload: { BUILD: true, DEPLOY: true, HEALTH: true, SECURITY: true },
-      previous_hash: "placeholder",
+      previous_hash: evt0.event_hash,
     });
 
-    await ledger.append({
+    const evt2 = await ledger.append({
       event_id: "EVT-002",
       event_type: "MISSION_COMPLETED",
       mission_id: "MISSION-001",
       caused_by: ["EVT-001"],
       timestamp: deps.nowIso(),
       payload: {},
-      previous_hash: "placeholder",
+      previous_hash: evt1.event_hash,
     });
 
-    // Attempt to append after completion
     await expect(
       ledger.append({
         event_id: "EVT-003",
@@ -321,7 +304,7 @@ describe("Ledger", () => {
         caused_by: ["EVT-002"],
         timestamp: deps.nowIso(),
         payload: {},
-        previous_hash: "placeholder",
+        previous_hash: evt2.event_hash,
       })
     ).rejects.toThrow(InvalidLedgerEventError);
   });
@@ -329,7 +312,7 @@ describe("Ledger", () => {
   it("reconstructs same state from exported event stream (restart recovery)", async () => {
     const ledger = new Ledger(deps);
 
-    await ledger.append({
+    const evt0 = await ledger.append({
       event_id: "EVT-000",
       event_type: "MISSION_CREATED",
       mission_id: "MISSION-001",
@@ -346,7 +329,7 @@ describe("Ledger", () => {
       caused_by: ["EVT-000"],
       timestamp: deps.nowIso(),
       payload: {},
-      previous_hash: "placeholder",
+      previous_hash: evt0.event_hash,
     });
 
     const exported = ledger.export();

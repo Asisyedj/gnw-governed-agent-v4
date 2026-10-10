@@ -208,9 +208,8 @@ export class AgriculturalOrchestrator {
         plantingDate,
         harvestDate,
         fieldId,
-        soilAnalytics: field.cropHistory.length > 0
-          ? field.cropHistory[field.cropHistory.length - 1].soilAnalytics
-          : this.getDefaultSoilAnalytics(field.soilType),
+        soilAnalytics: field.cropHistory[field.cropHistory.length - 1]?.soilAnalytics
+          ?? this.getDefaultSoilAnalytics(field.soilType),
         yieldEstimate: this.estimateYield(plan.crop, field.soilType),
       };
 
