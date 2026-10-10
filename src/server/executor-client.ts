@@ -20,3 +20,40 @@ export async function callExecutor(env:Env,command:string[],opts?:{cwd?:string;t
   if(!data||typeof data!=="object")throw new Error("executor_response_invalid");
   return data as ExecutorResult;
 }
+/**
+ * Requests cancellation from the isolated executor. The executor must implement an
+ * idempotent requestId fence and return { cancelled: true, requestId } only after
+ * the child process and its descendants are confirmed stopped.
+ */
+export async function cancelExecutor(
+  env:Env,
+  input:{requestId:string;actionDigest:string;reason:string}
+):Promise<void>{
+  if(!env.executorUrl) throw new Error("executor_url_not_configured");
+  if(!/^[a-f0-9]{64}$/.test(input.actionDigest)) throw new Error("executor_cancel_action_digest_invalid");
+  const url=new URL(`${env.executorUrl}/cancel`);
+  if(env.isProduction&&url.protocol!=="https:") throw new Error("executor_https_required");
+  const issuedAt=Date.now();
+  const payload=JSON.stringify({requestId:input.requestId,issuedAt,actionDigest:input.actionDigest,reason:input.reason.slice(0,200)});
+  const digest=bodyDigest(payload);
+  const res=await fetch(url,{
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "authorization":`Bearer ${token(env,input.requestId,issuedAt,digest)}`,
+      "x-gnw-request-id":input.requestId,
+      "x-gnw-issued-at":String(issuedAt),
+      "x-gnw-body-sha256":digest,
+    },
+    body:payload,
+    redirect:"error",
+    signal:AbortSignal.timeout(5_000),
+  });
+  if(!res.ok) throw new Error(`Executor cancellation HTTP ${res.status}`);
+  const result=await res.json() as unknown;
+  if(!result||typeof result!=="object"||
+     (result as {cancelled?:unknown}).cancelled!==true||
+     (result as {requestId?:unknown}).requestId!==input.requestId){
+    throw new Error("executor_cancel_unconfirmed");
+  }
+}
