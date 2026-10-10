@@ -140,5 +140,3 @@ export async function executeReadOnlyAgentTool(ctx: ReadOnlyContext, tool: strin
     default: throw new Error("unsupported_read_only_agent_tool");
   }
 }
-
-[executed on device: cloud-pc-6nly3e7f (c1e53d3a-bb1c-4963-9a97-d44ce659fb63)]
