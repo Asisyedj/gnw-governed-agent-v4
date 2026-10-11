@@ -58,8 +58,11 @@ export function isPrivateAddress(host: string): boolean {
     const v4 = Number(parsed & 0xffffffffn);
     return isPrivateIpv4([v4 >>> 24, (v4 >>> 16) & 255, (v4 >>> 8) & 255, v4 & 255].join("."));
   }
-  // Unspecified, loopback, unique-local (fc00::/7), link-local (fe80::/10), multicast.
+  // Unspecified, loopback, deprecated IPv4-compatible, unique-local (fc00::/7),
+  // link-local (fe80::/10), multicast, and documentation-only 2001:db8::/32.
   return parsed === 0n || parsed === 1n ||
+    (parsed >> 32n) === 0n ||
+    (parsed >> 96n) === 0x20010db8n ||
     (parsed >> 121n) === 0x7en ||
     (parsed >> 118n) === 0x3fan ||
     (parsed >> 120n) === 0xffn;
