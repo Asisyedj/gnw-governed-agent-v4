@@ -24,7 +24,7 @@ export const AGENT_TOOL_SCOPES: Record<SpecialistAgent, readonly string[]> = {
     "file.read", "files.read", "file.write", "file.patch", "file.list", "task.status",
     "browser.visual", "browser.screenshot",
     "git.status", "git.diff", "git.commit", "git.branch", "github.pr",
-    "memory.store", "memory.query", "code.symbols", "code.definition"
+    "memory.store", "memory.query", "code.symbols", "code.definition", "docs.write"
   ],
   qa: [
     "qa.evaluate", "qa.report", "exec.test", "documents.search", "documents.summarize", "task.status",

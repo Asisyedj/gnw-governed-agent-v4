@@ -8,6 +8,7 @@ import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "
 import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
 import { executeReadOnlyAgentTool, isReadOnlyAgentTool } from "./agent-tools.js";
+import { executeDocsWrite } from "./write-tools.js";
 
 export type ExecutionContext={
   db:Db; env:Env; taskId:number; tenantId:number; actorId:number; role:string; requestId:string;
@@ -38,6 +39,7 @@ function commandFromParameters(tool:string, parameters:unknown): { command:strin
 
 export async function executeGovernedTool(ctx:ExecutionContext,tool:string,parameters:unknown,actionDigest:string):Promise<unknown>{
   if (isReadOnlyAgentTool(tool)) return executeReadOnlyAgentTool(ctx,tool,parameters);
+  if (tool === "docs.write") return executeDocsWrite({ db: ctx.db, env: ctx.env, taskId: ctx.taskId, tenantId: ctx.tenantId }, parameters);
   const spec=commandFromParameters(tool,parameters);
   if (tool!=="exec.command" && tool!=="exec.test" && tool!=="exec.python") throw new Error("unsupported_governed_tool");
   return callExecutor(ctx.env,spec.command,{
