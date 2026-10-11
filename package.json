@@ -28,7 +28,11 @@
     "verify:crypto": "node scripts/verify-cryptographic-closure.mjs",
     "verify:compliance": "node scripts/verify-compliance-matrix.mjs",
     "verify:release:evidence": "node scripts/verify-release-evidence.mjs",
-    "verify:git-release-metadata": "node scripts/verify-git-release-metadata.mjs"
+    "verify:git-release-metadata": "node scripts/verify-git-release-metadata.mjs",
+    "staging:rollback": "node scripts/staging-rollback.mjs",
+    "test:rls:policy-suite": "node scripts/test-rls-policy-suite.mjs",
+    "test:harness": "vitest run src/tests/integration/tool-integration-harness.test.ts",
+    "verify:certificate": "node scripts/verify-production-certificate.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

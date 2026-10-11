@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnw.invalid/schemas/production-certification-evidence.schema.json",
+  "title": "GNW Candidate Release Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "candidate",
+    "environment",
+    "scope",
+    "gates",
+    "independentReview",
+    "releaseOwner"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "commitSha",
+        "artifactSha256",
+        "gitClean"
+      ],
+      "properties": {
+        "commitSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "artifactSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "gitClean": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "local",
+            "ci",
+            "staging",
+            "production"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "gates": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status",
+          "evidenceRef",
+          "verifiedAt"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED",
+              "NOT_TESTED"
+            ]
+          },
+          "evidenceRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "independentReview": {
+      "type": "object",
+      "required": [
+        "decision",
+        "reviewer",
+        "reviewedAt",
+        "decisionEvidenceRef"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "APPROVE",
+            "DENY",
+            "HOLD"
+          ]
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decisionEvidenceRef": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "releaseOwner": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

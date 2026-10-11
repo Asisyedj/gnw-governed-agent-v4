@@ -1,0 +1,9 @@
+{
+  "9999_ci_rollback_drill.sql": {
+    "purpose": "Disposable CI-only rollback validation; never use as a real staging migration",
+    "forwardSha256": "061f8beaaa84be6c6835ea5f039b0fe7c661755ad63217e1629292a69d491bba",
+    "rollbackFile": "scripts/fixtures/9999_ci_rollback_drill.rollback.sql",
+    "rollbackSha256": "f2901f51ab1d0b266e995e85e1f72d54547b438f21a04faa1346435f9ed71560",
+    "verifySql": "SELECT to_regclass('public.gnw_ci_rollback_drill') IS NULL AS passed"
+  }
+}

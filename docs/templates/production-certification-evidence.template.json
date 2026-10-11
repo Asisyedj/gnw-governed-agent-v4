@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "candidate": {
+    "commitSha": "",
+    "artifactSha256": "",
+    "gitClean": false
+  },
+  "environment": {
+    "id": "",
+    "type": "staging"
+  },
+  "scope": "",
+  "gates": {
+    "sourceIdentity": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "reproducibleBuild": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "automatedTests": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "databaseRls": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "approvalAndReplayControls": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "tenLiveIntegrations": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "liveEndToEndMission": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "backupRestoreDrill": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "stagingRollbackDrill": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "securityAssessment": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "supplyChainProvenance": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    },
+    "observabilityAndRunbooks": {
+      "status": "NOT_TESTED",
+      "evidenceRef": "",
+      "verifiedAt": ""
+    }
+  },
+  "independentReview": {
+    "decision": "HOLD",
+    "approved": false,
+    "reviewer": "",
+    "reviewedAt": "",
+    "decisionEvidenceRef": ""
+  },
+  "releaseOwner": ""
+}
