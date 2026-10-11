@@ -22,7 +22,9 @@ describe("SecureToolIntegrationHarness registration and fail-closed guards", () 
     const harness = new SecureToolIntegrationHarness();
     const handler = vi.fn(async () => "must not execute");
     harness.registerMockTool("knowledge.search", handler);
-    const result = await harness.run(invocation("knowledge.search", "delete"));
+    const request = invocation();
+    request.envelope.operation = "delete";
+    const result = await harness.run(request);
     expect(result.success).toBe(false);
     expect(result.error).toBe("harness_tool_binding_mismatch");
     expect(handler).not.toHaveBeenCalled();
