@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, createPublicKey, sign as cryptoSign, veri
 import dns from "node:dns/promises";
 import https from "node:https";
 import net from "node:net";
+import { isPrivateAddress } from "./lib/ssrf.js";
 
 export function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -38,28 +39,19 @@ export function assertHttpsUrl(raw: string): URL {
 }
 
 export function isPrivateOrLocalHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h === "::1" || h === "0.0.0.0" || h.endsWith(".local") || h.endsWith(".internal") || h === "metadata.google.internal") return true;
-  if (/^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h) || /^127\./.test(h)) return true;
-  if (/^(fc|fd)[0-9a-f]{2}:/i.test(h) || /^fe8[0-9a-f]:/i.test(h) || /^fe9[0-9a-f]:/i.test(h) || /^fea[0-9a-f]:/i.test(h) || /^feb[0-9a-f]:/i.test(h)) return true;
-  return false;
+  return isPrivateAddress(hostname);
 }
 
 function isUnsafeResolvedAddress(address: string): boolean {
   const normalized = address.toLowerCase().replace(/^\[|\]$/g, "");
-  if (net.isIPv4(normalized)) {
-    const parts = normalized.split(".").map(Number);
-    if (parts.length !== 4 || parts.some(n => !Number.isFinite(n))) return true;
-    const [a,b,c,d] = parts as [number,number,number,number];
-    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127) || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+  // DNS answers must be valid literal IPs, and every answer must be public.
+  return net.isIP(normalized) === 0 || isPrivateAddress(normalized);
+}
+
+export function assertSafeResolvedAddresses(resolved: readonly { address: string }[]): void {
+  if (!resolved.length || resolved.some(entry => isUnsafeResolvedAddress(entry.address))) {
+    throw new Error("unsafe_dns_destination");
   }
-  if (net.isIPv6(normalized)) {
-    const h = normalized;
-    if (h === "::" || h === "::1" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe8") || h.startsWith("fe9") || h.startsWith("fea") || h.startsWith("feb") || h.startsWith("ff")) return true;
-    const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped?.[1]) return isUnsafeResolvedAddress(mapped[1]);
-  }
-  return false;
 }
 
 export async function governedFetch(raw: string, init: RequestInit = {}, maxResponseBytes = 4 * 1024 * 1024): Promise<Response> {
@@ -69,7 +61,7 @@ export async function governedFetch(raw: string, init: RequestInit = {}, maxResp
   if (allowedHosts) assertEgressUrl(raw, allowedHosts);
 
   const resolved = await dns.lookup(url.hostname, { all: true, verbatim: true });
-  if (!resolved.length || resolved.some(entry => isUnsafeResolvedAddress(entry.address))) throw new Error("unsafe_dns_destination");
+  assertSafeResolvedAddresses(resolved);
   const target = resolved[0]?.address;
   if (!target) throw new Error("unsafe_dns_destination");
   const method = String(init.method ?? "GET").toUpperCase();

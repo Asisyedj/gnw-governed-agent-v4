@@ -39,6 +39,7 @@ describe("production control primitives",()=>{
  });
  it("covers governance deny/allow/replay/approval/interlock paths",async()=>{
    expect(requiresHumanApproval({operation:"provider_job",classification:"public",agent:"video_producer",tool:"video.provider_job"})).toBe(true);
+   expect(requiresHumanApproval({operation:"write_artifact",classification:"internal",agent:"engineering",tool:"docs.write"})).toBe(true);
    const stores=new MemoryGovernanceStores();
    const g=new GovernanceService(stores,undefined,()=>now);
    const valid=baseRequest();
@@ -115,11 +116,15 @@ vi.mock("../../server/agent-tools.js",()=>({
  isReadOnlyAgentTool:(tool:string)=>["files.read","documents.search","documents.summarize","knowledge.retrieve","task.status"].includes(tool),
  executeReadOnlyAgentTool:async (_ctx:unknown,tool:string,parameters:unknown)=>({tool,parameters}),
 }));
+vi.mock("../../server/write-tools.js",()=>({
+ executeDocsWrite:async (_ctx:unknown,parameters:unknown)=>({tool:"docs.write",parameters}),
+}));
 describe("governed execution boundary",()=>{
  it("dispatches read-only agent tools through the governed dispatcher",async()=>{
    const {executeGovernedTool}=await import("../../server/execution.js");
    const ctx={db:{},env:{} as any,taskId:1,tenantId:1,actorId:1,role:"operator",requestId:"req-readonly",grantId:"g",governanceRequest:baseRequest()} as any;
    await expect(executeGovernedTool(ctx,"task.status",{},"digest")).resolves.toEqual({tool:"task.status",parameters:{}});
+   await expect(executeGovernedTool(ctx,"docs.write",{filename:"summary.md"},"digest")).resolves.toEqual({tool:"docs.write",parameters:{filename:"summary.md"}});
  });
  it("runs handler only after governance admission",async()=>{
    const {executeWithGovernance}=await import("../../server/execution.js");

@@ -19,6 +19,28 @@ export interface StorageDriver {
   list(prefix?: string): Promise<StorageObject[]>;
 }
 
+type AtomicWriteOps = {
+  writeFile: typeof writeFile;
+  rename: typeof rename;
+  unlink: typeof unlink;
+};
+
+/** Write to a unique temporary object and always remove a leftover partial temp file. */
+export async function writeAtomically(
+  tmpPath: string,
+  targetPath: string,
+  data: Buffer | Uint8Array,
+  ops: AtomicWriteOps = { writeFile, rename, unlink },
+): Promise<void> {
+  try {
+    await ops.writeFile(tmpPath, data, { flag: "wx" });
+    await ops.rename(tmpPath, targetPath);
+  } finally {
+    // writeFile can create bytes and then reject; rename can also fail.
+    await ops.unlink(tmpPath).catch(() => {});
+  }
+}
+
 class LocalStorageDriver implements StorageDriver {
   constructor(private readonly dir: string, private readonly baseUrl: string) {}
 
@@ -39,8 +61,7 @@ class LocalStorageDriver implements StorageDriver {
     const filePath = this.safePath(key);
     await mkdir(resolve(filePath, ".."), { recursive: true });
     const tmpPath = filePath + "." + randomUUID() + ".tmp";
-    await writeFile(tmpPath, data, { flag: "wx" });
-    await rename(tmpPath, filePath);
+    await writeAtomically(tmpPath, filePath, data);
     const info = await stat(filePath);
     return { key, url: this.url(key), contentType, size: info.size, uploadedAt: info.mtime };
   }
@@ -50,7 +71,10 @@ class LocalStorageDriver implements StorageDriver {
   }
 
   async delete(key: string): Promise<void> {
-    await unlink(this.safePath(key)).catch(() => {});
+    await unlink(this.safePath(key)).catch((error: unknown) => {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return;
+      throw error;
+    });
   }
 
   url(key: string): string {
