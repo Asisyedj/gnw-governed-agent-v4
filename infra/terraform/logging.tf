@@ -32,7 +32,7 @@ resource "google_project_iam_member" "bigquery_data_editor" {
 resource "google_logging_project_sink" "gnw_audit_sink_bq" {
   name             = "${var.project_prefix}-gnw-audit-sink-bq"
   destination      = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${var.project_prefix}_audit_logs"
-  filter           = 'logName="projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Factivity"'
+  filter           = "logName=\"projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Factivity\""
   unique_writer_identity = true
 }
 
@@ -48,7 +48,7 @@ resource "google_bigquery_dataset" "audit_logs" {
 resource "google_logging_project_sink" "gnw_monitoring_sink" {
   name        = "${var.project_prefix}-gnw-monitoring-sink"
   destination = "pubsub.googleapis.com/projects/${var.project_id}/topics/${var.project_prefix}-gnw-monitoring"
-  filter      = 'severity>=ERROR'
+  filter      = "severity>=ERROR"
   unique_writer_identity = true
 }
 
@@ -105,7 +105,7 @@ resource "google_monitoring_notification_channel" "gnw_email_channel" {
 # Log-based metric for custom monitoring
 resource "google_logging_metric" "gnw_custom_metric" {
   name   = "${var.project_prefix}_gnw_custom_events"
-  filter = 'resource.type="global" AND jsonPayload.eventType=\"gnw_event\"'
+  filter = "resource.type=\"global\" AND jsonPayload.eventType=\"gnw_event\""
 
   metric_descriptor {
     metric_kind  = "DELTA"
