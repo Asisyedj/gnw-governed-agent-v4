@@ -80,6 +80,11 @@ jobs:
         run: npm run verify:crypto
       - name: Database RLS verification
         run: npm run verify:rls
+      - name: Expanded RLS policy suite
+        env:
+          NODE_ENV: test
+          GNW_RLS_EVIDENCE_PATH: rls-policy-suite-results.json
+        run: npm run test:rls:policy-suite
       - name: Backup and restore drill
         env:
           PGPASSWORD: gnw_admin_pw
@@ -94,6 +99,8 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_restore -v ON_ERROR_STOP=1 -c "SELECT 1 FROM tenants WHERE slug='backup-drill-${GITHUB_RUN_ID}' LIMIT 1;"
           dropdb -h 127.0.0.1 -U postgres --if-exists gnw_restore
           rm -f /tmp/gnw-backup.dump
+      - name: Secure governed mock harness tests
+        run: npm run test:harness
       - name: Unit and integration tests
         run: npm run test
       - name: Tests with coverage
@@ -156,9 +163,11 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: coverage-${{ github.sha }}
-          path: coverage
+          path: |
+            coverage
+            rls-policy-suite-results.json
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 90
 
   secret-scan:
     name: Secret Scanning
@@ -216,4 +225,70 @@ jobs:
           path: evidence/
           retention-days: 90
 
-  
+  staging-rollback-drill:
+    name: Staging rollback guard drill (disposable CI database only)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_DB: gnw_rollback_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: gnw_admin_pw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gnw_rollback_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://gnw_migrator:gnw_migrator_pw@localhost:5432/gnw_rollback_test
+      GNW_ENVIRONMENT: staging
+      GNW_STAGING_ROLLBACK_ENABLED: "true"
+      GNW_STAGING_DATABASE_URL: postgresql://gnw_migrator:gnw_migrator_pw@localhost:5432/gnw_rollback_test
+      GNW_STAGING_BACKUP_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_rollback_test
+      GNW_STAGING_DATABASE_NAME: gnw_rollback_test
+      GNW_STAGING_DATABASE_ALLOWLIST: localhost:5432/gnw_rollback_test
+      GNW_POSTGRES_SSL_REQUIRED: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - name: Clean dependency install
+        run: npm ci
+      - name: Provision disposable migration role
+        env:
+          PGPASSWORD: gnw_admin_pw
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U postgres -d gnw_rollback_test -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
+          GRANT CONNECT, TEMPORARY ON DATABASE gnw_rollback_test TO gnw_migrator;
+          GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;
+          SQL
+      - name: Apply disposable forward migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp scripts/fixtures/9999_ci_rollback_drill.sql drizzle/9999_ci_rollback_drill.sql
+          trap 'rm -f drizzle/9999_ci_rollback_drill.sql' EXIT
+          npm run db:migrate
+          node scripts/staging-rollback.mjs --migration=9999_ci_rollback_drill.sql --backup-ref=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} --confirm=ROLLBACK-STAGING
+          test -f rollback-evidence.json
+      - name: Verify rollback ledger record removed
+        env:
+          PGPASSWORD: gnw_migrator_pw
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U gnw_migrator -d gnw_rollback_test -v ON_ERROR_STOP=1 -c "SELECT 1 FROM gnw_migrations WHERE filename='9999_ci_rollback_drill.sql';" | grep -q "0 rows"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: gnw-staging-rollback-drill-${{ github.sha }}
+          path: |
+            rollback-evidence.json
+            artifacts/staging-rollback/
+          if-no-files-found: ignore
+          retention-days: 90

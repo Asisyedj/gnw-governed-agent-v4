@@ -55,3 +55,11 @@ npm test
 ## License
 
 MIT
+
+## GNW production gates and evidence
+
+- Run the expanded database isolation suite with `npm run test:rls:policy-suite` against a disposable test database; use staging only with the documented opt-in and least-privilege credentials.
+- Run governed tool-harness guard tests with `npm run test:harness`. These are mocked-provider tests, not live integration proof.
+- The rollback command is fail-closed and allowlist-bound: `npm run staging:rollback -- --migration=9999_ci_rollback_drill.sql --backup-ref=ci-example --confirm=ROLLBACK-STAGING`. The included allowlist contains only a disposable CI fixture; it is not approval to roll back a real staging migration.
+- Review [`docs/RLS_TESTING.md`](docs/RLS_TESTING.md), [`docs/TOOL_HARNESS_ARCHITECTURE.md`](docs/TOOL_HARNESS_ARCHITECTURE.md), [`docs/PRODUCTION_CERTIFICATION.md`](docs/PRODUCTION_CERTIFICATION.md), and [`docs/RELEASE_SIGN_OFF_AUDIT_TEMPLATE.md`](docs/RELEASE_SIGN_OFF_AUDIT_TEMPLATE.md).
+- The manual `GNW Release Certification Evidence` workflow collects evidence for a specific candidate. A green workflow does not certify live provider integrations or issue production approval. Any missing/blocked evidence keeps the release on HOLD.

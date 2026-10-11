@@ -14,3 +14,10 @@ test-artifacts/
 release/evidence/
 *.tgz
 *.tar.gz
+
+# Generated gate evidence (retain in workflow artifacts)
+/rls-policy-suite-results.json
+/rollback-evidence.json
+/certification/evidence.json
+/certification/verification-result.json
+/artifacts/staging-rollback/

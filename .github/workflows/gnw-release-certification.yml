@@ -1,0 +1,74 @@
+name: GNW Release Certification Evidence
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact candidate commit SHA to evaluate
+        required: true
+        type: string
+jobs:
+  candidate-evidence:
+    name: Collect candidate evidence (not a production certificate)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    environment: gnw-candidate-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with:
+          node-version: '22.x'
+          cache: npm
+      - name: Verify exact source identity
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+          git diff --check
+      - name: Clean dependency install
+        run: npm ci
+      - name: Typecheck and lint
+        run: |
+          npm run typecheck
+          npm run lint
+      - name: Cryptographic, compliance, and release metadata checks
+        run: |
+          npm run verify:production
+          npm run verify:crypto
+          npm run verify:compliance
+          npm run verify:git-release-metadata
+      - name: Existing automated tests
+        run: npm test
+      - name: RLS policy suite
+        env:
+          NODE_ENV: test
+          GNW_RLS_EVIDENCE_PATH: certification-evidence/rls-policy-suite-results.json
+        run: npm run test:rls:policy-suite
+      - name: Governed mock harness tests
+        run: npm run test:harness
+      - name: Coverage and production build
+        run: |
+          npm run test:coverage
+          npm run build
+      - name: Collect candidate hashes and limitations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p certification-evidence
+          git rev-parse HEAD > certification-evidence/candidate-commit-sha.txt
+          sha256sum package-lock.json > certification-evidence/package-lock.sha256
+          if [ -d dist ]; then find dist -type f -print0 | sort -z | xargs -0 sha256sum > certification-evidence/dist.sha256; fi
+          printf '%s\n' 'CANDIDATE_EVIDENCE_ONLY_NOT_A_PRODUCTION_CERTIFICATE' > certification-evidence/decision.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: gnw-candidate-evidence-${{ inputs.candidate_sha }}
+          path: certification-evidence/
+          if-no-files-found: warn
+          retention-days: 90
