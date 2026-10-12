@@ -20,7 +20,7 @@ RUN npm ci --omit=dev --ignore-scripts
 FROM base AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
-RUN addgroup -S gnw && adduser -S gnw -G gnw
+RUN addgroup -S -g 10001 gnw && adduser -S -u 10001 -G gnw gnw
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json ./
