@@ -89,8 +89,8 @@ resource "google_notebooks_instance" "gnw_workbench" {
   network = google_compute_network.gnw_vpc.id
   subnet  = google_compute_subnetwork.gnw_subnet.id
 
-  no_public_ip      = true
-  no_proxy_access   = false
+  no_public_ip    = true
+  no_proxy_access = false
 
   shielded_instance_config {
     enable_secure_boot          = true
