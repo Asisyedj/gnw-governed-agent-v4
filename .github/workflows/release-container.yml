@@ -105,5 +105,5 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          echo "Published image: ghcr.io/${{ github.repository }}@$${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published image: ghcr.io/${{ github.repository }}@${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
           echo "Do not deploy until independent review, staging smoke tests, and rollback verification are complete." >> "$GITHUB_STEP_SUMMARY"
