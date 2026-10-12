@@ -30,25 +30,25 @@ resource "google_project_iam_member" "bigquery_data_editor" {
 }
 
 resource "google_logging_project_sink" "gnw_audit_sink_bq" {
-  name             = "${var.project_prefix}-gnw-audit-sink-bq"
-  destination      = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${var.project_prefix}_audit_logs"
-  filter           = "logName=\"projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Factivity\""
+  name                   = "${var.project_prefix}-gnw-audit-sink-bq"
+  destination            = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${var.project_prefix}_audit_logs"
+  filter                 = "logName=\"projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Factivity\""
   unique_writer_identity = true
 }
 
 resource "google_bigquery_dataset" "audit_logs" {
-  dataset_id    = "${var.project_prefix}_audit_logs"
-  friendly_name = "GNW Audit Logs"
-  description   = "Dataset for GNW audit logs"
-  location      = var.region
+  dataset_id                 = "${var.project_prefix}_audit_logs"
+  friendly_name              = "GNW Audit Logs"
+  description                = "Dataset for GNW audit logs"
+  location                   = var.region
   delete_contents_on_destroy = false
 }
 
 # Log Sink for monitoring to Pub/Sub
 resource "google_logging_project_sink" "gnw_monitoring_sink" {
-  name        = "${var.project_prefix}-gnw-monitoring-sink"
-  destination = "pubsub.googleapis.com/projects/${var.project_id}/topics/${var.project_prefix}-gnw-monitoring"
-  filter      = "severity>=ERROR"
+  name                   = "${var.project_prefix}-gnw-monitoring-sink"
+  destination            = "pubsub.googleapis.com/projects/${var.project_id}/topics/${var.project_prefix}-gnw-monitoring"
+  filter                 = "severity>=ERROR"
   unique_writer_identity = true
 }
 
