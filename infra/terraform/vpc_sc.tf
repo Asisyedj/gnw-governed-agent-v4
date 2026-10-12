@@ -31,10 +31,8 @@ resource "google_access_context_manager_service_perimeter" "gnw_perimeter" {
     # Egress policies - restrict data exfiltration
     egress_policies {
       egress_from {
-        identity_type = "IDENTITY_TYPE_UNSPECIFIED"
-        sources {
-          resource = "projects/${var.project_id}"
-        }
+        identity_type      = "IDENTITY_TYPE_UNSPECIFIED"
+        source_restriction = "SOURCE_RESTRICTION_DISABLED"
       }
       egress_to {
         resources = []
