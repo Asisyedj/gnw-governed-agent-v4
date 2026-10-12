@@ -5,10 +5,10 @@
 
 # VPC Service Controls Perimeter
 resource "google_access_context_manager_service_perimeter" "gnw_perimeter" {
-  parent         = "organizations/${var.organization_id}"
-  name           = "accessPolicies/${var.access_policy_id}/servicePerimeters/${var.project_prefix}-gnw-perimeter"
-  title          = "GNW Governed Agent Perimeter"
-  description    = "VPC Service Controls perimeter for GNW governed agent workloads"
+  parent                    = "organizations/${var.organization_id}"
+  name                      = "accessPolicies/${var.access_policy_id}/servicePerimeters/${var.project_prefix}-gnw-perimeter"
+  title                     = "GNW Governed Agent Perimeter"
+  description               = "VPC Service Controls perimeter for GNW governed agent workloads"
   use_explicit_dry_run_spec = false
 
   status {
