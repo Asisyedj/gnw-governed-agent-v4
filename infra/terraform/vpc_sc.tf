@@ -5,7 +5,7 @@
 
 # VPC Service Controls Perimeter
 resource "google_access_context_manager_service_perimeter" "gnw_perimeter" {
-  parent                    = "organizations/${var.organization_id}"
+  parent                    = "accessPolicies/${var.access_policy_id}"
   name                      = "accessPolicies/${var.access_policy_id}/servicePerimeters/${var.project_prefix}-gnw-perimeter"
   title                     = "GNW Governed Agent Perimeter"
   description               = "VPC Service Controls perimeter for GNW governed agent workloads"
@@ -16,7 +16,7 @@ resource "google_access_context_manager_service_perimeter" "gnw_perimeter" {
       "projects/${var.project_id}"
     ]
 
-    services = [
+    restricted_services = [
       "aiplatform.googleapis.com",
       "storage.googleapis.com",
       "bigquery.googleapis.com",
@@ -93,7 +93,7 @@ resource "google_access_context_manager_access_level" "gnw_access_level" {
 # VPC Service Controls Bridge (optional for premium tier)
 resource "google_access_context_manager_service_perimeter" "gnw_bridge" {
   count          = var.vpc_sc_tier == "PREMIUM" ? 1 : 0
-  parent         = "organizations/${var.organization_id}"
+  parent         = "accessPolicies/${var.access_policy_id}"
   name           = "accessPolicies/${var.access_policy_id}/servicePerimeters/${var.project_prefix}-gnw-bridge"
   title          = "GNW Bridge Perimeter"
   perimeter_type = "PERIMETER_TYPE_BRIDGE"
@@ -101,9 +101,6 @@ resource "google_access_context_manager_service_perimeter" "gnw_bridge" {
   status {
     resources = [
       "projects/${var.project_id}"
-    ]
-    restricted_services = [
-      "aiplatform.googleapis.com",
     ]
   }
 }
