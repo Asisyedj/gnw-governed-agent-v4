@@ -16,11 +16,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede
-      - name: Validate Kubernetes YAML and client-side structure
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.6.7
         run: |
-          kubectl apply --dry-run=client --validate=false -f k8s/configmap.yaml
-          kubectl apply --dry-run=client --validate=false -f k8s/deployment.yaml
+          curl --fail --location --silent --show-error \
+            --output /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          sudo install -m 0755 /tmp/kubeconform /usr/local/bin/kubeconform
+          kubeconform -v
+      - name: Validate Kubernetes schemas without a cluster
+        run: |
+          find k8s -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
+            | xargs -0 kubeconform -strict -summary
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
       - name: Terraform format check
         working-directory: infra/terraform
@@ -48,7 +57,7 @@ jobs:
           push: false
           tags: local/gnw:${{ github.sha }}
       - name: Scan image for HIGH and CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0, official safe release
         with:
           image-ref: local/gnw:${{ github.sha }}
           format: table
