@@ -51,9 +51,6 @@ resource "google_access_context_manager_service_perimeter" "gnw_perimeter" {
     ingress_policies {
       ingress_from {
         identity_type = "IDENTITY_TYPE_UNSPECIFIED"
-        sources {
-          resource = "projects/${var.project_id}"
-        }
       }
       ingress_to {
         resources = [
