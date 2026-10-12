@@ -28,9 +28,9 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       topologySpreadConstraints:
@@ -51,6 +51,13 @@ spec:
                 name: gnw-config
             - secretRef:
                 name: gnw-secrets
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
