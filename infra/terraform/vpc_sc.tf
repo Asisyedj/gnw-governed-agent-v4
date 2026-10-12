@@ -91,17 +91,18 @@ resource "google_access_context_manager_access_level" "gnw_access_level" {
 }
 
 # VPC Service Controls Bridge (optional for premium tier)
-resource "google_access_context_manager_service_perimeter_bridge" "gnw_bridge" {
-  count  = var.vpc_sc_tier == "PREMIUM" ? 1 : 0
-  parent = "organizations/${var.organization_id}"
-  name   = "accessPolicies/${var.access_policy_id}/servicePerimeters/${var.project_prefix}-gnw-bridge"
-  title  = "GNW Bridge Perimeter"
+resource "google_access_context_manager_service_perimeter" "gnw_bridge" {
+  count          = var.vpc_sc_tier == "PREMIUM" ? 1 : 0
+  parent         = "organizations/${var.organization_id}"
+  name           = "accessPolicies/${var.access_policy_id}/servicePerimeters/${var.project_prefix}-gnw-bridge"
+  title          = "GNW Bridge Perimeter"
+  perimeter_type = "PERIMETER_TYPE_BRIDGE"
 
   status {
     resources = [
       "projects/${var.project_id}"
     ]
-    services = [
+    restricted_services = [
       "aiplatform.googleapis.com",
     ]
   }
