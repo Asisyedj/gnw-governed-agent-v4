@@ -86,12 +86,12 @@ resource "google_notebooks_instance" "gnw_workbench" {
     image_family = "common-cu113-notebooks-debian-11"
   }
 
-  network      = google_compute_network.gnw_vpc.id
-  subnet       = google_compute_subnetwork.gnw_subnet.id
+  network = google_compute_network.gnw_vpc.id
+  subnet  = google_compute_subnetwork.gnw_subnet.id
 
-  no_public_ip         = true
-  no_proxy_access      = false
-  enable_monitoring    = true
+  no_public_ip      = true
+  no_proxy_access   = false
+  enable_monitoring = true
 
   shielded_instance_config {
     enable_secure_boot          = true
