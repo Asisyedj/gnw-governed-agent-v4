@@ -91,7 +91,6 @@ resource "google_notebooks_instance" "gnw_workbench" {
 
   no_public_ip      = true
   no_proxy_access   = false
-  enable_monitoring = true
 
   shielded_instance_config {
     enable_secure_boot          = true
