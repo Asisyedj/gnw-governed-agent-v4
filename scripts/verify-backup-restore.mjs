@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
 const { Client } = pg;
@@ -24,10 +24,21 @@ async function main() {
   console.log('Integrity check: PASS\n');
 
   console.log('=== Step 2: Isolated Restoration Drill ===');
-  const testDb = 'gnw_staging_restore_test';
+  const testDb = process.env.GNW_BACKUP_VERIFY_DB || 'gnw_staging_restore_test';
 
-  // Create isolated restore verification database using postgres superuser
-  const adminClient = new Client({ connectionString: 'postgresql://gnw:gnw_test_pw@localhost:5432/postgres' });
+  // Strict target safety and allowlist validation
+  if (!/^gnw_(staging_restore_test|backup_verify_[a-z0-9_-]+)$/.test(testDb)) {
+    throw new Error(`Invalid or disallowed restore verification target: ${testDb}`);
+  }
+  if (/(^|[-_.])(prod|production|live)([-_.]|$)/i.test(testDb)) {
+    throw new Error(`Refusing to restore to target that looks like production: ${testDb}`);
+  }
+
+  // Derive admin connection parameters safely
+  const adminUrl = process.env.GNW_BACKUP_VERIFY_ADMIN_URL ||
+    (process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/[^/]+$/, '/postgres') : 'postgresql://gnw:gnw_test_pw@localhost:5432/postgres');
+
+  const adminClient = new Client({ connectionString: adminUrl });
   await adminClient.connect();
   try {
     await adminClient.query(`DROP DATABASE IF EXISTS ${testDb};`);
@@ -36,24 +47,38 @@ async function main() {
     await adminClient.end();
   }
 
+  // Extract host, port, user from adminUrl for pg_restore
+  const parsedAdmin = new URL(adminUrl);
+  const pgHost = parsedAdmin.hostname || 'localhost';
+  const pgPort = parsedAdmin.port || '5432';
+  const pgUser = decodeURIComponent(parsedAdmin.username) || 'gnw';
+  const pgPassword = decodeURIComponent(parsedAdmin.password) || process.env.PGPASSWORD || 'gnw_test_pw';
+
   // Restore dump into test database
   const restoreProc = spawnSync('pg_restore', [
     '--no-owner',
     '--no-privileges',
     '-d', testDb,
-    '-h', 'localhost',
-    '-U', 'gnw',
+    '-h', pgHost,
+    '-p', pgPort,
+    '-U', pgUser,
     backupFile,
   ], {
-    env: { ...process.env, PGPASSWORD: 'gnw_test_pw' },
+    env: { ...process.env, PGPASSWORD: pgPassword },
     encoding: 'utf8',
     timeout: 60000,
   });
 
-  if (restoreProc.error) throw new Error(`pg_restore failed: ${restoreProc.error.message}`);
+  if (restoreProc.error) {
+    throw new Error(`pg_restore spawn error: ${restoreProc.error.message}`);
+  }
+  if (restoreProc.status !== 0) {
+    throw new Error(`pg_restore failed with exit code ${restoreProc.status}: ${restoreProc.stderr || restoreProc.stdout || 'unknown error'}`);
+  }
 
   // Connect to restored database and verify contents
-  const restoreClient = new Client({ connectionString: `postgresql://gnw:gnw_test_pw@localhost:5432/${testDb}` });
+  const restoreUrl = adminUrl.replace(/\/[^/]+$/, `/${testDb}`);
+  const restoreClient = new Client({ connectionString: restoreUrl });
   await restoreClient.connect();
   try {
     const tableRes = await restoreClient.query(`
@@ -72,19 +97,22 @@ async function main() {
       throw new Error('Restore data verification failed: marker missing or invalid');
     }
 
-    // Verify migrations ledger in restored DB
+    // Verify migrations ledger in restored DB dynamically
+    const baseMigrationFiles = (await readdir(join(root, 'drizzle')))
+      .filter(f => /^\d+_.*\.sql$/.test(f) && !f.startsWith('9999_'));
+    const expectedCount = baseMigrationFiles.length + 1; // base migrations + 9999 forward drill migration
     const migRes = await restoreClient.query(`SELECT count(*) FROM gnw_migrations;`);
-    console.log(`Restored Migrations Count: ${migRes.rows[0].count} (must be 4, as forward migration was present)`);
+    console.log(`Restored Migrations Count: ${migRes.rows[0].count} (expected: ${expectedCount})`);
 
-    if (Number(migRes.rows[0].count) !== 4) {
-      throw new Error('Restore verification failed: migration count mismatch');
+    if (Number(migRes.rows[0].count) !== expectedCount) {
+      throw new Error(`Restore verification failed: migration count mismatch (got ${migRes.rows[0].count}, expected ${expectedCount})`);
     }
 
     console.log('\nBackup restoration drill: FULLY VERIFIED PASS (Schema and data bit-for-bit restored)');
   } finally {
     await restoreClient.end();
     // Cleanup the temporary restore verification database
-    const cleanupClient = new Client({ connectionString: 'postgresql://gnw:gnw_test_pw@localhost:5432/postgres' });
+    const cleanupClient = new Client({ connectionString: adminUrl });
     await cleanupClient.connect();
     await cleanupClient.query(`DROP DATABASE IF EXISTS ${testDb};`);
     await cleanupClient.end();
