@@ -30,6 +30,7 @@ async function handleReview(app: { db: Db }, req: FastifyRequest, reply: Fastify
   if (approval.status !== "pending") return reply.status(409).send({ error: `Approval already ${approval.status}.` });
   if (approval.expiresAt < new Date()) return reply.status(410).send({ error: "Approval request has expired.", code: "expired" });
   if (!hasIndependentApproval(approval.requestedByUserId, session.userId)) {
+    const requesterMissing = approval.requestedByUserId === null || approval.requestedByUserId === undefined;
     await insertAuditLog(app.db, {
       eventType: "approval.self_approval_denied",
       actorId: session.userId,
@@ -38,10 +39,10 @@ async function handleReview(app: { db: Db }, req: FastifyRequest, reply: Fastify
       resourceType: "approval",
       resourceId: String(id),
       outcome: "denied",
-      detail: { reason: approval.requestedByUserId == null ? "requester_identity_missing" : "self_approval_denied" },
+      detail: { reason: requesterMissing ? "requester_identity_missing" : "self_approval_denied" },
       ipAddress: req.ip,
     });
-    return reply.status(403).send({ error: "Approval requires a reviewer independent from the requester.", code: approval.requestedByUserId == null ? "approval_requester_missing" : "self_approval_denied" });
+    return reply.status(403).send({ error: "Approval requires a reviewer independent from the requester.", code: requesterMissing ? "approval_requester_missing" : "self_approval_denied" });
   }
 
   const parsed = reviewSchema.safeParse(req.body);
