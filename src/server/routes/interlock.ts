@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveSession } from "./auth.js";
 import { findUserById, getInterlock, setInterlock, insertAuditLog } from "../repo.js";
 import type { Db } from "../db/index.js";
+import { isMonotonicSafeInterlockPatch } from "../security/p1-guards.js";
 
 declare module "fastify" { interface FastifyInstance { db: Db; } }
 
@@ -26,6 +27,10 @@ export const interlockRoutes: FastifyPluginAsync = async (app) => {
     if (!(["owner", "admin"] as string[]).includes(user.role)) return reply.status(403).send({ error: "Only owner/admin can modify interlock.", code: "forbidden" });
     const body = z.object({ enabled: z.boolean(), reason: z.string().trim().max(1000).optional() }).safeParse(req.body);
     if (!body.success) return reply.status(400).send({ error: "Invalid input" });
+    if (!isMonotonicSafeInterlockPatch({ killSwitch: body.data.enabled })) {
+      await insertAuditLog(app.db, { eventType: "kill_switch.release_denied", actorId: session.userId, tenantId: session.tenantId, outcome: "denied", detail: { reason: "platform_operator_dual_control_required" }, ipAddress: req.ip });
+      return reply.status(403).send({ error: "Global kill-switch release requires the protected platform dual-control workflow.", code: "platform_operator_dual_control_required" });
+    }
     const interlockPatch: { killSwitch: boolean; reason?: string } = { killSwitch: body.data.enabled };
     if (body.data.reason !== undefined) interlockPatch.reason = body.data.reason;
     const updated = await setInterlock(app.db, interlockPatch, session.userId);
@@ -45,6 +50,11 @@ export const interlockRoutes: FastifyPluginAsync = async (app) => {
 
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: "Invalid input", details: parsed.error.issues });
+
+    if (!isMonotonicSafeInterlockPatch(parsed.data)) {
+      await insertAuditLog(app.db, { eventType: "interlock.release_denied", actorId: session.userId, tenantId: session.tenantId, outcome: "denied", detail: { patch: parsed.data, reason: "platform_operator_dual_control_required" }, ipAddress: req.ip });
+      return reply.status(403).send({ error: "Global interlock release requires the protected platform dual-control workflow.", code: "platform_operator_dual_control_required" });
+    }
 
     const patch: { killSwitch?: boolean; circuitOpen?: boolean; reason?: string } = {};
     if (parsed.data.killSwitch !== undefined) patch.killSwitch = parsed.data.killSwitch;
