@@ -4,8 +4,9 @@ import Workspace from "./views/Workspace";
 import ApprovalsView from "./views/Approvals";
 import AuditView from "./views/Audit";
 import ControlsView from "./views/Controls";
+import SettingsView from "./views/Settings";
 
-type View = "workspace" | "approvals" | "audit" | "controls";
+type View = "workspace" | "approvals" | "audit" | "controls" | "settings";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -68,6 +69,7 @@ export default function App() {
           </button>
           <button className={view === "audit" ? "active" : ""} onClick={() => setView("audit")}>Audit Trail</button>
           <button className={view === "controls" ? "active" : ""} onClick={() => setView("controls")}>Safety Controls</button>
+          <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>AI Settings</button>
         </nav>
         <div className="topbar-actions">
           {interlockEngaged && <span className="badge" style={{ background: "var(--danger)" }}>INTERLOCK</span>}
@@ -80,6 +82,7 @@ export default function App() {
         {view === "approvals" && <ApprovalsView summary={summary} onRefresh={refresh} />}
         {view === "audit" && <AuditView />}
         {view === "controls" && <ControlsView summary={summary} onRefresh={refresh} />}
+        {view === "settings" && <SettingsView />}
       </div>
     </div>
   );
