@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveSession } from "./auth.js";
 import { findUserById, listPendingApprovals, findApprovalById, reviewApproval, insertAuditLog } from "../repo.js";
 import type { Db } from "../db/index.js";
+import { hasIndependentApproval } from "../security/p1-guards.js";
 
 declare module "fastify" { interface FastifyInstance { db: Db; } }
 
@@ -28,6 +29,20 @@ async function handleReview(app: { db: Db }, req: FastifyRequest, reply: Fastify
   if (!approval) return reply.status(404).send({ error: "Approval not found" });
   if (approval.status !== "pending") return reply.status(409).send({ error: `Approval already ${approval.status}.` });
   if (approval.expiresAt < new Date()) return reply.status(410).send({ error: "Approval request has expired.", code: "expired" });
+  if (!hasIndependentApproval(approval.requestedByUserId, session.userId)) {
+    await insertAuditLog(app.db, {
+      eventType: "approval.self_approval_denied",
+      actorId: session.userId,
+      tenantId: session.tenantId,
+      ...(approval.taskId !== null && approval.taskId !== undefined ? { taskId: approval.taskId } : {}),
+      resourceType: "approval",
+      resourceId: String(id),
+      outcome: "denied",
+      detail: { reason: approval.requestedByUserId == null ? "requester_identity_missing" : "self_approval_denied" },
+      ipAddress: req.ip,
+    });
+    return reply.status(403).send({ error: "Approval requires a reviewer independent from the requester.", code: approval.requestedByUserId == null ? "approval_requester_missing" : "self_approval_denied" });
+  }
 
   const parsed = reviewSchema.safeParse(req.body);
   const status = forcedStatus ?? (parsed.success ? parsed.data.status : undefined);
