@@ -1,7 +1,7 @@
 {
   "schemaVersion": "GNW.Gate1VerificationEvidence.v2",
   "executionMode": "SIMULATION",
-  "timestamp": "2026-10-13T15:25:53.261Z",
+  "timestamp": "2026-10-13T18:39:38.945Z",
   "gate1Certification": "IN_PROGRESS_NOT_CERTIFIED",
   "liveAwsCertified": false,
   "status": "PASS_SIMULATION_ONLY",
@@ -48,6 +48,6 @@
       "reason": "Live AWS queries must be run on staging EC2 host with active staging instance profile via --mode=live."
     }
   },
-  "completedAt": "2026-10-13T15:25:54.102Z",
-  "evidenceSha256": "f3b6745227d232c2e9aef5c5cdc04ab34094afdb61c8eb56b5749879c71fc2af"
+  "completedAt": "2026-10-13T18:39:42.028Z",
+  "evidenceSha256": "8eade47f9c7fe8d5cd5bd9a993f5fe6232b1602f53409a8417b13f1391eabe6e"
 }

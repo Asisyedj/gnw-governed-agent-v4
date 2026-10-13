@@ -339,6 +339,13 @@ async function runStagingSecretsDrill() {
     const liveRegion = process.env.AWS_REGION || "us-east-1";
     const stagingAccountId = process.env.AWS_STAGING_ACCOUNT_ID;
 
+    // Fail-closed requirement: AWS_STAGING_ACCOUNT_ID is mandatory in live mode
+    if (!stagingAccountId || stagingAccountId.trim() === "") {
+      throw new Error(
+        "[GATE-1-DRILL] FATAL: AWS_STAGING_ACCOUNT_ID environment variable is mandatory in --mode=live (fail-closed)."
+      );
+    }
+
     // 7a: Verify credential identity via STS GetCallerIdentity
     console.log("  → Verifying AWS SDK credential source via STS GetCallerIdentity...");
     const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
@@ -367,13 +374,25 @@ async function runStagingSecretsDrill() {
       );
     }
 
-    if (stagingAccountId && callerIdentity.Account !== stagingAccountId) {
+    // Exact role name matching: ensure assumed role matches expected staging role
+    const expectedRoleName =
+      process.env.AWS_STAGING_ROLE_NAME ||
+      process.env.EXPECTED_STAGING_ROLE_NAME ||
+      "gnw-staging-ec2-role";
+    const expectedRolePattern = `:assumed-role/${expectedRoleName}/`;
+    if (!callerIdentity.Arn.includes(expectedRolePattern)) {
       throw new Error(
-        `[GATE-1-DRILL] FATAL: Caller account (${callerIdentity.Account}) does not match staging account (${stagingAccountId}).`
+        `[GATE-1-DRILL] FATAL: Caller identity ARN (${callerIdentity.Arn}) does not match expected staging role '${expectedRoleName}'. Assumed role matching '${expectedRolePattern}' is required.`
       );
     }
 
-    console.log("  ✓ Confirmed AWS SDK is using an assumed instance profile role on the staging account.");
+    if (callerIdentity.Account !== stagingAccountId) {
+      throw new Error(
+        `[GATE-1-DRILL] FATAL: Caller account (${callerIdentity.Account}) does not match required staging account (${stagingAccountId}).`
+      );
+    }
+
+    console.log(`  ✓ Confirmed AWS SDK is using assumed staging role '${expectedRoleName}' on account ${stagingAccountId}.`);
 
     // Negative drill probe secret identifier — included in allowlist so request passes provider validation
     // and hits real AWS API to prove IAM policy denial:
@@ -406,21 +425,26 @@ async function runStagingSecretsDrill() {
       }
       console.log(`  ✓ Live staging secret '${probeSecretId}' retrieved successfully (value masked, length: ${stagingVal.length}).`);
 
-      // 7d: Live negative probe: requesting an unauthorized staging secret must be denied by AWS IAM
+      // 7d: Live negative probe: requesting an unauthorized staging secret must be denied strictly by AWS IAM (AccessDeniedException / HTTP 403)
+      // Note: ResourceNotFoundException is strictly DISALLOWED as proof of denial.
       console.log("  → Testing actual AWS IAM negative denial on unauthorized probe...");
       let liveDenialPass = false;
       let denialReason = "";
       try {
         await liveProvider.fetchSecret(negativeProbeId);
       } catch (err) {
-        if (err.message.includes("AccessDenied")) {
+        const isAccessDenied =
+          err.name === "AccessDeniedException" ||
+          err.message?.includes("AccessDenied") ||
+          err.$metadata?.httpStatusCode === 403;
+
+        if (isAccessDenied) {
           liveDenialPass = true;
-          denialReason = "AccessDenied from AWS IAM";
-        } else if (err.message.includes("secret not found")) {
-          // If the staging IAM policy permits describing but the secret doesn't exist,
-          // note: for strict IAM denial test, the policy should omit or deny this resource.
-          liveDenialPass = true;
-          denialReason = "ResourceNotFound (API authenticated & reached)";
+          denialReason = "AccessDeniedException (HTTP 403) verified from AWS IAM";
+        } else {
+          throw new Error(
+            `[GATE-1-DRILL] FATAL: Negative authorization probe failed. Expected strict IAM AccessDeniedException (HTTP 403), but received: [${err.name || "Error"}] ${err.message}. ResourceNotFoundException or other errors do not prove IAM policy denial.`
+          );
         }
       }
 
