@@ -10,14 +10,16 @@ beforeAll(async () => { ({ app, db } = await createTestApp()); });
 afterAll(async () => { await app.close(); });
 
 describe("Auth routes", () => {
-  it("POST /api/auth/register — creates user and returns session cookie", async () => {
+  it("POST /api/auth/register — fails closed when public registration is disabled", async () => {
+    const tenantSlug = `blocked-tenant-${Date.now()}`;
     const res = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { email: `test-${Date.now()}@example.com`, password: "StrongP@ss1!", tenantSlug: `tenant-${Date.now()}` },
+      payload: { email: `blocked-${Date.now()}@example.com`, password: "StrongP@ss1!", tenantSlug },
     });
-    expect([200, 201]).toContain(res.statusCode);
-    expect(res.headers["set-cookie"]).toBeDefined();
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: "registration_closed" });
+    expect(res.headers["set-cookie"]).toBeUndefined();
   });
 
   it("POST /api/auth/login — wrong password returns 401", async () => {
