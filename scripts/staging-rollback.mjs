@@ -38,6 +38,9 @@ async function main() {
     pool = new Pool({ connectionString: target.raw, ssl: process.env.GNW_POSTGRES_SSL_REQUIRED === 'true' ? { rejectUnauthorized: true } : false, max: 1, connectionTimeoutMillis: 10000 });
     const client = await pool.connect();
     try {
+      // Cluster-wide migration advisory lock
+      await client.query("SELECT pg_advisory_lock(hashtext('gnw_migration_lock'))");
+
       const role = (await client.query('SELECT current_database() AS db, current_user AS role, r.rolsuper, r.rolbypassrls FROM pg_roles r WHERE r.rolname = current_user')).rows[0];
       if (!role || role.db !== process.env.GNW_STAGING_DATABASE_NAME) fail('connected_database_mismatch');
       if (role.rolsuper || role.rolbypassrls) fail('rollback_role_must_not_bypass_rls_or_be_superuser');
@@ -53,7 +56,10 @@ async function main() {
       catch (error) { await client.query('ROLLBACK'); throw error; }
       const report = { schemaVersion: 1, status: 'PASS', mode: 'allowlisted-staging-rollback', timestamp: new Date().toISOString(), databaseName: role.db, databaseEndpoint: target.endpoint, databaseRole: role.role, migration, forwardMigrationSha256: forwardHash, rollbackSqlSha256: rollbackHash, backupRef, backupArtifact: relative(root, backupPath), backupBytes: info.size, backupSha256: backupSha, postcondition: 'PASS', rollbackEffect: 'committed' };
       await save(report); console.log(JSON.stringify(report, null, 2));
-    } finally { client.release(); }
+    } finally {
+      try { await client.query("SELECT pg_advisory_unlock(hashtext('gnw_migration_lock'))"); } catch {}
+      client.release();
+    }
   } catch (error) { const report = { schemaVersion: 1, status: 'FAIL', timestamp: new Date().toISOString(), migration, backupRef, error: error instanceof Error ? error.message : String(error), backupArtifact: backupPath ? relative(root, backupPath) : null, rollbackEffect: committed ? 'committed_but_evidence_write_failed' : 'not_confirmed' }; await save(report).catch(() => {}); console.error('GNW staging rollback DENIED/FAILED:', report.error); process.exitCode = 1; }
   finally { if (pool) await pool.end(); }
 }

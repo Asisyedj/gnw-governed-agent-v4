@@ -10,6 +10,9 @@ const pool = new Pool({
 });
 const client = await pool.connect();
 try {
+  // Acquire cluster-wide migration advisory lock to prevent race conditions during concurrent startup
+  await client.query("SELECT pg_advisory_lock(hashtext('gnw_migration_lock'))");
+
   await client.query('CREATE TABLE IF NOT EXISTS gnw_migrations (id SERIAL PRIMARY KEY, filename TEXT NOT NULL UNIQUE, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
   const files = (await readdir(join(process.cwd(), 'drizzle'))).filter(f => /^\d+_.*\.sql$/.test(f)).sort();
   for (const filename of files) {
@@ -31,4 +34,37 @@ try {
       throw error;
     }
   }
-} finally { client.release(); await pool.end(); }
+
+  // Enforce runtime role least-privilege permissions on newly created/migrated tables
+  const appRole = process.env.GNW_APP_DB_USER || 'gnw_app';
+  const roleRes = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [appRole]);
+  if (roleRes.rowCount > 0) {
+    await client.query(`
+      GRANT USAGE ON SCHEMA public TO ${appRole};
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${appRole};
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${appRole};
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='audit_log') THEN
+          EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.audit_log FROM ${appRole}';
+          EXECUTE 'GRANT SELECT, INSERT ON TABLE public.audit_log TO ${appRole}';
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='audit_chain_head') THEN
+          EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.audit_chain_head FROM ${appRole}';
+          EXECUTE 'GRANT SELECT ON TABLE public.audit_chain_head TO ${appRole}';
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='gnw_migrations') THEN
+          EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.gnw_migrations FROM ${appRole}';
+          EXECUTE 'GRANT SELECT ON TABLE public.gnw_migrations TO ${appRole}';
+        END IF;
+      END $$;
+    `);
+    console.log(`[MIGRATE] Enforced least-privilege permissions on role: ${appRole}`);
+  }
+} finally {
+  try {
+    await client.query("SELECT pg_advisory_unlock(hashtext('gnw_migration_lock'))");
+  } catch {}
+  client.release();
+  await pool.end();
+}
