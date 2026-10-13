@@ -11,8 +11,8 @@ export function publicRegistrationAllowed(allowSelfRegistration: boolean): boole
  * tenant-facing endpoints may only move global interlocks toward the safer state.
  */
 export function isMonotonicSafeInterlockPatch(patch: {
-  killSwitch?: boolean;
-  circuitOpen?: boolean;
+  killSwitch?: boolean | undefined;
+  circuitOpen?: boolean | undefined;
 }): boolean {
   const requestedStates = [patch.killSwitch, patch.circuitOpen].filter(
     (value): value is boolean => value !== undefined,
