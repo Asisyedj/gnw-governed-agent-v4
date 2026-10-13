@@ -4,6 +4,14 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 const { Pool } = pg;
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+
+function quoteIdent(str) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(str)) {
+    throw new Error(`Invalid database role identifier format: ${str}`);
+  }
+  return `"${str}"`;
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.GNW_POSTGRES_SSL_REQUIRED === 'true' ? { rejectUnauthorized: true } : false,
@@ -36,30 +44,41 @@ try {
   }
 
   // Enforce runtime role least-privilege permissions on newly created/migrated tables
+  // Uses strict identifier regex validation and identifier quoting to prevent SQL injection.
   const appRole = process.env.GNW_APP_DB_USER || 'gnw_app';
+  const quotedRole = quoteIdent(appRole);
+
   const roleRes = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [appRole]);
   if (roleRes.rowCount > 0) {
     await client.query(`
-      GRANT USAGE ON SCHEMA public TO ${appRole};
-      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${appRole};
-      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${appRole};
-      DO $$
+      GRANT USAGE ON SCHEMA public TO ${quotedRole};
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${quotedRole};
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${quotedRole};
+
+      -- Enforce default privileges for future tables/sequences created by schema owner
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${quotedRole};
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${quotedRole};
+
+      -- Strict least-privilege revocations on append-only and control tables
+      DO $do$
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='audit_log') THEN
-          EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.audit_log FROM ${appRole}';
-          EXECUTE 'GRANT SELECT, INSERT ON TABLE public.audit_log TO ${appRole}';
+          EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.audit_log FROM ' || quote_ident('${appRole}');
+          EXECUTE 'GRANT SELECT, INSERT ON TABLE public.audit_log TO ' || quote_ident('${appRole}');
         END IF;
+
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='audit_chain_head') THEN
-          EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.audit_chain_head FROM ${appRole}';
-          EXECUTE 'GRANT SELECT ON TABLE public.audit_chain_head TO ${appRole}';
+          EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.audit_chain_head FROM ' || quote_ident('${appRole}');
+          EXECUTE 'GRANT SELECT ON TABLE public.audit_chain_head TO ' || quote_ident('${appRole}');
         END IF;
+
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='gnw_migrations') THEN
-          EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.gnw_migrations FROM ${appRole}';
-          EXECUTE 'GRANT SELECT ON TABLE public.gnw_migrations TO ${appRole}';
+          EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.gnw_migrations FROM ' || quote_ident('${appRole}');
+          EXECUTE 'GRANT SELECT ON TABLE public.gnw_migrations TO ' || quote_ident('${appRole}');
         END IF;
-      END $$;
+      END $do$;
     `);
-    console.log(`[MIGRATE] Enforced least-privilege permissions on role: ${appRole}`);
+    console.log(`[MIGRATE] Enforced least-privilege permissions and default privileges on role: ${appRole}`);
   }
 } finally {
   try {

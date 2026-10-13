@@ -8,6 +8,12 @@ const { Client } = pg;
 
 async function main() {
   const root = process.cwd();
+
+  // Fail-closed environment guards
+  if (process.env.NODE_ENV === 'production' || process.env.GNW_ENVIRONMENT === 'production') {
+    throw new Error('CRITICAL: Refusing to run destructive backup restoration verification in production environment');
+  }
+
   const evidence = JSON.parse(await readFile(resolve(root, 'rollback-evidence.json'), 'utf8'));
 
   console.log('=== Step 1: Backup Artifact Integrity Check ===');
@@ -26,7 +32,13 @@ async function main() {
   console.log('=== Step 2: Isolated Restoration Drill ===');
   const testDb = process.env.GNW_BACKUP_VERIFY_DB || 'gnw_staging_restore_test';
 
-  // Strict target safety and allowlist validation
+  // Strict database name protection — persistent databases must NEVER be dropped
+  const forbiddenDatabases = new Set(['postgres', 'gnw', 'gnw_staging', 'gnw_test', 'template0', 'template1']);
+  if (forbiddenDatabases.has(testDb.toLowerCase())) {
+    throw new Error(`CRITICAL: Refusing to drop/recreate persistent database: ${testDb}`);
+  }
+
+  // Strict target safety allowlist validation
   if (!/^gnw_(staging_restore_test|backup_verify_[a-z0-9_-]+)$/.test(testDb)) {
     throw new Error(`Invalid or disallowed restore verification target: ${testDb}`);
   }
@@ -38,6 +50,32 @@ async function main() {
   const adminUrl = process.env.GNW_BACKUP_VERIFY_ADMIN_URL ||
     (process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/[^/]+$/, '/postgres') : 'postgresql://gnw:gnw_test_pw@localhost:5432/postgres');
 
+  // Verify host isolation and forbid production hostnames
+  const parsedAdmin = new URL(adminUrl);
+  const pgHost = parsedAdmin.hostname || 'localhost';
+  const pgPort = parsedAdmin.port || '5432';
+
+  if (/(^|[-_.])(prod|production|live)([-_.]|$)/i.test(pgHost)) {
+    throw new Error(`CRITICAL: Refusing to run restore verification on production host: ${pgHost}`);
+  }
+
+  // Explicit allowed verification hosts
+  const allowedHosts = new Set(
+    (process.env.GNW_BACKUP_VERIFY_ALLOWED_HOSTS || 'localhost,127.0.0.1,::1')
+      .split(',')
+      .map(h => h.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  if (!allowedHosts.has(pgHost.toLowerCase())) {
+    throw new Error(`Target host "${pgHost}" is not in allowed verification hosts (${Array.from(allowedHosts).join(', ')})`);
+  }
+
+  const pgUser = decodeURIComponent(parsedAdmin.username) || 'gnw';
+  const pgPassword = decodeURIComponent(parsedAdmin.password) || process.env.PGPASSWORD || 'gnw_test_pw';
+
+  console.log(`Connecting to isolated verification host: ${pgHost}:${pgPort}`);
+  console.log(`Target transient test database: ${testDb}`);
+
   const adminClient = new Client({ connectionString: adminUrl });
   await adminClient.connect();
   try {
@@ -46,13 +84,6 @@ async function main() {
   } finally {
     await adminClient.end();
   }
-
-  // Extract host, port, user from adminUrl for pg_restore
-  const parsedAdmin = new URL(adminUrl);
-  const pgHost = parsedAdmin.hostname || 'localhost';
-  const pgPort = parsedAdmin.port || '5432';
-  const pgUser = decodeURIComponent(parsedAdmin.username) || 'gnw';
-  const pgPassword = decodeURIComponent(parsedAdmin.password) || process.env.PGPASSWORD || 'gnw_test_pw';
 
   // Restore dump into test database
   const restoreProc = spawnSync('pg_restore', [
