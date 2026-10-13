@@ -30,7 +30,7 @@ export const authRoutes:FastifyPluginAsync=async(app)=>{
     const tenant=await findTenantBySlug(app.db,DEFAULT_TENANT_SLUG);
     if(!tenant)return reply.send({bootstrap:ALLOW_SELF_REGISTRATION,allowSelfRegistration:ALLOW_SELF_REGISTRATION});
     const count=await countUsersByTenant(app.db,tenant.id);
-    return reply.send({bootstrap:count===0,allowSelfRegistration:ALLOW_SELF_REGISTRATION});
+    return reply.send({bootstrap:count===0&&ALLOW_SELF_REGISTRATION,allowSelfRegistration:ALLOW_SELF_REGISTRATION});
   });
 
   app.post("/register",async(req,reply)=>{
