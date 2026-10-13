@@ -1,19 +1,53 @@
 -- 0003_audit_hash_chain.sql
--- Cryptographic hash chain for audit_log tamper-detection.
+-- Cryptographic hash chain for audit_log tamper-detection with transactional concurrency protection.
 -- Guarantees:
--- 1. Every audit entry is cryptographically bound to its predecessor via SHA-256.
--- 2. First entry links to 'GENESIS'.
--- 3. Automatic, transactional hash generation via BEFORE INSERT trigger with FOR UPDATE row locking.
--- 4. SECURITY DEFINER ensures application roles without UPDATE privileges can safely insert into the chain.
--- 5. Append-only enforcement via trigger and table privilege revocation.
+-- 1. Cluster-wide transaction serialization via pg_advisory_xact_lock.
+-- 2. Strict monotonicity: ID allocation happens INSIDE the advisory lock, guaranteeing ID order == Chain order.
+-- 3. Dedicated audit_chain_head singleton table maintaining the linear tip of the chain.
+-- 4. Absolute fork-freedom and link continuity under high concurrent insert pressure.
+-- 5. SECURITY DEFINER ensures application roles without UPDATE privileges can safely insert.
+-- 6. Append-only enforcement via trigger and table privilege revocation.
 
 -- Add columns if not already present
 ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS prev_entry_hash TEXT;
 ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS entry_hash TEXT;
 
+-- Singleton table tracking the current linear tip of the audit hash chain
+CREATE TABLE IF NOT EXISTS audit_chain_head (
+  singleton_id INTEGER PRIMARY KEY DEFAULT 1 CHECK (singleton_id = 1),
+  last_audit_id BIGINT,
+  last_entry_hash TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Initialize audit_chain_head from current audit_log tip or GENESIS
+DO $$
+DECLARE
+  v_tip_id BIGINT;
+  v_tip_hash TEXT;
+BEGIN
+  SELECT id, entry_hash INTO v_tip_id, v_tip_hash
+  FROM audit_log
+  WHERE entry_hash IS NOT NULL
+  ORDER BY id DESC
+  LIMIT 1;
+
+  IF v_tip_hash IS NOT NULL THEN
+    INSERT INTO audit_chain_head (singleton_id, last_audit_id, last_entry_hash, updated_at)
+    VALUES (1, v_tip_id, v_tip_hash, NOW())
+    ON CONFLICT (singleton_id) DO UPDATE
+      SET last_audit_id = EXCLUDED.last_audit_id,
+          last_entry_hash = EXCLUDED.last_entry_hash,
+          updated_at = NOW();
+  ELSE
+    INSERT INTO audit_chain_head (singleton_id, last_audit_id, last_entry_hash, updated_at)
+    VALUES (1, NULL, 'GENESIS', NOW())
+    ON CONFLICT (singleton_id) DO NOTHING;
+  END IF;
+END $$;
+
 -- Trigger function for automatic transactional chain calculation
--- SECURITY DEFINER allows non-superuser application roles (gnw_app) to lock & compute
--- the chain tail without granting gnw_app UPDATE privileges on audit_log.
+-- Acquires advisory lock, allocates ID sequentially, locks chain head, computes SHA-256
 CREATE OR REPLACE FUNCTION gnw_audit_hash_chain_insert()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -24,11 +58,16 @@ DECLARE
   v_prev_hash TEXT;
   v_payload TEXT;
 BEGIN
-  -- Obtain exclusive row lock on the latest audit entry to strictly serialize chain writes
-  SELECT entry_hash INTO v_prev_hash
-  FROM audit_log
-  ORDER BY id DESC
-  LIMIT 1
+  -- 1. Cluster-wide advisory lock held for the lifetime of this transaction
+  PERFORM pg_advisory_xact_lock(hashtext('gnw_audit_chain_lock'));
+
+  -- 2. Allocate the ID sequence strictly inside the lock so ID order == Chain order
+  NEW.id := nextval(pg_get_serial_sequence('audit_log', 'id'));
+
+  -- 3. Lock the singleton chain head record FOR UPDATE
+  SELECT last_entry_hash INTO v_prev_hash
+  FROM audit_chain_head
+  WHERE singleton_id = 1
   FOR UPDATE;
 
   IF v_prev_hash IS NULL THEN
@@ -47,6 +86,14 @@ BEGIN
                v_prev_hash;
 
   NEW.entry_hash := encode(sha256(convert_to(v_payload, 'UTF8')), 'hex');
+
+  -- 4. Atomically advance the singleton chain head
+  UPDATE audit_chain_head
+  SET last_audit_id = NEW.id,
+      last_entry_hash = NEW.entry_hash,
+      updated_at = NOW()
+  WHERE singleton_id = 1;
+
   RETURN NEW;
 END;
 $$;
@@ -86,6 +133,13 @@ BEGIN
 
     v_prev := v_hash;
   END LOOP;
+
+  -- Synchronize audit_chain_head with the final historical backfill tip
+  UPDATE audit_chain_head
+  SET last_audit_id = (SELECT id FROM audit_log ORDER BY id DESC LIMIT 1),
+      last_entry_hash = v_prev,
+      updated_at = NOW()
+  WHERE singleton_id = 1;
 
   IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_log_append_only') THEN
     ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only;
