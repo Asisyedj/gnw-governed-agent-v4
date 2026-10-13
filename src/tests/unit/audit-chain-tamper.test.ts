@@ -1,34 +1,84 @@
 /**
- * Audit Ledger Cryptographic Hash Chain & Tamper-Detection Test Suite.
+ * Audit Ledger Cryptographic Hash Chain, Concurrency, and Tamper-Detection Test Suite.
  *
  * Verifies that:
- * 1. Sequential inserts form a valid, continuous SHA-256 hash chain starting from GENESIS.
- * 2. Any mutation of historical payload (tampering) is detected and fails verification.
- * 3. Any broken or reordered link (mismatched prev_entry_hash) is detected.
- * 4. Application role (gnw_app) cannot UPDATE or DELETE audit records (append-only enforcement).
+ * 1. High-concurrency inserts (30 simultaneous parallel operations via Promise.all)
+ *    serialize deterministically with zero chain forks, zero broken links, and zero hash mismatches.
+ * 2. Sequential inserts form a continuous SHA-256 hash chain starting from GENESIS.
+ * 3. Any mutation of historical payload (tampering) is detected and fails verification.
+ * 4. Any broken or reordered link (mismatched prev_entry_hash) is detected.
+ * 5. Application role (gnw_app) cannot UPDATE or DELETE audit records (append-only enforcement).
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
-import { createHash } from "node:crypto";
 
 const { Pool } = pg;
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://gnw:gnw_test_pw@localhost:5432/gnw_test";
+const DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgresql://gnw:gnw_test_pw@localhost:5432/gnw_test";
 
-describe("Audit Ledger Cryptographic Hash Chain & Tamper Detection", () => {
+describe("Audit Ledger Cryptographic Hash Chain & Concurrency Guards", () => {
   let pool: pg.Pool;
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: DATABASE_URL });
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      max: 35, // allow 30+ concurrent connections for the concurrency test
+    });
   });
 
   afterAll(async () => {
     await pool.end();
   });
 
+  it("handles 30 simultaneous concurrent inserts with zero chain forks or broken links", async () => {
+    const CONCURRENCY = 30;
+
+    // Launch 30 concurrent inserts simultaneously
+    const promises = Array.from({ length: CONCURRENCY }, (_, i) => {
+      return (async () => {
+        const client = await pool.connect();
+        try {
+          const res = await client.query(`
+            INSERT INTO audit_log (event_type, tenant_id, outcome, detail)
+            VALUES ($1, 1, 'success', $2)
+            RETURNING id, event_type, prev_entry_hash, entry_hash
+          `, [`concurrent.test.event.${i}`, JSON.stringify({ index: i, timestamp: Date.now() })]);
+          return res.rows[0];
+        } finally {
+          client.release();
+        }
+      })();
+    });
+
+    const insertedRows = await Promise.all(promises);
+    expect(insertedRows.length).toBe(CONCURRENCY);
+
+    // Verify all 30 returned valid 64-character SHA-256 hashes
+    for (const row of insertedRows) {
+      expect(row.entry_hash).toMatch(/^[0-9a-f]{64}$/);
+      expect(row.prev_entry_hash).toMatch(/^[0-9a-f]{64}$|^GENESIS$/);
+    }
+
+    // Verify that every single hash is unique (NO FORKS or duplicate entry_hashes)
+    const entryHashes = new Set(insertedRows.map(r => r.entry_hash));
+    expect(entryHashes.size).toBe(CONCURRENCY);
+
+    // Verify that the whole table satisfies cryptographic integrity via PostgreSQL verification function
+    const client = await pool.connect();
+    try {
+      const verifyRes = await client.query("SELECT * FROM gnw_verify_audit_chain()");
+      const v = verifyRes.rows[0];
+      expect(v.is_valid).toBe(true);
+      expect(Number(v.broken_links)).toBe(0);
+      expect(Number(v.hash_mismatches)).toBe(0);
+      expect(Number(v.total_entries)).toBeGreaterThanOrEqual(CONCURRENCY);
+    } finally {
+      client.release();
+    }
+  });
+
   it("automatically generates continuous SHA-256 hash chain on insert", async () => {
     const client = await pool.connect();
     try {
-      // Insert two sequential audit events
       const res1 = await client.query(`
         INSERT INTO audit_log (event_type, tenant_id, outcome, detail)
         VALUES ('test.chain.event1', 1, 'success', '{"step": 1}')
@@ -45,10 +95,8 @@ describe("Audit Ledger Cryptographic Hash Chain & Tamper Detection", () => {
       `);
       const row2 = res2.rows[0];
       expect(row2.entry_hash).toMatch(/^[0-9a-f]{64}$/);
-      // Row 2 MUST link directly to Row 1's entry_hash
       expect(row2.prev_entry_hash).toBe(row1.entry_hash);
 
-      // Verify via PostgreSQL stored verification function
       const verifyRes = await client.query("SELECT * FROM gnw_verify_audit_chain()");
       const v = verifyRes.rows[0];
       expect(v.is_valid).toBe(true);
@@ -62,7 +110,6 @@ describe("Audit Ledger Cryptographic Hash Chain & Tamper Detection", () => {
   it("detects payload tampering when row contents are modified", async () => {
     const client = await pool.connect();
     try {
-      // Insert a canary entry
       const insertRes = await client.query(`
         INSERT INTO audit_log (event_type, tenant_id, outcome, detail)
         VALUES ('test.tamper.canary', 1, 'success', '{"original": true}')
@@ -89,7 +136,7 @@ describe("Audit Ledger Cryptographic Hash Chain & Tamper Detection", () => {
       expect(v.is_valid).toBe(false);
       expect(Number(v.hash_mismatches)).toBeGreaterThan(0);
 
-      // Restore original content to leave ledger intact
+      // Restore original content
       await client.query("ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only");
       await client.query("ALTER TABLE audit_log DISABLE TRIGGER audit_log_chain_insert");
       await client.query(`
@@ -100,7 +147,6 @@ describe("Audit Ledger Cryptographic Hash Chain & Tamper Detection", () => {
       await client.query("ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only");
       await client.query("ALTER TABLE audit_log ENABLE TRIGGER audit_log_chain_insert");
 
-      // Re-verify that restoring integrity returns valid state
       const recheck = await client.query("SELECT * FROM gnw_verify_audit_chain()");
       expect(recheck.rows[0].is_valid).toBe(true);
     } finally {
