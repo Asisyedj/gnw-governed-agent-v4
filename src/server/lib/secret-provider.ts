@@ -9,6 +9,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { AwsSecretsManagerProvider } from "./aws-secrets-provider.js";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -123,8 +124,15 @@ export function createSecretProvider(
   switch (providerName) {
     case "env-file":
       return new EnvFileProvider(config.envPath ?? ".env.staging");
+    case "aws":
+      return new AwsSecretsManagerProvider({
+        region: config.region ?? config.AWS_REGION ?? "",
+        allowedAccountId: config.allowedAccountId,
+        endpoint: config.endpoint,
+        timeoutMs: config.timeoutMs ? Number(config.timeoutMs) : undefined,
+        maxRetries: config.maxRetries ? Number(config.maxRetries) : undefined,
+      });
     // Future: case "gcp": return new GcpSecretManager(config);
-    // Future: case "aws": return new AwsSecretsManager(config);
     // Future: case "azure": return new AzureKeyVault(config);
     // Future: case "vault": return new VaultProvider(config);
     default:
