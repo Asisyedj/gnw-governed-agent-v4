@@ -1,7 +1,10 @@
 {
-  "schemaVersion": "GNW.Gate1VerificationEvidence.v1",
-  "timestamp": "2026-10-13T15:02:17.025Z",
-  "status": "PASS",
+  "schemaVersion": "GNW.Gate1VerificationEvidence.v2",
+  "executionMode": "SIMULATION",
+  "timestamp": "2026-10-13T15:14:48.295Z",
+  "gate1Certification": "IN_PROGRESS_NOT_CERTIFIED",
+  "liveAwsCertified": false,
+  "status": "PASS_SIMULATION_ONLY",
   "assertions": {
     "manifest_schema_and_entries": {
       "pass": true,
@@ -12,7 +15,9 @@
     "imds_security": {
       "pass": true,
       "environment": "staging-simulation",
-      "policyCheck": "IMDSv2 enforced; Docker container hop limit constraint verified in GATE1-AWS-SECRETS-MANAGER-EC2-PLAN.md"
+      "imdsVersion": "unreachable-in-local-drill",
+      "policyCheck": "IMDSv2 enforced; Docker container hop limit constraint verified in GATE1-AWS-SECRETS-MANAGER-EC2-PLAN.md",
+      "liveVerified": false
     },
     "allowlist_and_region_pinning": {
       "pass": true,
@@ -25,13 +30,24 @@
       "pass": true,
       "sampleArn": "arn:aws:secretsmanager:us-east-1:112233445566:secret:gnw/staging/key-789",
       "maskedLabel": "arn:***:secret:gnw/staging/key-789",
-      "redactionPass": true
+      "redactionPass": true,
+      "healthProbeResult": {
+        "ok": false,
+        "connectivity": false,
+        "authorized": false,
+        "errorCategory": "CredentialsProviderError"
+      }
     },
     "fail_closed_startup": {
       "pass": true,
       "abortedOnFailure": true
+    },
+    "live_aws_retrieval": {
+      "pass": false,
+      "status": "SKIPPED_IN_SIMULATION",
+      "reason": "Live AWS queries must be run on staging EC2 host with active staging instance profile via --mode=live."
     }
   },
-  "completedAt": "2026-10-13T15:02:19.282Z",
-  "evidenceSha256": "0fb6fc0301f59943458098cfc3efa9126f5b3b3a3f6a2f3f8755bc9348462cb7"
+  "completedAt": "2026-10-13T15:14:49.994Z",
+  "evidenceSha256": "b89ec15136514f14143723a34e598e92ecb1fed0efcb374dc1ba885303f0332a"
 }
