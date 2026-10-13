@@ -142,6 +142,8 @@ export const budgetReservations = pgTable("budget_reservations", {
   grantNonce:text("grant_nonce").notNull(),
   reservedTokens:integer("reserved_tokens").notNull(),
   reservedBytes:bigint("reserved_bytes",{mode:"number"}).notNull(),
+  prevEntryHash:text("prev_entry_hash"),
+  entryHash:text("entry_hash"),
   createdAt:ts("created_at").notNull().defaultNow()
 }, t=>({
   taskIdx:index("budget_res_task_idx").on(t.taskId),

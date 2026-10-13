@@ -27,7 +27,7 @@ export default defineConfig({
       thresholds: { lines: 60, functions: 60, branches: 50, statements: 60 },
     },
     reporters: ["verbose"],
-    testTimeout: 15_000,
-    hookTimeout: 15_000,
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

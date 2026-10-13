@@ -1,9 +1,31 @@
 import type { Db } from "./db/index.js";
 import { insertAuditLog, setInterlock } from "./repo.js";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 
 export type AuditEventType="auth.signin"|"auth.signout"|"auth.failed"|"user.register"|"user.login"|"user.login_failed"|"user.logout"|"task.create"|"task.cancel"|"task.approve"|"task.deny"|"task.stop"|"task.complete"|"task.fail"|"grant.issue"|"grant.deny"|"grant.expire"|"grant.replay"|"approval.create"|"approval.use"|"approval.expire"|"approval.replay"|"capability.lease"|"capability.consume"|"capability.signature_verified"|"capability.expire"|"governance.pass"|"governance.fail"|"governance.deny"|"kill_switch.engage"|"kill_switch.release"|"kill_switch_block"|"circuit_breaker_block"|"interlock.update"|"secret.rotate"|"backup.create"|"backup.verify"|"tool.invoke"|"tool.deny"|"tool.result"|"video.create"|"video.approve"|"video.deny"|"video.stop"|"workspace.create"|"workspace.update"|"user.create"|"user.update"|"user.role_change"|"admin.action"|"system.startup"|"system.readiness";
 export interface AuditEvent{eventType:AuditEventType;actorId?:number|null;tenantId?:number|null;taskId?:number|null;resourceType?:string|null;resourceId?:string|null;outcome:"success"|"failure"|"denied";detail?:Record<string,unknown>|null;requestId?:string|null;ipAddress?:string|null;}
+
+
+// ---------------------------------------------------------------------------
+// Audit hash chain — tamper-detection for append-only ledger
+// ---------------------------------------------------------------------------
+let _lastEntryHash: string = "GENESIS";
+
+function computeAuditEntryHash(fields: {
+  eventType: string; actorId?: number | undefined; tenantId?: number | undefined;
+  outcome: string; detail?: unknown; createdAt: string; prevHash: string;
+}): string {
+  const payload = [
+    fields.eventType,
+    String(fields.actorId ?? ""),
+    String(fields.tenantId ?? ""),
+    fields.outcome,
+    JSON.stringify(fields.detail ?? null),
+    fields.createdAt,
+    fields.prevHash,
+  ].join("|");
+  return createHash("sha256").update(payload).digest("hex");
+}
 
 export async function audit(db:Db,event:AuditEvent,options:{required?:boolean}={}):Promise<void>{
  const entry:{eventType:string;actorId?:number;tenantId?:number;taskId?:number;resourceType?:string;resourceId?:string;outcome:"success"|"failure"|"denied";detail?:unknown;requestId?:string;ipAddress?:string}={eventType:event.eventType,outcome:event.outcome};
@@ -15,7 +37,19 @@ export async function audit(db:Db,event:AuditEvent,options:{required?:boolean}={
  if(event.detail !== null && event.detail !== undefined)entry.detail=event.detail;
  if(event.requestId !== null && event.requestId !== undefined)entry.requestId=event.requestId;
  if(event.ipAddress !== null && event.ipAddress !== undefined)entry.ipAddress=event.ipAddress;
- try{await insertAuditLog(db,entry);}
+ const now = new Date().toISOString();
+    const prevHash = _lastEntryHash;
+    const entryHash = computeAuditEntryHash({
+      eventType: entry.eventType,
+      actorId: entry.actorId,
+      tenantId: entry.tenantId,
+      outcome: entry.outcome,
+      detail: entry.detail,
+      createdAt: now,
+      prevHash,
+    });
+    const chainedEntry = { ...entry, prevEntryHash: prevHash, entryHash };
+    try{await insertAuditLog(db, chainedEntry); _lastEntryHash = entryHash;}
  catch(err){
    if(options.required){
      try { await setInterlock(db,{circuitOpen:true},event.actorId ?? undefined); } catch { /* preserve the original audit failure */ }
