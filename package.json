@@ -30,6 +30,7 @@
     "verify:release:evidence": "node scripts/verify-release-evidence.mjs",
     "verify:git-release-metadata": "node scripts/verify-git-release-metadata.mjs",
     "staging:rollback": "node scripts/staging-rollback.mjs",
+    "generate:staging-keys": "node scripts/generate-staging-keys.mjs",
     "test:rls:policy-suite": "node scripts/test-rls-policy-suite.mjs",
     "test:harness": "vitest run src/tests/integration/tool-integration-harness.test.ts",
     "verify:certificate": "node scripts/verify-production-certificate.mjs"
