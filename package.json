@@ -33,7 +33,9 @@
     "generate:staging-keys": "node scripts/generate-staging-keys.mjs",
     "test:rls:policy-suite": "node scripts/test-rls-policy-suite.mjs",
     "test:harness": "vitest run src/tests/integration/tool-integration-harness.test.ts",
-    "verify:certificate": "node scripts/verify-production-certificate.mjs"
+    "verify:certificate": "node scripts/verify-production-certificate.mjs",
+    "preflight:secrets": "node scripts/preflight-secrets.mjs",
+    "verify:audit-chain": "node scripts/verify-audit-chain.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
