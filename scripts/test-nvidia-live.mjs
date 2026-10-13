@@ -24,12 +24,9 @@ async function main() {
     process.exit(1);
   }
 
-  const maskedKey = apiKey.slice(0, 8) + '...' + apiKey.slice(-4);
-  const keyDigest = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
-
   console.log(`NVIDIA NIM Live Test Initializing...`);
   console.log(`Endpoint: ${baseUrl}/chat/completions`);
-  console.log(`API Key: ${maskedKey} (SHA-256 prefix: ${keyDigest})`);
+  console.log(`API Key: [CONFIGURED IN ENVIRONMENT]`);
 
   async function testModel(modelId, prompt, timeoutMs = 20000) {
     const controller = new AbortController();
