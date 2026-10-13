@@ -18,7 +18,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
   // GET /api/settings
   app.get("", async (_req, reply) => {
     const apiKey = process.env.LLM_API_KEY ?? "";
-    const maskedKey = apiKey.length > 8 ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : (apiKey ? "configured" : "none");
+    const maskedKey = apiKey ? "configured" : "none";
     return reply.send({
       provider: "NVIDIA NIM",
       baseUrl: process.env.LLM_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
@@ -27,11 +27,21 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       apiKeyConfigured: Boolean(apiKey),
       maskedApiKey: maskedKey,
       availableModels: [
-        "meta/llama-3.2-11b-vision-instruct",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+        "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "nvidia/nemotron-3-super-120b-a12b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "meta/llama-4-maverick-17b-128e-instruct",
+        "meta/llama-4-scout-17b-16e-instruct",
+        "meta/llama-3.3-70b-instruct",
         "meta/llama-3.2-90b-vision-instruct",
+        "meta/llama-3.2-11b-vision-instruct",
+        "deepseek-ai/deepseek-v4.1-flash",
+        "deepseek-ai/deepseek-coder-6.7b-instruct",
         "mistralai/mistral-large-2-instruct",
         "mistralai/mistral-7b-instruct-v0.3",
-        "deepseek-ai/deepseek-coder-6.7b-instruct",
+        "google/gemma-3-27b-it",
         "ibm/granite-3.0-8b-instruct",
         "ai21labs/jamba-1.5-large-instruct"
       ]
