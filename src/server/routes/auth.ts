@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "node:crypto";
 import { schema, type Db } from "../db/index.js";
 import { findTenantBySlug, findUserByEmail, updateUserLastLogin, countUsersByTenant, createSession, findSessionByTokenHash, deleteSession, insertAuditLog } from "../repo.js";
+import { publicRegistrationAllowed } from "../security/p1-guards.js";
 
 declare module "fastify" { interface FastifyInstance { db: Db; } }
 
@@ -27,7 +28,7 @@ const registerSchema=z.object({email:z.string().email(),password:z.string().min(
 export const authRoutes:FastifyPluginAsync=async(app)=>{
   app.get("/bootstrap",async(_req,reply)=>{
     const tenant=await findTenantBySlug(app.db,DEFAULT_TENANT_SLUG);
-    if(!tenant)return reply.send({bootstrap:true,allowSelfRegistration:true});
+    if(!tenant)return reply.send({bootstrap:ALLOW_SELF_REGISTRATION,allowSelfRegistration:ALLOW_SELF_REGISTRATION});
     const count=await countUsersByTenant(app.db,tenant.id);
     return reply.send({bootstrap:count===0,allowSelfRegistration:ALLOW_SELF_REGISTRATION});
   });
@@ -35,6 +36,7 @@ export const authRoutes:FastifyPluginAsync=async(app)=>{
   app.post("/register",async(req,reply)=>{
     const parsed=registerSchema.safeParse(req.body);
     if(!parsed.success)return reply.status(400).send({error:"Invalid input",code:"invalid_input"});
+    if(!publicRegistrationAllowed(ALLOW_SELF_REGISTRATION))return reply.status(403).send({error:"Self-registration is disabled; provision the initial owner through the protected bootstrap process.",code:"registration_closed"});
     const {email,password}=parsed.data;
     const tenantSlug=parsed.data.tenantSlug??DEFAULT_TENANT_SLUG;
     const passwordHash=await bcrypt.hash(password,SALT_ROUNDS);
