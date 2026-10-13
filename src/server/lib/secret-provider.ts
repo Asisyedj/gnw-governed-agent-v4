@@ -2,7 +2,7 @@
  * Secret Manager provider abstraction for GNW Governed Agent.
  *
  * Supports pluggable secret backends: env-file (staging/dev), or cloud
- * providers (GCP, AWS, Azure, Vault) via future implementations.
+ * providers (GCP, AWS, Azure, Vault) via implementations.
  *
  * Design: fail-closed — if any required secret cannot be fetched, startup
  * must abort. No fallback to empty strings for production secrets.
@@ -22,7 +22,7 @@ export interface SecretProvider {
   /** Fetch a single secret value by its provider-specific ID. */
   fetchSecret(secretId: string): Promise<string>;
 
-  /** Verify connectivity to the secret backend. */
+  /** Verify connectivity and authorization to the secret backend. */
   healthCheck(): Promise<boolean>;
 
   /** Release provider resources. */
@@ -117,20 +117,44 @@ export class EnvFileProvider implements SecretProvider {
 // Factory
 // ---------------------------------------------------------------------------
 
+export interface SecretProviderFactoryConfig {
+  region?: string | undefined;
+  AWS_REGION?: string | undefined;
+  allowedAccountId?: string | undefined;
+  allowedSecretIds?: readonly string[] | undefined;
+  endpoint?: string | undefined;
+  timeoutMs?: string | number | undefined;
+  maxRetries?: string | number | undefined;
+  envPath?: string | undefined;
+  [key: string]: unknown;
+}
+
 export function createSecretProvider(
   providerName: string,
-  config: Record<string, string> = {}
+  config: SecretProviderFactoryConfig = {}
 ): SecretProvider {
   switch (providerName) {
     case "env-file":
-      return new EnvFileProvider(config.envPath ?? ".env.staging");
+      return new EnvFileProvider(
+        typeof config.envPath === "string" ? config.envPath : ".env.staging"
+      );
     case "aws":
       return new AwsSecretsManagerProvider({
-        region: config.region ?? config.AWS_REGION ?? "",
-        allowedAccountId: config.allowedAccountId,
-        endpoint: config.endpoint,
-        timeoutMs: config.timeoutMs ? Number(config.timeoutMs) : undefined,
-        maxRetries: config.maxRetries ? Number(config.maxRetries) : undefined,
+        region:
+          (typeof config.region === "string" ? config.region : undefined) ??
+          (typeof config.AWS_REGION === "string" ? config.AWS_REGION : undefined) ??
+          "",
+        allowedAccountId:
+          typeof config.allowedAccountId === "string"
+            ? config.allowedAccountId
+            : undefined,
+        allowedSecretIds: Array.isArray(config.allowedSecretIds)
+          ? (config.allowedSecretIds as string[])
+          : undefined,
+        endpoint:
+          typeof config.endpoint === "string" ? config.endpoint : undefined,
+        timeoutMs: config.timeoutMs !== undefined ? Number(config.timeoutMs) : undefined,
+        maxRetries: config.maxRetries !== undefined ? Number(config.maxRetries) : undefined,
       });
     // Future: case "gcp": return new GcpSecretManager(config);
     // Future: case "azure": return new AzureKeyVault(config);
@@ -206,5 +230,114 @@ export async function runPreflight(
     fetchedCount: fetched,
     failedSecrets: failed,
     status: failed.length === 0 ? "PASS" : "FAIL",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Runtime Startup Bootstrap
+// ---------------------------------------------------------------------------
+
+export interface BootstrapSecretsOptions {
+  manifestPath?: string | undefined;
+  providerName?: string | undefined;
+  config?: SecretProviderFactoryConfig | undefined;
+  overrideExistingEnv?: boolean | undefined;
+}
+
+export interface BootstrapSecretsResult {
+  provider: string;
+  loadedCount: number;
+  requiredCount: number;
+  keys: string[];
+}
+
+/**
+ * Bootstrap runtime secrets from configured SecretProvider before application startup.
+ * Fail-closed: any failure fetching a required secret throws an error and aborts startup.
+ */
+export async function bootstrapRuntimeSecrets(
+  options: BootstrapSecretsOptions = {}
+): Promise<BootstrapSecretsResult> {
+  const provider = options.providerName ?? process.env.GNW_SECRET_PROVIDER;
+  if (!provider || provider === "none" || provider === "env") {
+    return {
+      provider: "none",
+      loadedCount: 0,
+      requiredCount: 0,
+      keys: [],
+    };
+  }
+
+  const manifestPath =
+    options.manifestPath ??
+    process.env.GNW_SECRET_MANIFEST ??
+    (provider === "aws" ? "secret-manifest.staging-aws.json" : "secret-manifest.staging.json");
+
+  const manifest = await loadManifest(manifestPath);
+
+  // Extract strict allowlist of secret IDs declared in the manifest
+  const allowedSecretIds = Object.values(manifest.secrets).map((s) => s.secretId);
+
+  const providerInstance = createSecretProvider(manifest.provider, {
+    ...options.config,
+    region:
+      options.config?.region ??
+      (typeof process.env.AWS_REGION === "string" ? process.env.AWS_REGION : undefined) ??
+      "us-east-1",
+    allowedAccountId:
+      options.config?.allowedAccountId ?? process.env.AWS_ALLOWED_ACCOUNT_ID,
+    allowedSecretIds,
+    endpoint:
+      options.config?.endpoint ?? process.env.AWS_ENDPOINT_URL,
+    envPath:
+      options.config?.envPath ?? process.env.GNW_ENV_FILE ?? ".env.staging",
+  });
+
+  // Verify health before retrieval — fail closed if unauthorized or unreachable
+  const isHealthy = await providerInstance.healthCheck();
+  if (!isHealthy) {
+    await providerInstance.close();
+    throw new Error(
+      `[GNW] Fatal startup error: secret provider "${manifest.provider}" failed health check. Verify credentials, IAM permissions, and connectivity.`
+    );
+  }
+
+  const keys: string[] = [];
+  const requiredCount = Object.values(manifest.secrets).filter((s) => s.required).length;
+
+  try {
+    for (const [envVar, entry] of Object.entries(manifest.secrets)) {
+      try {
+        const val = await providerInstance.fetchSecret(entry.secretId);
+        if (!val && entry.required) {
+          throw new Error(
+            `[GNW] Fatal startup error: required secret "${envVar}" (${entry.secretId}) returned empty payload.`
+          );
+        }
+        if (val) {
+          if (options.overrideExistingEnv !== false || process.env[envVar] === undefined) {
+            process.env[envVar] = val;
+          }
+          keys.push(envVar);
+        }
+      } catch (err: unknown) {
+        if (entry.required) {
+          throw new Error(
+            `[GNW] Fatal startup error: required secret "${envVar}" (${entry.secretId}) failed to load: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+      }
+    }
+  } finally {
+    await providerInstance.close();
+  }
+
+  return {
+    provider: manifest.provider,
+    loadedCount: keys.length,
+    requiredCount,
+    keys,
   };
 }

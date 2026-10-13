@@ -37,6 +37,7 @@ vi.mock("@aws-sdk/client-secrets-manager", () => {
 // Import AFTER mocks are registered
 import {
   AwsSecretsManagerProvider,
+  validateSecretIdentifier,
   validateSecretArn,
   safeLabel,
   type AwsSecretsManagerConfig,
@@ -128,12 +129,55 @@ describe("AwsSecretsManagerProvider", () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
-    it("works with full ARN secret identifiers", async () => {
+    it("works with full ARN secret identifiers in same region", async () => {
       const arn =
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:gnw/staging/db-AbCdEf";
       mockSend.mockResolvedValueOnce({ SecretString: "arn-value" });
       const value = await provider.fetchSecret(arn);
       expect(value).toBe("arn-value");
+    });
+  });
+
+  // =========================================================================
+  // fetchSecret — Allowlist & Region Pinning (P0)
+  // =========================================================================
+
+  describe("fetchSecret — Allowlist & Region Pinning", () => {
+    it("allows secrets present in allowedSecretIds", async () => {
+      const p = makeProvider({
+        allowedSecretIds: ["gnw/staging/db", "gnw/staging/auth"],
+      });
+      mockSend.mockResolvedValueOnce({ SecretString: "db-secret" });
+      const val = await p.fetchSecret("gnw/staging/db");
+      expect(val).toBe("db-secret");
+      await p.close();
+    });
+
+    it("rejects secrets NOT in allowedSecretIds", async () => {
+      const p = makeProvider({
+        allowedSecretIds: ["gnw/staging/db"],
+      });
+      await expect(p.fetchSecret("gnw/staging/unauthorized")).rejects.toThrow(
+        "is not in the allowed secret identifiers list",
+      );
+      await p.close();
+    });
+
+    it("rejects secret ARNs whose region does not match configured region", async () => {
+      const crossRegionArn =
+        "arn:aws:secretsmanager:eu-west-1:123456789012:secret:gnw/staging/db-AbCdEf";
+      await expect(provider.fetchSecret(crossRegionArn)).rejects.toThrow(
+        "does not match configured provider region",
+      );
+    });
+
+    it("rejects secret names with unsafe characters or traversal", async () => {
+      await expect(provider.fetchSecret("../secret")).rejects.toThrow(
+        "invalid secret name format",
+      );
+      await expect(provider.fetchSecret("secret with spaces")).rejects.toThrow(
+        "invalid secret name format",
+      );
     });
   });
 
@@ -339,34 +383,88 @@ describe("AwsSecretsManagerProvider", () => {
   });
 
   // =========================================================================
-  // healthCheck
+  // healthCheck & checkHealthDetails (P1 Disambiguation)
   // =========================================================================
 
-  describe("healthCheck", () => {
-    it("returns true when DescribeSecret succeeds", async () => {
+  describe("healthCheck & checkHealthDetails", () => {
+    it("returns true and authorized:true when DescribeSecret succeeds", async () => {
       mockSend.mockResolvedValueOnce({ Name: "gnw-health-check-probe" });
+      const details = await provider.checkHealthDetails();
+      expect(details.ok).toBe(true);
+      expect(details.connectivity).toBe(true);
+      expect(details.authorized).toBe(true);
       expect(await provider.healthCheck()).toBe(true);
     });
 
-    it("returns true on ResourceNotFoundException (API is reachable)", async () => {
+    it("returns true on ResourceNotFoundException (API reached and authorized)", async () => {
       mockSend.mockRejectedValueOnce(
         awsError("ResourceNotFoundException", 404),
       );
+      const details = await provider.checkHealthDetails();
+      expect(details.ok).toBe(true);
+      expect(details.connectivity).toBe(true);
+      expect(details.authorized).toBe(true);
       expect(await provider.healthCheck()).toBe(true);
     });
 
-    it("returns true on AccessDeniedException (credentials work)", async () => {
-      mockSend.mockRejectedValueOnce(
+    it("FAILS healthCheck on AccessDeniedException (disambiguates authorization failure)", async () => {
+      mockSend.mockRejectedValue(
         awsError("AccessDeniedException", 403),
       );
-      expect(await provider.healthCheck()).toBe(true);
+      const details = await provider.checkHealthDetails();
+      // Must NOT report healthy!
+      expect(details.ok).toBe(false);
+      expect(details.connectivity).toBe(true);
+      expect(details.authorized).toBe(false);
+      expect(details.error).toContain("AccessDenied");
+
+      // healthCheck() must return false!
+      expect(await provider.healthCheck()).toBe(false);
     });
 
     it("returns false on network/connectivity errors", async () => {
-      mockSend.mockRejectedValueOnce(
+      mockSend.mockRejectedValue(
         awsError("NetworkingError", 0),
       );
+      const details = await provider.checkHealthDetails();
+      expect(details.ok).toBe(false);
+      expect(details.connectivity).toBe(false);
+      expect(details.authorized).toBe(false);
       expect(await provider.healthCheck()).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // Cache invalidation (Rotation Support)
+  // =========================================================================
+
+  describe("invalidateCache — rotation", () => {
+    it("clears cached value for a specific secret to allow rotated value fetch", async () => {
+      mockSend.mockResolvedValueOnce({ SecretString: "version-1" });
+      const v1 = await provider.fetchSecret("ROTATING_KEY");
+      expect(v1).toBe("version-1");
+
+      // Invalidate
+      provider.invalidateCache("ROTATING_KEY");
+
+      mockSend.mockResolvedValueOnce({ SecretString: "version-2" });
+      const v2 = await provider.fetchSecret("ROTATING_KEY");
+      expect(v2).toBe("version-2");
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("clears all cached secrets when called without arguments", async () => {
+      mockSend.mockResolvedValueOnce({ SecretString: "val-1" });
+      mockSend.mockResolvedValueOnce({ SecretString: "val-2" });
+      await provider.fetchSecret("KEY_1");
+      await provider.fetchSecret("KEY_2");
+
+      provider.invalidateCache();
+
+      mockSend.mockResolvedValueOnce({ SecretString: "val-1-new" });
+      const v1 = await provider.fetchSecret("KEY_1");
+      expect(v1).toBe("val-1-new");
+      expect(mockSend).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -401,7 +499,6 @@ describe("AwsSecretsManagerProvider", () => {
 
   describe("SecretProvider interface", () => {
     it("implements the SecretProvider interface", () => {
-      // TypeScript compile-time check; this assignment must succeed
       const sp: SecretProvider = provider;
       expect(sp.name).toBe("aws-secrets-manager");
       expect(typeof sp.fetchSecret).toBe("function");
@@ -416,15 +513,72 @@ describe("AwsSecretsManagerProvider", () => {
 
   describe("createSecretProvider factory", () => {
     it("creates AwsSecretsManagerProvider via 'aws' provider name", async () => {
-      // Dynamic import to test factory wiring
       const { createSecretProvider } = await import(
         "../../server/lib/secret-provider.js"
       );
       const p = createSecretProvider("aws", {
         region: "us-west-2",
+        allowedSecretIds: ["gnw/staging/db"],
       });
       expect(p.name).toBe("aws-secrets-manager");
       await p.close();
+    });
+  });
+
+  // =========================================================================
+  // bootstrapRuntimeSecrets (P0 Startup Integration)
+  // =========================================================================
+
+  describe("bootstrapRuntimeSecrets", () => {
+    it("returns provider: none when GNW_SECRET_PROVIDER is unset", async () => {
+      const { bootstrapRuntimeSecrets } = await import(
+        "../../server/lib/secret-provider.js"
+      );
+      const res = await bootstrapRuntimeSecrets();
+      expect(res.provider).toBe("none");
+      expect(res.loadedCount).toBe(0);
+    });
+
+    it("loads secrets and populates process.env on valid manifest", async () => {
+      const { bootstrapRuntimeSecrets } = await import(
+        "../../server/lib/secret-provider.js"
+      );
+
+      // Probe health passes
+      mockSend.mockResolvedValueOnce({ Name: "gnw-health-check-probe" });
+      // Fetch for each secret in manifest
+      mockSend.mockImplementation((cmd: { input?: { SecretId?: string } }) => {
+        const id = cmd.input?.SecretId ?? "";
+        if (id === "gnw-health-check-probe") return Promise.resolve({ Name: id });
+        return Promise.resolve({ SecretString: `secret-val-for-${id}` });
+      });
+
+      const res = await bootstrapRuntimeSecrets({
+        providerName: "aws",
+        manifestPath: "secret-manifest.staging-aws.json",
+        config: { region: "us-east-1" },
+      });
+
+      expect(res.provider).toBe("aws");
+      expect(res.loadedCount).toBeGreaterThan(0);
+      expect(process.env.DATABASE_URL).toBe("secret-val-for-gnw/staging/database-url");
+    });
+
+    it("fails closed if provider health check fails", async () => {
+      const { bootstrapRuntimeSecrets } = await import(
+        "../../server/lib/secret-provider.js"
+      );
+
+      // Probe fails with AccessDenied
+      mockSend.mockRejectedValueOnce(awsError("AccessDeniedException", 403));
+
+      await expect(
+        bootstrapRuntimeSecrets({
+          providerName: "aws",
+          manifestPath: "secret-manifest.staging-aws.json",
+          config: { region: "us-east-1" },
+        }),
+      ).rejects.toThrow("failed health check");
     });
   });
 });

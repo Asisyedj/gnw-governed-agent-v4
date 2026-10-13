@@ -1,7 +1,7 @@
 {
   "name": "gnw-governed-agent-v4",
   "version": "1.0.0",
-  "description": "GNW Governed Agent — production control plane",
+  "description": "GNW Governed Agent \u2014 production control plane",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -35,7 +35,8 @@
     "test:harness": "vitest run src/tests/integration/tool-integration-harness.test.ts",
     "verify:certificate": "node scripts/verify-production-certificate.mjs",
     "preflight:secrets": "node scripts/preflight-secrets.mjs",
-    "verify:audit-chain": "node scripts/verify-audit-chain.mjs"
+    "verify:audit-chain": "node scripts/verify-audit-chain.mjs",
+    "verify:staging:secrets": "node scripts/verify-aws-staging-secrets.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1150.0",

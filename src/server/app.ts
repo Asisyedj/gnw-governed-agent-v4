@@ -5,6 +5,12 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import { createDb, closeDb } from "./db/index.js";
 import { getInterlock, insertAuditLog } from "./repo.js";
 import { validateSecrets } from "./lib/secretsCheck.js";
+import { bootstrapRuntimeSecrets, type BootstrapSecretsOptions } from "./lib/secret-provider.js";
+
+export interface BuildAppOptions {
+  secretBootstrap?: BootstrapSecretsOptions | undefined;
+  skipSecretBootstrap?: boolean | undefined;
+}
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { taskRoutes } from "./routes/tasks.js";
@@ -21,7 +27,10 @@ import type { FastifyRequest } from "fastify";
 
 const PORT = Number(process.env.PORT ?? 3000);
 
-export async function buildApp() {
+export async function buildApp(options: BuildAppOptions = {}) {
+  if (!options.skipSecretBootstrap && process.env.GNW_SECRET_PROVIDER) {
+    await bootstrapRuntimeSecrets(options.secretBootstrap);
+  }
   validateSecrets();
 
   const db = createDb();

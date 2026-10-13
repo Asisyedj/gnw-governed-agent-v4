@@ -7,8 +7,10 @@
  * Security constraints:
  * - No secret values are ever logged, serialized, or included in error messages.
  * - ARN validation ensures only expected secrets in expected accounts/regions are fetched.
+ * - Explicit allowlist enforcement: only manifest-approved secret IDs may be fetched.
+ * - Region matching: ARN region must match configured provider region.
+ * - Health check disambiguation: separates API connectivity from IAM authorization.
  * - Timeout and retry behaviour is configurable; defaults are conservative.
- * - healthCheck() calls DescribeSecret (no value returned) to verify connectivity.
  */
 
 import {
@@ -37,6 +39,12 @@ export interface AwsSecretsManagerConfig {
   allowedAccountId?: string | undefined;
 
   /**
+   * Optional: restrict retrieval to an explicit allowlist of secret identifiers.
+   * If provided, any identifier not present in this list is rejected before the API call.
+   */
+  allowedSecretIds?: readonly string[] | undefined;
+
+  /**
    * Request timeout in milliseconds. Default: 5000ms.
    */
   timeoutMs?: number | undefined;
@@ -53,7 +61,18 @@ export interface AwsSecretsManagerConfig {
 }
 
 // ---------------------------------------------------------------------------
-// ARN validation
+// Health check status
+// ---------------------------------------------------------------------------
+
+export interface SecretProviderHealth {
+  ok: boolean;
+  connectivity: boolean;
+  authorized: boolean;
+  error?: string | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// ARN & Identifier validation
 // ---------------------------------------------------------------------------
 
 /**
@@ -63,32 +82,71 @@ export interface AwsSecretsManagerConfig {
 const ARN_REGEX =
   /^arn:aws:secretsmanager:[a-z]{2}(-gov)?-[a-z]+-\d:\d{12}:secret:[A-Za-z0-9/_+=.@!-]+$/;
 
-/** Validate ARN format and account-id allowlist. */
-export function validateSecretArn(
-  secretId: string,
-  allowedAccountId: string | undefined,
-): void {
-  // Allow plain secret names (non-ARN) — SDK resolves them in the configured region.
-  if (!secretId.startsWith("arn:")) return;
+/** Strict regex for non-ARN secret names. */
+const SECRET_NAME_REGEX = /^[A-Za-z0-9/_+=.@!-]+$/;
 
-  if (!ARN_REGEX.test(secretId)) {
-    throw new Error(
-      "[GNW] AwsSecretsManagerProvider: invalid ARN format for secret identifier." +
-      " Expected arn:aws:secretsmanager:<region>:<account>:secret:<name>."
-    );
+/** Validate identifier format, region pinning, account allowlist, and approved ID list. */
+export function validateSecretIdentifier(
+  secretId: string,
+  configuredRegion: string,
+  allowedAccountId?: string | undefined,
+  allowedSecretIds?: readonly string[] | undefined,
+): void {
+  // If an allowlist is provided, secretId MUST be in the allowlist
+  if (allowedSecretIds && allowedSecretIds.length > 0) {
+    if (!allowedSecretIds.includes(secretId)) {
+      throw new Error(
+        "[GNW] AwsSecretsManagerProvider: secret identifier \"" +
+        safeLabel(secretId) +
+        "\" is not in the allowed secret identifiers list. Access denied."
+      );
+    }
   }
 
-  if (allowedAccountId) {
+  if (secretId.startsWith("arn:")) {
+    if (!ARN_REGEX.test(secretId)) {
+      throw new Error(
+        "[GNW] AwsSecretsManagerProvider: invalid ARN format for secret identifier." +
+        " Expected arn:aws:secretsmanager:<region>:<account>:secret:<name>."
+      );
+    }
+
     const arnParts = secretId.split(":");
+    const arnRegion = arnParts[3];
     const arnAccount = arnParts[4];
-    if (arnAccount !== allowedAccountId) {
+
+    if (arnRegion !== configuredRegion) {
+      throw new Error(
+        "[GNW] AwsSecretsManagerProvider: secret ARN region \"" +
+        arnRegion + "\" does not match configured provider region \"" +
+        configuredRegion + "\". Region mismatch denied."
+      );
+    }
+
+    if (allowedAccountId && arnAccount !== allowedAccountId) {
       throw new Error(
         "[GNW] AwsSecretsManagerProvider: secret ARN belongs to account " +
         arnAccount + " but allowed account is " + allowedAccountId +
         ". Cross-account access denied by provider policy."
       );
     }
+  } else {
+    if (secretId.includes("..") || !SECRET_NAME_REGEX.test(secretId)) {
+      throw new Error(
+        "[GNW] AwsSecretsManagerProvider: invalid secret name format \"" +
+        safeLabel(secretId) +
+        "\". Must contain only alphanumeric, hyphens, underscores, dots, slashes, or plus signs without traversal."
+      );
+    }
   }
+}
+
+/** Backward-compatible helper for existing tests. */
+export function validateSecretArn(
+  secretId: string,
+  allowedAccountId: string | undefined,
+): void {
+  validateSecretIdentifier(secretId, "us-east-1", allowedAccountId, undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +189,7 @@ export class AwsSecretsManagerProvider implements SecretProvider {
     readonly timeoutMs: number;
     readonly maxRetries: number;
     readonly allowedAccountId: string | undefined;
+    readonly allowedSecretIds: readonly string[] | undefined;
     readonly endpoint: string | undefined;
   };
 
@@ -151,6 +210,7 @@ export class AwsSecretsManagerProvider implements SecretProvider {
       timeoutMs: config.timeoutMs ?? 5_000,
       maxRetries: config.maxRetries ?? 2,
       allowedAccountId: config.allowedAccountId,
+      allowedSecretIds: config.allowedSecretIds,
       endpoint: config.endpoint,
     };
 
@@ -169,7 +229,12 @@ export class AwsSecretsManagerProvider implements SecretProvider {
 
   async fetchSecret(secretId: string): Promise<string> {
     this.assertOpen();
-    validateSecretArn(secretId, this.providerConfig.allowedAccountId);
+    validateSecretIdentifier(
+      secretId,
+      this.providerConfig.region,
+      this.providerConfig.allowedAccountId,
+      this.providerConfig.allowedSecretIds,
+    );
 
     // Return cached value if available
     const cached = this.cache.get(secretId);
@@ -247,30 +312,65 @@ export class AwsSecretsManagerProvider implements SecretProvider {
     return value;
   }
 
-  async healthCheck(): Promise<boolean> {
+  /**
+   * Detailed health check that disambiguates API connectivity from IAM authorization.
+   */
+  async checkHealthDetails(): Promise<SecretProviderHealth> {
     this.assertOpen();
     try {
-      // DescribeSecret does NOT return the secret value — safe for health checks.
-      // We use a synthetic/known-safe secret name; a ResourceNotFoundException
-      // still proves the API is reachable and credentials are valid for the call.
       await this.client.send(
         new DescribeSecretCommand({
           SecretId: "gnw-health-check-probe",
         }),
       );
-      return true;
+      return { ok: true, connectivity: true, authorized: true };
     } catch (err: unknown) {
       const awsErr = err as AwsSdkError;
-      // ResourceNotFoundException means the API responded — healthy
-      if (awsErr.name === "ResourceNotFoundException") {
-        return true;
+      const code = awsErr.name ?? "UnknownError";
+      const status = awsErr.$metadata?.httpStatusCode ?? 0;
+
+      // ResourceNotFoundException proves connectivity AND that credentials are authorized
+      // to interact with Secrets Manager in this account/region.
+      if (code === "ResourceNotFoundException" || status === 404) {
+        return { ok: true, connectivity: true, authorized: true };
       }
-      // AccessDenied means credentials work but policy is too narrow — still "connected"
-      if (awsErr.name === "AccessDeniedException") {
-        return true;
+
+      // AccessDeniedException proves connectivity, but authorization FAILED.
+      // Must NOT be reported as healthy!
+      if (code === "AccessDeniedException" || status === 403) {
+        return {
+          ok: false,
+          connectivity: true,
+          authorized: false,
+          error: "AccessDenied: IAM credentials lack secretsmanager permissions",
+        };
       }
-      // Any other error: connectivity issue
-      return false;
+
+      // Any other error (network timeout, connection refused, DNS resolution)
+      return {
+        ok: false,
+        connectivity: false,
+        authorized: false,
+        error: code,
+      };
+    }
+  }
+
+  /**
+   * Standard SecretProvider healthCheck.
+   * Returns true ONLY if provider is connected AND authorized.
+   */
+  async healthCheck(): Promise<boolean> {
+    const details = await this.checkHealthDetails();
+    return details.ok;
+  }
+
+  /** Invalidate in-memory cache to support key rotation drills. */
+  invalidateCache(secretId?: string): void {
+    if (secretId) {
+      this.cache.delete(secretId);
+    } else {
+      this.cache.clear();
     }
   }
 

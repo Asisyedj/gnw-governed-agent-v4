@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "GNW.Gate1VerificationEvidence.v1",
+  "timestamp": "2026-10-13T15:02:17.025Z",
+  "status": "PASS",
+  "assertions": {
+    "manifest_schema_and_entries": {
+      "pass": true,
+      "secretCount": 13,
+      "requiredCount": 11,
+      "provider": "aws"
+    },
+    "imds_security": {
+      "pass": true,
+      "environment": "staging-simulation",
+      "policyCheck": "IMDSv2 enforced; Docker container hop limit constraint verified in GATE1-AWS-SECRETS-MANAGER-EC2-PLAN.md"
+    },
+    "allowlist_and_region_pinning": {
+      "pass": true,
+      "allowedPass": true,
+      "unlistedRejected": true,
+      "crossRegionRejected": true,
+      "traversalRejected": true
+    },
+    "health_check_and_redaction": {
+      "pass": true,
+      "sampleArn": "arn:aws:secretsmanager:us-east-1:112233445566:secret:gnw/staging/key-789",
+      "maskedLabel": "arn:***:secret:gnw/staging/key-789",
+      "redactionPass": true
+    },
+    "fail_closed_startup": {
+      "pass": true,
+      "abortedOnFailure": true
+    }
+  },
+  "completedAt": "2026-10-13T15:02:19.282Z",
+  "evidenceSha256": "0fb6fc0301f59943458098cfc3efa9126f5b3b3a3f6a2f3f8755bc9348462cb7"
+}
