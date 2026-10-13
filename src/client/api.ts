@@ -27,6 +27,24 @@ export type ApprovalSummary = { id: number; taskId: number | null; actionDigest:
 export type Task = TaskSummary & { description: string | null; budgetTokensAllocated: number; budgetTokensUsed: number; budgetBytesAllocated: number; budgetBytesUsed: number; trajectoryRootHash: string | null; trajectorySteps: number; steps: StepSummary[] };
 export type StepSummary = { id: number; stepIndex: number; agentRole: string; toolName: string; operation: string; status: string; durationMs: number | null; errorMessage: string | null };
 
+export type SettingsResponse = {
+  provider: string;
+  baseUrl: string;
+  model: string;
+  deepResearchModel: string;
+  apiKeyConfigured: boolean;
+  maskedApiKey: string;
+  availableModels: string[];
+};
+
+export type TestResult = {
+  ok: boolean;
+  model: string;
+  response: string;
+  latencyMs: number;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+};
+
 export const api = {
   me: () => request<MeResponse>("/api/me"),
   bootstrap: () => request<BootstrapResponse>("/api/auth/bootstrap"),
@@ -38,4 +56,9 @@ export const api = {
   approvals: { list: () => request<ApprovalSummary[]>("/api/approvals"), review: (id: number, status: "approved" | "denied", reason?: string) => request<{ ok: boolean }>(`/api/approvals/${id}`, { method: "PATCH", body: JSON.stringify({ status, reason }) }) },
   interlock: { get: () => request<{ killSwitch: boolean; circuitOpen: boolean; generation: number }>("/api/interlock"), set: (patch: { killSwitch?: boolean; circuitOpen?: boolean }) => request<{ ok: boolean }>("/api/interlock", { method: "PATCH", body: JSON.stringify(patch) }) },
   audit: { list: (limit?: number) => request<Record<string, unknown>[]>(`/api/audit?limit=${limit ?? 100}`) },
+  settings: {
+    get: () => request<SettingsResponse>("/api/settings"),
+    update: (body: { model?: string; apiKey?: string }) => request<{ ok: boolean }>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),
+    test: (payload?: { model?: string; prompt?: string }) => request<TestResult>("/api/settings/test", { method: "POST", body: JSON.stringify(payload ?? {}) }),
+  },
 };

@@ -53,6 +53,9 @@ describe("validateSecrets", () => {
     process.env.NODE_ENV = "production";
     process.env.DATABASE_URL = "postgresql://u:p@db.internal/gnw";
     process.env.COOKIE_SECRET = "a".repeat(32);
+    delete process.env.SESSION_SECRET;
+    delete process.env.EXECUTOR_SECRET;
+    delete process.env.GNW_REQUIRE_SIGNED_GRANTS;
     expect(() => validateSecrets()).toThrow("SESSION_SECRET");
     expect(() => validateSecrets()).toThrow("EXECUTOR_SECRET");
     expect(() => validateSecrets()).toThrow("GNW_REQUIRE_SIGNED_GRANTS");

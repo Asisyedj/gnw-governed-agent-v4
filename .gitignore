@@ -16,6 +16,8 @@ release/evidence/
 *.tar.gz
 
 # Generated gate evidence (retain in workflow artifacts)
+/sbom.json
+/git-release-metadata.json
 /rls-policy-suite-results.json
 /rollback-evidence.json
 /certification/evidence.json

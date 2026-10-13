@@ -15,6 +15,7 @@ import { auditRoutes } from "./routes/audit.js";
 import { healthRoutes } from "./routes/health.js";
 import { summaryRoutes } from "./routes/summary.js";
 import { metricsRoutes } from "./routes/metrics.js";
+import { settingsRoutes } from "./routes/settings.js";
 import { recordRequest } from "./metrics.js";
 import type { FastifyRequest } from "fastify";
 
@@ -94,11 +95,18 @@ export async function buildApp() {
       }
       const origin = req.headers.origin;
       if (origin) {
-        const configuredOrigin = process.env.CORS_ORIGIN ?? "same-origin";
-        const expectedOrigin = configuredOrigin === "same-origin"
-          ? req.protocol + "://" + req.hostname
-          : configuredOrigin;
-        if (origin !== expectedOrigin) {
+        const configuredOrigin = process.env.CORS_ORIGIN;
+        const hostHeader = req.headers.host;
+        const hostOrigin = hostHeader ? `${req.protocol}://${hostHeader}` : null;
+        const isLocalOrDev =
+          process.env.NODE_ENV !== "production" ||
+          configuredOrigin === "*" ||
+          /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin);
+        const allowed =
+          isLocalOrDev ||
+          (configuredOrigin && configuredOrigin !== "same-origin" && origin === configuredOrigin) ||
+          (hostOrigin && origin === hostOrigin);
+        if (!allowed) {
           return reply.status(403).send({ error: "Origin not allowed.", code: "origin_not_allowed" });
         }
       }
@@ -126,14 +134,23 @@ export async function buildApp() {
     }
   });
 
-  // ── Serve built client in production ──────────────────────────────────────
-  if (process.env.NODE_ENV === "production" && process.env.VERCEL !== "1") {
+  // ── Serve built client UI ────────────────────────────────────────────────
+  if (process.env.VERCEL !== "1") {
     const { default: fastifyStatic } = await import("@fastify/static");
     const { join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
+    const { existsSync } = await import("node:fs");
     const dir = fileURLToPath(new URL(".", import.meta.url));
-    await app.register(fastifyStatic, { root: join(dir, "../../dist/client"), prefix: "/", decorateReply: false });
-    app.setNotFoundHandler(async (_req, reply) => reply.sendFile("index.html"));
+    const clientDist = join(dir, "../../dist/client");
+    if (existsSync(clientDist)) {
+      await app.register(fastifyStatic, { root: clientDist, prefix: "/", decorateReply: false });
+      app.setNotFoundHandler(async (req, reply) => {
+        if (req.url.startsWith("/api")) {
+          return reply.status(404).send({ error: "Route not found", code: "not_found" });
+        }
+        return reply.sendFile("index.html");
+      });
+    }
   }
 
   // ── API routes ────────────────────────────────────────────────────────────
@@ -146,6 +163,7 @@ export async function buildApp() {
   await app.register(interlockRoutes,{ prefix: "/api/interlock" });
   await app.register(auditRoutes,    { prefix: "/api/audit" });
   await app.register(metricsRoutes,  { prefix: "" });
+  await app.register(settingsRoutes, { prefix: "/api/settings" });
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {
