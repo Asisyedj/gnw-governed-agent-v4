@@ -23,7 +23,7 @@ BEGIN
   IF NOT pg_catalog.has_schema_privilege('gnw_audit_verifier', 'public', 'CREATE') THEN
     RAISE EXCEPTION 'gnw_audit_verifier needs temporary CREATE on schema public for function ownership transfer; provision it as DBA and revoke after migration';
   END IF;
-END $;
+END $$;
 
 GRANT SELECT ON TABLE public.audit_log, public.audit_chain_head TO gnw_audit_verifier;
 -- The database administrator provisions temporary CREATE on public for this
