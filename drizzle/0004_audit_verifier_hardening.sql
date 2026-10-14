@@ -78,7 +78,7 @@ BEGIN
                  COALESCE(r.detail::text, 'null') || '|' ||
                  to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') || '|' ||
                  COALESCE(r.prev_entry_hash, '');
-    v_computed_hash := encode(public.digest_placeholder(convert_to(v_payload, 'UTF8')), 'hex');
+    v_computed_hash := encode(sha256(convert_to(v_payload, 'UTF8')), 'hex');
 
     IF r.entry_hash IS DISTINCT FROM v_computed_hash THEN
       v_mismatches := v_mismatches + 1;
