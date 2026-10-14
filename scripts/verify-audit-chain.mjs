@@ -61,7 +61,7 @@ async function main() {
   try {
     if (useVerifierRole) {
       // SET ROLE succeeds only for an explicitly authorized membership. The role
-      // is NOLOGIN, NO SUPERUSER, BYPASSRLS and has SELECT on audit_log + head.
+      // is NOLOGIN, NOBYPASSRLS and reads the global chain through a scoped SELECT policy on audit_log.
       await client.query("SET ROLE gnw_audit_verifier");
     }
 
