@@ -21,6 +21,7 @@ beforeAll(async () => {
     slug: `settings-test-${randomUUID().slice(0, 8)}`,
     displayName: "Settings Security Test",
   }).returning({ id: schema.tenants.id });
+  if (!tenant) throw new Error("Failed to create settings test tenant");
   tenantId = tenant.id;
 
   const [user] = await withTenant(db, tenantId, tx =>
@@ -31,6 +32,7 @@ beforeAll(async () => {
       role: "owner",
     }).returning({ id: schema.users.id }),
   );
+  if (!user) throw new Error("Failed to create settings test user");
   userId = user.id;
 
   const rawToken = randomBytes(32).toString("hex");
