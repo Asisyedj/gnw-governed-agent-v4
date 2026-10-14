@@ -59,6 +59,7 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_audit_verifier;"
       - name: Typecheck
         run: npm run typecheck
       - name: Syntax-check production preflight
@@ -78,6 +79,7 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE UPDATE, DELETE ON audit_log, nonces, interlocks FROM gnw_app;"
           # Remove the temporary migration membership before tests/runtime checks.
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE gnw_audit_verifier FROM gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE CREATE ON SCHEMA public FROM gnw_audit_verifier;"
       - name: Verify production closure static gate
         run: npm run verify:production
       - name: Cryptographic closure
@@ -280,6 +282,7 @@ jobs:
           GRANT gnw_audit_verifier TO gnw_migrator;
           GRANT CONNECT, TEMPORARY ON DATABASE gnw_rollback_test TO gnw_migrator;
           GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;
+          GRANT USAGE, CREATE ON SCHEMA public TO gnw_audit_verifier;
           SQL
       - name: Apply disposable forward migration
         shell: bash
@@ -289,6 +292,7 @@ jobs:
           trap 'rm -f drizzle/9999_ci_rollback_drill.sql' EXIT
           npm run db:migrate
           PGPASSWORD=gnw_admin_pw psql -h 127.0.0.1 -U postgres -d gnw_rollback_test -v ON_ERROR_STOP=1 -c "REVOKE gnw_audit_verifier FROM gnw_migrator;"
+          PGPASSWORD=gnw_admin_pw psql -h 127.0.0.1 -U postgres -d gnw_rollback_test -v ON_ERROR_STOP=1 -c "REVOKE CREATE ON SCHEMA public FROM gnw_audit_verifier;"
           node scripts/staging-rollback.mjs --migration=9999_ci_rollback_drill.sql --backup-ref=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} --confirm=ROLLBACK-STAGING
           test -f rollback-evidence.json
       - name: Verify rollback ledger record removed
@@ -350,6 +354,7 @@ jobs:
           GRANT CONNECT, TEMPORARY ON DATABASE gnw_kill_switch_test TO gnw_app, gnw_migrator;
           GRANT USAGE ON SCHEMA public TO gnw_app;
           GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;
+          GRANT USAGE, CREATE ON SCHEMA public TO gnw_audit_verifier;
           SQL
       - name: Apply complete schema with the dedicated migrator
         env:
@@ -364,6 +369,7 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_kill_switch_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gnw_app;"
           psql -h 127.0.0.1 -U postgres -d gnw_kill_switch_test -v ON_ERROR_STOP=1 -c "REVOKE UPDATE, DELETE ON audit_log, nonces, interlocks FROM gnw_app;"
           psql -h 127.0.0.1 -U postgres -d gnw_kill_switch_test -v ON_ERROR_STOP=1 -c "REVOKE gnw_audit_verifier FROM gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_kill_switch_test -v ON_ERROR_STOP=1 -c "REVOKE CREATE ON SCHEMA public FROM gnw_audit_verifier;"
       - name: Execute kill-switch drill in isolation
         run: npx vitest run --config vitest.operational.config.ts --reporter=verbose --reporter=json --outputFile=kill-switch-drill-results.json
       - name: Upload kill-switch drill evidence
