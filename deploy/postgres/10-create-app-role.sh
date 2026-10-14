@@ -11,6 +11,10 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
 SELECT 'CREATE ROLE gnw_audit_verifier NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT'
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gnw_audit_verifier') \gexec
 
+-- Migration may temporarily transfer the verifier function to this NOLOGIN role.
+-- The release/migration administrator must revoke CREATE after all migrations.
+GRANT USAGE, CREATE ON SCHEMA public TO gnw_audit_verifier;
+
 SELECT format(
   'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT',
   :'app_user', :'app_password'
