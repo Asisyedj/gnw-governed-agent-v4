@@ -5,6 +5,12 @@ set -eu
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -v app_user="$GNW_APP_DB_USER" -v app_password="$GNW_APP_DB_PASSWORD" <<'SQL'
+-- Dedicated, non-login owner for global audit-chain verification.
+-- BYPASSRLS is deliberately confined to this NOLOGIN role; do not grant it to
+-- the application role or any ordinary runtime identity.
+SELECT 'CREATE ROLE gnw_audit_verifier NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gnw_audit_verifier') \gexec
+
 SELECT format(
   'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT',
   :'app_user', :'app_password'
