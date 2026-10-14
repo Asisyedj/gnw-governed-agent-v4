@@ -35,7 +35,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_catalog.pg_roles
     WHERE oid = verifier_oid
-      AND (rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole)
+      AND (rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole OR rolinherit)
   ) THEN
     RAISE EXCEPTION 'Audit verifier must be NOLOGIN, NOSUPERUSER, NOBYPASSRLS, NOCREATEDB, NOCREATEROLE';
   END IF;
