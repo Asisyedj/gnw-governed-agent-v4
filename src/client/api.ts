@@ -35,6 +35,7 @@ export type SettingsResponse = {
   apiKeyConfigured: boolean;
   maskedApiKey: string;
   availableModels: string[];
+  settingsManagedExternally: boolean;
 };
 
 export type TestResult = {
@@ -58,7 +59,6 @@ export const api = {
   audit: { list: (limit?: number) => request<Record<string, unknown>[]>(`/api/audit?limit=${limit ?? 100}`) },
   settings: {
     get: () => request<SettingsResponse>("/api/settings"),
-    update: (body: { model?: string; apiKey?: string }) => request<{ ok: boolean }>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),
     test: (payload?: { model?: string; prompt?: string }) => request<TestResult>("/api/settings/test", { method: "POST", body: JSON.stringify(payload ?? {}) }),
   },
 };
