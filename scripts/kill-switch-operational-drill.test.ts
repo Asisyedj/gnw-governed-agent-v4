@@ -66,6 +66,8 @@ afterAll(async () => {
     "INSERT INTO interlocks (kill_switch, circuit_open, generation, reason) VALUES (false, false, $1, $2)",
     [generation, "CI kill-switch drill teardown"],
   );
+  // Clear FK references from immutable interlock history before deleting the disposable test owner.
+  if (userId) await adminPool.query("UPDATE interlocks SET updated_by_user_id = NULL WHERE updated_by_user_id = $1", [userId]);
   if (sessionId) await db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
   if (userId && tenantId) {
     await withTenant(db, tenantId, tx => tx.delete(schema.users).where(eq(schema.users.id, userId!)));
