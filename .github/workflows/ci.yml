@@ -114,6 +114,11 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
         run: npm run test
+      - name: Verify global audit-chain integrity and runtime append-only grants
+        env:
+          DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
+          GNW_AUDIT_VERIFY_USE_ROLE: "false"
+        run: node scripts/verify-audit-chain.mjs --limit 100000
       - name: Tests with coverage
         env:
           TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
