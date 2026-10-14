@@ -15,7 +15,7 @@ BEGIN
   WHERE rolname = 'gnw_audit_verifier';
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Required role gnw_audit_verifier is missing; provision it as NOLOGIN NOSUPERUSER BYPASSRLS before migration';
+    RAISE EXCEPTION 'Required role gnw_audit_verifier is missing; provision it as NOLOGIN NOSUPERUSER NOBYPASSRLS before migration';
   END IF;
   IF v_can_login OR v_is_superuser OR v_bypass_rls THEN
     RAISE EXCEPTION 'gnw_audit_verifier must be NOLOGIN, NOSUPERUSER, NOBYPASSRLS';
