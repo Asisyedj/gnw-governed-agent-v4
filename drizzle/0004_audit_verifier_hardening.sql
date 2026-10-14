@@ -25,7 +25,6 @@ BEGIN
   END IF;
 END $;
 
-GRANT USAGE ON SCHEMA public TO gnw_audit_verifier;
 GRANT SELECT ON TABLE public.audit_log, public.audit_chain_head TO gnw_audit_verifier;
 -- The database administrator provisions temporary CREATE on public for this
 -- NOLOGIN role before migration. The deployment runner must revoke that grant
@@ -118,15 +117,7 @@ BEGIN
 END;
 $$;
 
--- Keep direct invocation closed by default. The migrator is granted EXECUTE
--- before ownership is transferred; the role's temporary membership is removed
--- by the deployment/CI orchestration after migrations complete.
+-- Keep direct invocation closed by default. A privileged operational identity
+-- must receive EXECUTE explicitly from the DBA if it needs to call this function.
 REVOKE ALL ON FUNCTION public.gnw_verify_audit_chain() FROM PUBLIC;
-DO $
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'gnw_migrator') THEN
-    GRANT EXECUTE ON FUNCTION public.gnw_verify_audit_chain() TO gnw_migrator;
-  END IF;
-END $;
-
 ALTER FUNCTION public.gnw_verify_audit_chain() OWNER TO gnw_audit_verifier;
