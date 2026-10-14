@@ -3,11 +3,8 @@ import { api, type SettingsResponse, type TestResult } from "../api";
 
 export default function SettingsView() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
-  const [selectedModel, setSelectedModel] = useState("nvidia/nemotron-3-ultra-550b-a55b");
-  const [customKey, setCustomKey] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("meta/llama-3.2-11b-vision-instruct");
   const [error, setError] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -24,25 +21,6 @@ export default function SettingsView() {
   useEffect(() => {
     void load();
   }, []);
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    setMsg(null);
-    try {
-      const payload: { model?: string; apiKey?: string } = { model: selectedModel };
-      if (customKey.trim()) payload.apiKey = customKey.trim();
-      await api.settings.update(payload);
-      setMsg("Settings saved successfully.");
-      setCustomKey("");
-      await load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to save settings");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const testConnection = async (prompt?: string) => {
     setTesting(true);
@@ -61,15 +39,21 @@ export default function SettingsView() {
   return (
     <div className="gap-16">
       {error && <div className="alert alert-error">{error}</div>}
-      {msg && <div className="alert alert-success">{msg}</div>}
 
       <div className="card">
         <div className="card-header">
           <span className="card-title">NVIDIA NIM API Configuration</span>
-          <span className="status-chip status-done">ACTIVE</span>
+          <span className={settings?.apiKeyConfigured ? "status-chip status-done" : "status-chip"}>
+            {settings?.apiKeyConfigured ? "CONFIGURED" : "MISSING"}
+          </span>
         </div>
 
-        <form onSubmit={save} className="gap-12" style={{ padding: "12px 0" }}>
+        <div className="gap-12" style={{ padding: "12px 0" }}>
+          <div className="muted text-sm" style={{ marginBottom: 16 }}>
+            API credentials and the active model are managed by deployment configuration and the approved secret provider.
+            This screen does not accept, persist, or expose secrets. The model selector below applies only to a connection test.
+          </div>
+
           <div className="grid-3" style={{ marginBottom: 16 }}>
             <div className="stat-card">
               <div className="stat-label">AI Provider</div>
@@ -82,7 +66,7 @@ export default function SettingsView() {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Key Digest</div>
+              <div className="stat-label">Credential Status</div>
               <div className="stat-value" style={{ fontSize: 14 }}>
                 {settings?.maskedApiKey ?? "Loading…"}
               </div>
@@ -95,61 +79,37 @@ export default function SettingsView() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Active Model</label>
+            <label className="form-label">Model for connection test</label>
             <select
               className="form-input"
               value={selectedModel}
               onChange={e => setSelectedModel(e.target.value)}
             >
               {(settings?.availableModels ?? [
-                // ── NVIDIA Nemotron ──────────────────────────────
                 "nvidia/nemotron-3-ultra-550b-a55b",
                 "nvidia/llama-3.1-nemotron-ultra-253b-v1",
                 "nvidia/llama-3.3-nemotron-super-49b-v1.5",
                 "nvidia/nemotron-3-super-120b-a12b",
                 "nvidia/nemotron-3.5-lightning-30b-a3b",
-                // ── Meta Llama 4 ─────────────────────────────────
                 "meta/llama-4-maverick-17b-128e-instruct",
                 "meta/llama-4-scout-17b-16e-instruct",
-                // ── Meta Llama 3.x ───────────────────────────────
                 "meta/llama-3.3-70b-instruct",
                 "meta/llama-3.2-90b-vision-instruct",
                 "meta/llama-3.2-11b-vision-instruct",
-                // ── DeepSeek ─────────────────────────────────────
-                "deepseek-ai/deepseek-r1",
                 "deepseek-ai/deepseek-v4.1-flash",
-                "deepseek-ai/deepseek-v4-pro-0813",
-                // ── Mistral ──────────────────────────────────────
+                "deepseek-ai/deepseek-coder-6.7b-instruct",
                 "mistralai/mistral-large-2-instruct",
                 "mistralai/mistral-7b-instruct-v0.3",
-                // ── Google Gemma ──────────────────────────────────
                 "google/gemma-3-27b-it",
-                // ── IBM Granite ──────────────────────────────────
                 "ibm/granite-3.0-8b-instruct",
-                // ── AI21 ─────────────────────────────────────────
-                "ai21labs/jamba-1.5-large-instruct"
+                "ai21labs/jamba-1.5-large-instruct",
               ]).map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-            <span className="muted text-sm">Selected model is used for governed tasks and deep research.</span>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Update NVIDIA API Key (Optional)</label>
-            <input
-              type="password"
-              className="form-input"
-              value={customKey}
-              onChange={e => setCustomKey(e.target.value)}
-              placeholder="Paste new nvapi-... key to update"
-            />
           </div>
 
           <div className="row" style={{ marginTop: 12 }}>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? "Saving…" : "Save Settings"}
-            </button>
             <button
               type="button"
               className="btn btn-ghost"
@@ -167,7 +127,7 @@ export default function SettingsView() {
               🌾 Test Agriculture AI Prompt
             </button>
           </div>
-        </form>
+        </div>
       </div>
 
       {testResult && (
