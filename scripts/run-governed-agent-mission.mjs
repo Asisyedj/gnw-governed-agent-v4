@@ -22,7 +22,23 @@ async function main() {
     })
   );
 
+  const nodeEnvironment = process.env.NODE_ENV ?? env.NODE_ENV;
+  if (nodeEnvironment === 'production') {
+    throw new Error('This direct-call mission runner is disabled in production; use the governed execution API.');
+  }
+  const labEnabled = process.env.GNW_ENABLE_LOCAL_MISSION_LAB ?? env.GNW_ENABLE_LOCAL_MISSION_LAB;
+  if (labEnabled !== 'true') {
+    throw new Error('Local mission lab is opt-in only. Set GNW_ENABLE_LOCAL_MISSION_LAB=true for a disposable local test.');
+  }
+
+  const databaseUrl = process.env.GNW_MISSION_LAB_DATABASE_URL ?? env.GNW_MISSION_LAB_DATABASE_URL ?? 'postgresql://gnw_app:gnw_app_pw@localhost:5432/gnw_test';
+  const parsedDatabaseUrl = new URL(databaseUrl);
+  if (!['localhost', '127.0.0.1', '::1'].includes(parsedDatabaseUrl.hostname) || parsedDatabaseUrl.pathname !== '/gnw_test') {
+    throw new Error('Local mission lab only permits the disposable localhost gnw_test database.');
+  }
+
   const apiKey = env.LLM_API_KEY;
+  if (!apiKey) throw new Error('LLM_API_KEY is not configured for the local mission lab.');
   const baseUrl = env.LLM_BASE_URL || 'https://integrate.api.nvidia.com/v1';
   const primaryModel = env.LLM_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b';
   const validatorModel = env.GNW_DEEP_RESEARCH_MODEL || 'meta/llama-3.2-11b-vision-instruct';
@@ -75,7 +91,7 @@ async function main() {
 
   // ── Step 1: Connect to GNW Database (Staging) ─────────────────────────────
   console.log('--- Step 1: Governance Database Binding ---');
-  const db = new Client({ connectionString: 'postgresql://gnw_app:gnw_app_pw@localhost:5432/gnw_test' });
+  const db = new Client({ connectionString: databaseUrl });
   await db.connect();
   console.log('Connected to GNW database as non-superuser: gnw_app (RLS Enforced)\n');
   await db.query("SELECT set_config('app.tenant_id', '1', false);");
@@ -104,6 +120,13 @@ async function main() {
     console.log('\n--- Validator Decision ---');
     console.log(valResult.content);
     console.log('--------------------------\n');
+
+    // Fail closed: a validator response is not an approval unless it explicitly
+    // begins with the expected approval token. This runner is a local-only lab,
+    // not a production authorization mechanism.
+    if (!/^VALIDATION:\\s*APPROVED(?:\\b|$)/i.test(valResult.content)) {
+      throw new Error('Validator did not explicitly approve the plan; refusing to write the demo task.');
+    }
 
     // ── Step 4: Cryptographic Envelope & Action Digest ────────────────────────
     console.log('--- Step 4: Cryptographic Envelope & Audit Recording ---');
