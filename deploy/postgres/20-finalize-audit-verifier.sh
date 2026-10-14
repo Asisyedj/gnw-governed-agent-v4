@@ -51,6 +51,17 @@ BEGIN
     RAISE EXCEPTION 'Migration role still has audit verifier membership';
   END IF;
 
+  IF NOT pg_catalog.has_table_privilege('gnw_app', 'public.audit_log', 'INSERT')
+     OR NOT pg_catalog.has_table_privilege('gnw_app', 'public.audit_log', 'SELECT') THEN
+    RAISE EXCEPTION 'Runtime role must retain INSERT/SELECT on audit_log';
+  END IF;
+
+  IF pg_catalog.has_table_privilege('gnw_app', 'public.audit_log', 'UPDATE')
+     OR pg_catalog.has_table_privilege('gnw_app', 'public.audit_log', 'DELETE')
+     OR pg_catalog.has_table_privilege('gnw_app', 'public.audit_log', 'TRUNCATE') THEN
+    RAISE EXCEPTION 'Runtime role must not have UPDATE/DELETE/TRUNCATE on audit_log';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_policies
     WHERE schemaname = 'public'
