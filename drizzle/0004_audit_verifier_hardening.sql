@@ -20,14 +20,16 @@ BEGIN
   IF v_can_login OR v_is_superuser OR NOT v_bypass_rls THEN
     RAISE EXCEPTION 'gnw_audit_verifier must be NOLOGIN, NOSUPERUSER, BYPASSRLS';
   END IF;
-END $$;
+  IF NOT pg_catalog.has_schema_privilege('gnw_audit_verifier', 'public', 'CREATE') THEN
+    RAISE EXCEPTION 'gnw_audit_verifier needs temporary CREATE on schema public for function ownership transfer; provision it as DBA and revoke after migration';
+  END IF;
+END $;
 
 GRANT USAGE ON SCHEMA public TO gnw_audit_verifier;
 GRANT SELECT ON TABLE public.audit_log, public.audit_chain_head TO gnw_audit_verifier;
--- PostgreSQL requires the new function owner to have CREATE on the containing
--- schema at ownership transfer time. Remove it immediately afterward.
-GRANT CREATE ON SCHEMA public TO gnw_audit_verifier;
-
+-- The database administrator provisions temporary CREATE on public for this
+-- NOLOGIN role before migration. The deployment runner must revoke that grant
+-- after the migrations have completed.
 CREATE OR REPLACE FUNCTION public.gnw_verify_audit_chain()
 RETURNS TABLE (
   total_entries BIGINT,
@@ -128,4 +130,3 @@ BEGIN
 END $;
 
 ALTER FUNCTION public.gnw_verify_audit_chain() OWNER TO gnw_audit_verifier;
-REVOKE CREATE ON SCHEMA public FROM gnw_audit_verifier;
