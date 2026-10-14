@@ -124,7 +124,7 @@ async function main() {
     // Fail closed: a validator response is not an approval unless it explicitly
     // begins with the expected approval token. This runner is a local-only lab,
     // not a production authorization mechanism.
-    if (!/^VALIDATION:\\s*APPROVED(?:\\b|$)/i.test(valResult.content)) {
+    if (!/^VALIDATION:\s*APPROVED(?:\b|$)/i.test(valResult.content)) {
       throw new Error('Validator did not explicitly approve the plan; refusing to write the demo task.');
     }
 
