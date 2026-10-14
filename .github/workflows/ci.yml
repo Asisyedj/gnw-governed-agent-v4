@@ -101,9 +101,16 @@ jobs:
           rm -f /tmp/gnw-backup.dump
       - name: Secure governed mock harness tests
         run: npm run test:harness
+      # Audit-chain tamper tests intentionally need an administrative test connection
+      # to disable triggers and simulate corruption in this disposable CI database.
+      # Application/runtime tests continue to use DATABASE_URL=gnw_app (NOBYPASSRLS).
       - name: Unit and integration tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
         run: npm run test
       - name: Tests with coverage
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
         run: npm run test:coverage
       - name: Build
         run: npm run build
