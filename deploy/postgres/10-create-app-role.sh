@@ -6,9 +6,9 @@ set -eu
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -v app_user="$GNW_APP_DB_USER" -v app_password="$GNW_APP_DB_PASSWORD" <<'SQL'
 -- Dedicated, non-login owner for global audit-chain verification.
--- BYPASSRLS is deliberately confined to this NOLOGIN role; do not grant it to
+-- NOBYPASSRLS is required; global visibility comes from a scoped SELECT policy; do not grant it to
 -- the application role or any ordinary runtime identity.
-SELECT 'CREATE ROLE gnw_audit_verifier NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT'
+SELECT 'CREATE ROLE gnw_audit_verifier NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT'
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gnw_audit_verifier') \gexec
 
 -- Migration may temporarily transfer the verifier function to this NOLOGIN role.
