@@ -2,7 +2,7 @@
 -- A SECURITY DEFINER verifier owned by an ordinary NOBYPASSRLS migration role
 -- can see only the rows allowed by FORCE ROW LEVEL SECURITY. That can make an
 -- empty/partial view incorrectly report a valid chain. Provision this dedicated
--- NOLOGIN BYPASSRLS role via database-admin/IaC before running migrations.
+-- NOLOGIN NOBYPASSRLS role via database-admin/IaC before running migrations.
 DO $$
 DECLARE
   v_can_login BOOLEAN;
@@ -17,8 +17,11 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Required role gnw_audit_verifier is missing; provision it as NOLOGIN NOSUPERUSER BYPASSRLS before migration';
   END IF;
-  IF v_can_login OR v_is_superuser OR NOT v_bypass_rls THEN
-    RAISE EXCEPTION 'gnw_audit_verifier must be NOLOGIN, NOSUPERUSER, BYPASSRLS';
+  IF v_can_login OR v_is_superuser OR v_bypass_rls THEN
+    RAISE EXCEPTION 'gnw_audit_verifier must be NOLOGIN, NOSUPERUSER, NOBYPASSRLS';
+  END IF;
+  IF NOT pg_catalog.has_schema_privilege('gnw_audit_verifier', 'public', 'USAGE') THEN
+    RAISE EXCEPTION 'gnw_audit_verifier needs USAGE on schema public; provision it as DBA';
   END IF;
   IF NOT pg_catalog.has_schema_privilege('gnw_audit_verifier', 'public', 'CREATE') THEN
     RAISE EXCEPTION 'gnw_audit_verifier needs temporary CREATE on schema public for function ownership transfer; provision it as DBA and revoke after migration';
@@ -26,9 +29,16 @@ BEGIN
 END $$;
 
 GRANT SELECT ON TABLE public.audit_log, public.audit_chain_head TO gnw_audit_verifier;
--- The database administrator provisions temporary CREATE on public for this
--- NOLOGIN role before migration. The deployment runner must revoke that grant
--- after the migrations have completed.
+-- A narrowly scoped SELECT policy lets this NOLOGIN/NOBYPASSRLS role verify the
+-- global chain while FORCE ROW LEVEL SECURITY remains enabled for every other
+-- role. This is safer and portable to managed PostgreSQL services than BYPASSRLS.
+DROP POLICY IF EXISTS gnw_audit_verifier_global_read ON public.audit_log;
+CREATE POLICY gnw_audit_verifier_global_read
+  ON public.audit_log
+  FOR SELECT
+  TO gnw_audit_verifier
+  USING (true);
+
 CREATE OR REPLACE FUNCTION public.gnw_verify_audit_chain()
 RETURNS TABLE (
   total_entries BIGINT,
@@ -56,8 +66,8 @@ DECLARE
   v_head_hash TEXT;
   v_head_found BOOLEAN;
 BEGIN
-  -- The dedicated NOLOGIN BYPASSRLS owner intentionally verifies the global
-  -- chain across tenants. Runtime request handlers must not use this role.
+  -- The dedicated NOLOGIN audit role intentionally verifies the global chain
+  -- across tenants through its explicit SELECT-only RLS policy.
   FOR r IN
     SELECT id, event_type, actor_id, tenant_id, outcome, detail, created_at,
            prev_entry_hash, entry_hash
