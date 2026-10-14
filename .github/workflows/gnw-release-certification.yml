@@ -59,6 +59,9 @@ jobs:
           set -euo pipefail
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_audit_verifier NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT gnw_audit_verifier TO gnw_migrator;"
+          psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_audit_verifier;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
@@ -74,6 +77,7 @@ jobs:
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gnw_app;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gnw_app;"
           psql -h 127.0.0.1 -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE UPDATE, DELETE ON audit_log, nonces, interlocks FROM gnw_app;"
+          PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres PGDATABASE=gnw_test sh deploy/postgres/20-finalize-audit-verifier.sh
       - name: Typecheck and lint
         run: |
           npm run typecheck
@@ -85,6 +89,8 @@ jobs:
           npm run verify:compliance
           npm run verify:git-release-metadata
       - name: Existing automated tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
         run: npm test
       - name: RLS policy suite
         env:
@@ -94,9 +100,20 @@ jobs:
       - name: Governed mock harness tests
         run: npm run test:harness
       - name: Coverage and production build
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
         run: |
           npm run test:coverage
           npm run build
+      - name: Authenticated kill-switch operational drill
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
+        run: npx vitest run --config vitest.operational.config.ts --reporter=verbose
+      - name: Verify global audit-chain integrity and runtime append-only grants
+        env:
+          DATABASE_URL: postgresql://postgres:gnw_admin_pw@localhost:5432/gnw_test
+          GNW_AUDIT_VERIFY_USE_ROLE: "false"
+        run: node scripts/verify-audit-chain.mjs --limit 100000
       - name: Collect candidate hashes and limitations
         shell: bash
         run: |
