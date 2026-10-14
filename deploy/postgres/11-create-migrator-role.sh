@@ -16,6 +16,8 @@ SELECT format(
   :'migrator_user', :'migrator_password'
 ) WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = :'migrator_user') \gexec
 
+SELECT format('ALTER ROLE %I LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT', :'migrator_user') \gexec
+
 SELECT format(
   'GRANT CONNECT, TEMPORARY ON DATABASE %I TO %I',
   current_database(), :'migrator_user'
