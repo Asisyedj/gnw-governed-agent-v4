@@ -116,14 +116,16 @@ BEGIN
 END;
 $$;
 
--- PostgreSQL's built-in SHA-256 function is exposed in pg_catalog on supported
--- versions; use it directly instead of relying on an extension-owned function.
-ALTER FUNCTION public.gnw_verify_audit_chain() OWNER TO gnw_audit_verifier;
-REVOKE CREATE ON SCHEMA public FROM gnw_audit_verifier;
+-- Keep direct invocation closed by default. The migrator is granted EXECUTE
+-- before ownership is transferred; the role's temporary membership is removed
+-- by the deployment/CI orchestration after migrations complete.
 REVOKE ALL ON FUNCTION public.gnw_verify_audit_chain() FROM PUBLIC;
-DO $$
+DO $
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'gnw_migrator') THEN
     GRANT EXECUTE ON FUNCTION public.gnw_verify_audit_chain() TO gnw_migrator;
   END IF;
-END $$;
+END $;
+
+ALTER FUNCTION public.gnw_verify_audit_chain() OWNER TO gnw_audit_verifier;
+REVOKE CREATE ON SCHEMA public FROM gnw_audit_verifier;
