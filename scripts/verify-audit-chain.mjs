@@ -138,17 +138,19 @@ async function main() {
       const privilegeResult = await client.query(`
         SELECT has_table_privilege('gnw_app', 'public.audit_log', 'UPDATE') AS can_update,
                has_table_privilege('gnw_app', 'public.audit_log', 'DELETE') AS can_delete,
+               has_table_privilege('gnw_app', 'public.audit_log', 'TRUNCATE') AS can_truncate,
                has_table_privilege('gnw_app', 'public.audit_log', 'INSERT') AS can_insert,
                has_table_privilege('gnw_app', 'public.audit_log', 'SELECT') AS can_select
       `);
       const privilege = privilegeResult.rows[0];
       appendOnly = Boolean(privilege && privilege.can_insert && privilege.can_select &&
-        !privilege.can_update && !privilege.can_delete);
+        !privilege.can_update && !privilege.can_delete && !privilege.can_truncate);
       console.log("[AUDIT-CHAIN] gnw_app privilege check:");
       console.log("  INSERT: " + Boolean(privilege?.can_insert));
       console.log("  SELECT: " + Boolean(privilege?.can_select));
       console.log("  UPDATE denied: " + !Boolean(privilege?.can_update));
       console.log("  DELETE denied: " + !Boolean(privilege?.can_delete));
+      console.log("  TRUNCATE denied: " + !Boolean(privilege?.can_truncate));
     } catch (error) {
       console.error("[AUDIT-CHAIN] FAIL — could not verify append-only application privileges: " +
         (error instanceof Error ? error.message : "unknown error"));
