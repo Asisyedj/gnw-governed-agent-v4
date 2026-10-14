@@ -1,21 +1,14 @@
 #!/usr/bin/env node
-// scripts/verify-audit-chain.mjs
-// Verifies the cryptographic integrity of the audit_log hash chain in PostgreSQL.
-//
-// Dual-layer verification:
-// 1. In-database PL/pgSQL verification function (gnw_verify_audit_chain)
-// 2. Independent Node.js client-side verification of all rows, links, and hashes
-// 3. Sequential ID gap detection
-// 4. Role privilege verification (UPDATE and DELETE strictly revoked from gnw_app)
-//
-// Usage: DATABASE_URL=... node scripts/verify-audit-chain.mjs [--tenant N] [--limit N]
-// Exit 0 = PASS, Exit 1 = FAIL
+// Verifies the global audit_log hash chain in PostgreSQL.
+// The chain is global across tenants. A tenant-filtered subset cannot establish
+// its continuity, and an RLS-hidden empty result must never be treated as PASS.
+// For a non-superuser operator, set GNW_AUDIT_VERIFY_USE_ROLE=true and connect
+// with an identity explicitly authorized to SET ROLE gnw_audit_verifier.
 
 import pg from "pg";
 import { createHash } from "node:crypto";
 
 const { Pool } = pg;
-
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
   console.error("[AUDIT-CHAIN] DATABASE_URL is required");
@@ -24,16 +17,26 @@ if (!DATABASE_URL) {
 
 const args = process.argv.slice(2);
 function arg(name, fallback) {
-  const idx = args.indexOf(name);
-  return idx >= 0 && args[idx + 1] ? args[idx + 1] : fallback;
+  const index = args.indexOf(name);
+  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
 }
 
 const tenantFilter = arg("--tenant", null);
-const limit = parseInt(arg("--limit", "10000"), 10);
+const limit = Number.parseInt(arg("--limit", "10000"), 10);
+const useVerifierRole = process.env.GNW_AUDIT_VERIFY_USE_ROLE === "true";
+
+if (tenantFilter !== null) {
+  console.error("[AUDIT-CHAIN] FAIL — a tenant-filtered slice cannot verify the global hash chain; remove --tenant and use an authorized global-verifier connection");
+  process.exit(1);
+}
+if (!Number.isSafeInteger(limit) || limit < 1) {
+  console.error("[AUDIT-CHAIN] FAIL — --limit must be a positive safe integer");
+  process.exit(1);
+}
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
-function computeEntryHash(row, prevHash) {
+function computeEntryHash(row) {
   const payload = [
     row.event_type ?? "",
     String(row.actor_id ?? ""),
@@ -41,7 +44,7 @@ function computeEntryHash(row, prevHash) {
     row.outcome ?? "",
     row.detail_raw ?? "null",
     row.created_at_iso ?? "",
-    prevHash ?? "GENESIS",
+    row.prev_entry_hash ?? "GENESIS",
   ].join("|");
   return createHash("sha256").update(payload).digest("hex");
 }
@@ -49,37 +52,36 @@ function computeEntryHash(row, prevHash) {
 async function main() {
   console.log("[AUDIT-CHAIN] GNW Audit Ledger Cryptographic Chain Verifier");
   console.log("[AUDIT-CHAIN] Database: [CONFIGURED]");
-  console.log("[AUDIT-CHAIN] Tenant filter:", tenantFilter ?? "ALL");
-  console.log("[AUDIT-CHAIN] Limit:", limit);
+  console.log("[AUDIT-CHAIN] Scope: GLOBAL (all tenants)");
+  console.log("[AUDIT-CHAIN] Limit: " + limit);
+  console.log("[AUDIT-CHAIN] Use dedicated verifier role: " + (useVerifierRole ? "yes" : "no"));
   console.log();
 
   const client = await pool.connect();
-
   try {
-    // 1. In-Database Verification
-    let dbVerification = null;
-    try {
-      const dbVerifyRes = await client.query("SELECT * FROM gnw_verify_audit_chain()");
-      if (dbVerifyRes.rows.length > 0) {
-        dbVerification = dbVerifyRes.rows[0];
-        console.log("[AUDIT-CHAIN] In-database verification result:");
-        console.log(`  Total entries:    ${dbVerification.total_entries}`);
-        console.log(`  Valid links:      ${dbVerification.valid_links}`);
-        console.log(`  Broken links:     ${dbVerification.broken_links}`);
-        console.log(`  Hash mismatches:  ${dbVerification.hash_mismatches}`);
-        console.log(`  Database valid:   ${dbVerification.is_valid ? "✓ TRUE" : "✗ FALSE"}`);
-        console.log();
-      }
-    } catch {
-      console.log("[AUDIT-CHAIN] gnw_verify_audit_chain() not available, relying on client verification");
+    if (useVerifierRole) {
+      // SET ROLE succeeds only for an explicitly authorized membership. The role
+      // is NOLOGIN, NO SUPERUSER, BYPASSRLS and has SELECT on audit_log + head.
+      await client.query("SET ROLE gnw_audit_verifier");
     }
 
-    // 2. Client-side independent verification
-    let where = "";
-    const params = [];
-    if (tenantFilter) {
-      params.push(parseInt(tenantFilter, 10));
-      where = `WHERE tenant_id = $${params.length}`;
+    let dbVerification = null;
+    try {
+      const dbVerifyRes = await client.query("SELECT * FROM public.gnw_verify_audit_chain()");
+      if (dbVerifyRes.rows.length !== 1) {
+        throw new Error("Global database verifier did not return exactly one result row");
+      }
+      dbVerification = dbVerifyRes.rows[0];
+      console.log("[AUDIT-CHAIN] In-database global verification:");
+      console.log("  Total entries:    " + dbVerification.total_entries);
+      console.log("  Valid links:      " + dbVerification.valid_links);
+      console.log("  Broken links:     " + dbVerification.broken_links);
+      console.log("  Hash mismatches:  " + dbVerification.hash_mismatches);
+      console.log("  Database valid:   " + (dbVerification.is_valid ? "TRUE" : "FALSE"));
+      console.log();
+    } catch (error) {
+      console.error("[AUDIT-CHAIN] FAIL — global database verifier unavailable: " +
+        (error instanceof Error ? error.message : "unknown error"));
     }
 
     const query = `
@@ -92,109 +94,103 @@ async function main() {
              to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
              prev_entry_hash,
              entry_hash
-      FROM audit_log
-      ${where}
+      FROM public.audit_log
       ORDER BY id ASC
-      LIMIT $${params.length + 1}
+      LIMIT $1
     `;
-    params.push(limit);
-
-    const result = await client.query(query, params);
-    const rows = result.rows;
-
-    if (rows.length === 0) {
-      console.log("[AUDIT-CHAIN] No audit entries found. PASS (empty ledger)");
-      process.exit(0);
+    // Fetch one extra row so the verifier never certifies a truncated prefix.
+    const result = await client.query(query, [limit + 1]);
+    if (result.rows.length > limit) {
+      throw new Error("Verification truncated: more than " + limit +
+        " audit entries. Increase --limit and rerun; a partial prefix is not a PASS.");
     }
-
-    console.log(`[AUDIT-CHAIN] Independent client verification of ${rows.length} rows...`);
+    const rows = result.rows;
+    console.log("[AUDIT-CHAIN] Client-side rows visible: " + rows.length);
 
     let gapCount = 0;
     let chainBreaks = 0;
     let hashMismatches = 0;
     let pendingOrNullHashes = 0;
-    let prevId = null;
-    let expectedPrevHash = "GENESIS";
+    let previousId = null;
+    let expectedPreviousHash = "GENESIS";
 
     for (const row of rows) {
       const currentId = Number(row.id);
-      // Check ID gaps
-      if (prevId !== null && currentId !== prevId + 1) {
-        gapCount++;
-        console.log(`  ⚠ ID gap: ${prevId} → ${currentId} (${currentId - prevId - 1} missing rows)`);
-      }
+      // Sequence gaps can be caused by rolled-back transactions; report them,
+      // but use hash links and the persisted chain head as the integrity proof.
+      if (previousId !== null && currentId !== previousId + 1) gapCount++;
 
-      // Check for pending/null hashes
       if (!row.entry_hash || row.entry_hash === "pending" || !row.prev_entry_hash) {
         pendingOrNullHashes++;
-        console.log(`  ✗ Unfinalized hash at ID ${row.id}: entry_hash=${row.entry_hash}, prev=${row.prev_entry_hash}`);
       }
 
-      // Verify chain link to previous entry
-      if (row.prev_entry_hash !== expectedPrevHash) {
-        chainBreaks++;
-        console.log(`  ✗ Chain link broken at ID ${row.id}: expected prev ${expectedPrevHash.slice(0, 16)}..., got ${row.prev_entry_hash?.slice(0, 16)}...`);
-      }
+      if (row.prev_entry_hash !== expectedPreviousHash) chainBreaks++;
 
-      // Recompute SHA-256 hash from canonical row payload
-      const computed = computeEntryHash(row, row.prev_entry_hash);
-      if (row.entry_hash !== computed) {
-        hashMismatches++;
-        console.log(`  ✗ Hash mismatch at ID ${row.id}: stored=${row.entry_hash?.slice(0, 16)}... computed=${computed.slice(0, 16)}...`);
-      }
+      const computed = computeEntryHash(row);
+      if (row.entry_hash !== computed) hashMismatches++;
 
-      expectedPrevHash = row.entry_hash;
-      prevId = currentId;
+      expectedPreviousHash = row.entry_hash;
+      previousId = currentId;
     }
 
-    // 3. Check append-only privileges for gnw_app
     let appendOnly = false;
     try {
-      const privCheck = await client.query(`
-        SELECT has_table_privilege('gnw_app', 'audit_log', 'UPDATE') AS can_update,
-               has_table_privilege('gnw_app', 'audit_log', 'DELETE') AS can_delete,
-               has_table_privilege('gnw_app', 'audit_log', 'INSERT') AS can_insert,
-               has_table_privilege('gnw_app', 'audit_log', 'SELECT') AS can_select
+      const privilegeResult = await client.query(`
+        SELECT has_table_privilege('gnw_app', 'public.audit_log', 'UPDATE') AS can_update,
+               has_table_privilege('gnw_app', 'public.audit_log', 'DELETE') AS can_delete,
+               has_table_privilege('gnw_app', 'public.audit_log', 'INSERT') AS can_insert,
+               has_table_privilege('gnw_app', 'public.audit_log', 'SELECT') AS can_select
       `);
-      const priv = privCheck.rows[0];
-      appendOnly = priv.can_insert && priv.can_select && !priv.can_update && !priv.can_delete;
-      console.log();
-      console.log("[AUDIT-CHAIN] Role privilege check for gnw_app:");
-      console.log(`  INSERT: ${priv.can_insert ? "✓ GRANTED" : "✗ NOT GRANTED"}`);
-      console.log(`  SELECT: ${priv.can_select ? "✓ GRANTED" : "✗ NOT GRANTED"}`);
-      console.log(`  UPDATE: ${priv.can_update ? "✗ VIOLATION (should be revoked)" : "✓ REVOKED"}`);
-      console.log(`  DELETE: ${priv.can_delete ? "✗ VIOLATION (should be revoked)" : "✓ REVOKED"}`);
-    } catch {
-      console.log("[AUDIT-CHAIN] Role gnw_app not present in this database instance");
+      const privilege = privilegeResult.rows[0];
+      appendOnly = Boolean(privilege && privilege.can_insert && privilege.can_select &&
+        !privilege.can_update && !privilege.can_delete);
+      console.log("[AUDIT-CHAIN] gnw_app privilege check:");
+      console.log("  INSERT: " + Boolean(privilege?.can_insert));
+      console.log("  SELECT: " + Boolean(privilege?.can_select));
+      console.log("  UPDATE denied: " + !Boolean(privilege?.can_update));
+      console.log("  DELETE denied: " + !Boolean(privilege?.can_delete));
+    } catch (error) {
+      console.error("[AUDIT-CHAIN] FAIL — could not verify append-only application privileges: " +
+        (error instanceof Error ? error.message : "unknown error"));
     }
 
-    // Summary
-    const issues = chainBreaks + hashMismatches + pendingOrNullHashes;
-    const dbValid = dbVerification ? dbVerification.is_valid : true;
+    const visibilityMismatch = !dbVerification ||
+      Number(dbVerification.total_entries) !== rows.length;
+    if (visibilityMismatch) {
+      console.error("[AUDIT-CHAIN] FAIL — client read " + rows.length +
+        " rows while global verifier reported " +
+        (dbVerification ? dbVerification.total_entries : "unavailable") +
+        "; RLS-hidden rows and unavailable verifier evidence cannot be treated as PASS.");
+    }
+    const databaseValid = dbVerification ? Boolean(dbVerification.is_valid) : false;
+    const issues = chainBreaks + hashMismatches + pendingOrNullHashes +
+      (visibilityMismatch ? 1 : 0);
 
-    console.log();
-    const result_obj = {
-      schema: "GNW.AuditChainVerification.v2",
+    const report = {
+      schema: "GNW.AuditChainVerification.v3",
       timestamp: new Date().toISOString(),
+      scope: "GLOBAL",
       entriesChecked: rows.length,
-      databaseReportedValid: dbValid,
+      databaseReportedValid: databaseValid,
+      databaseVerifierAvailable: Boolean(dbVerification),
+      visibilityMismatch,
       idGaps: gapCount,
       chainBreaks,
       hashMismatches,
       pendingOrNullHashes,
       appendOnlyPermissions: appendOnly,
-      status: (issues === 0 && dbValid) ? "PASS" : "FAIL",
+      status: (issues === 0 && databaseValid && appendOnly) ? "PASS" : "FAIL",
     };
-
-    console.log(JSON.stringify(result_obj, null, 2));
     console.log();
+    console.log(JSON.stringify(report, null, 2));
 
-    if (issues > 0 || !dbValid) {
-      console.error(`[AUDIT-CHAIN] FAIL — ${issues} chain integrity violation(s) detected`);
-      process.exit(1);
+    if (report.status !== "PASS") {
+      console.error("[AUDIT-CHAIN] FAIL — integrity, visibility, or privilege evidence is incomplete");
+      process.exitCode = 1;
     } else {
-      console.log(`[AUDIT-CHAIN] PASS — All ${rows.length} entries cryptographically verified, chain unbroken`);
-      process.exit(0);
+      console.log("[AUDIT-CHAIN] PASS — all " + rows.length +
+        " visible entries match the global verifier and append-only privileges are enforced");
+      process.exitCode = 0;
     }
   } finally {
     client.release();
@@ -202,7 +198,8 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error("[AUDIT-CHAIN] Unexpected error:", err.message);
-  process.exit(1);
+main().catch(error => {
+  console.error("[AUDIT-CHAIN] FAIL — unexpected verification error: " +
+    (error instanceof Error ? error.message : "unknown error"));
+  process.exitCode = 1;
 });
