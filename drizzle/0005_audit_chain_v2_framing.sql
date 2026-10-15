@@ -122,6 +122,12 @@ $$;
 -- to submit another hash version.
 ALTER TABLE public.audit_log ALTER COLUMN hash_version SET DEFAULT 2;
 
+-- Recreate the global verifier as its dedicated owner. The migration runner
+-- temporarily inherits the ability to SET ROLE gnw_audit_verifier; direct CREATE
+-- as gnw_migrator would fail because 0004 intentionally transferred ownership.
+-- The finalizer revokes the temporary membership and schema CREATE after migration.
+SET ROLE gnw_audit_verifier;
+
 -- Recreate the global verifier so it checks v1 history and v2 new entries while
 -- retaining the chain-head/empty-ledger checks introduced by migration 0004.
 CREATE OR REPLACE FUNCTION public.gnw_verify_audit_chain()
@@ -212,5 +218,6 @@ BEGIN
 END;
 $$;
 
--- Keep global verification fail-closed after CREATE OR REPLACE.
+-- Keep global verification fail-closed while operating as its owner.
 REVOKE ALL ON FUNCTION public.gnw_verify_audit_chain() FROM PUBLIC;
+RESET ROLE;
