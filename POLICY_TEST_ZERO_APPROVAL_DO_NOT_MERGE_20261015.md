@@ -1,0 +1,1 @@
+TEMPORARY GOVERNANCE TEST ONLY. This markdown file exists solely to test that the active main ruleset blocks a pull request with zero non-author approvals. Never merge this test PR. Close it after recording merge-state evidence.
