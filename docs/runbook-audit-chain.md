@@ -20,6 +20,17 @@ Perform these actions only against the intended environment, with a controlled d
 
 The finalizer intentionally assumes the canonical migration role name `gnw_migrator`. Do not silently rename it without updating the migration bootstrap, finalizer, workflows, and tests together.
 
+## Hash protocol versions
+
+Migration `0005_audit_chain_v2_framing.sql` introduces a versioned encoding for newly appended rows:
+
+- Historical rows keep `hash_version=1` and their original entry hashes. Do not rewrite or silently re-chain historical audit evidence.
+- New rows use `hash_version=2`, a domain prefix (`GNW.AUDIT.CHAIN.V2`) and UTF-8 byte-length-framed fields. Nullable values use a dedicated null marker, so field boundaries do not depend on a delimiter appearing in user-controlled text.
+- The database verifier and CLI verifier must understand both versions. Unknown versions, hash-version mismatches, hash/link mismatches, head mismatches, or incomplete visibility are failures.
+- The migration does not eliminate the legacy v1 encoding's delimiter ambiguity for old entries. Treat v1 rows as preserved historical evidence, keep external tamper-evident backups/anchors, and document this residual risk in any production acceptance record. Do not mark the legacy-history risk as closed merely because all v2 rows validate.
+
+The `hash_version` distribution is emitted in the CLI's structured output. Save it with each audit verification artifact so the proportion of legacy rows is visible.
+
 ## Run verification
 
 Use the committed script:
