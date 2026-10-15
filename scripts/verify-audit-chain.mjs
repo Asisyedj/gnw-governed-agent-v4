@@ -36,17 +36,43 @@ if (!Number.isSafeInteger(limit) || limit < 1) {
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
+function frameField(value) {
+  if (value === null || value === undefined) return "-1:";
+  const encoded = String(value);
+  return `${Buffer.byteLength(encoded, "utf8")}:${encoded}`;
+}
+
 function computeEntryHash(row) {
-  const payload = [
-    row.event_type ?? "",
-    String(row.actor_id ?? ""),
-    String(row.tenant_id ?? ""),
-    row.outcome ?? "",
-    row.detail_raw ?? "null",
-    row.created_at_iso ?? "",
-    row.prev_entry_hash ?? "GENESIS",
-  ].join("|");
-  return createHash("sha256").update(payload).digest("hex");
+  const eventType = row.event_type ?? "";
+  const actorId = row.actor_id === null || row.actor_id === undefined ? null : String(row.actor_id);
+  const tenantId = row.tenant_id === null || row.tenant_id === undefined ? null : String(row.tenant_id);
+  const outcome = row.outcome ?? null;
+  const detail = row.detail_raw === undefined ? null : row.detail_raw;
+  const createdAt = row.created_at_iso ?? "";
+  const previousHash = row.prev_entry_hash ?? null;
+
+  if (Number(row.hash_version) === 1) {
+    // Exact compatibility encoding used by the original migration 0003.
+    const payload = [
+      eventType,
+      String(actorId ?? ""),
+      String(tenantId ?? ""),
+      outcome ?? "",
+      detail ?? "null",
+      createdAt,
+      previousHash ?? "GENESIS",
+    ].join("|");
+    return createHash("sha256").update(payload).digest("hex");
+  }
+
+  if (Number(row.hash_version) === 2) {
+    const payload = "GNW.AUDIT.CHAIN.V2" + [
+      eventType, actorId, tenantId, outcome, detail, createdAt, previousHash,
+    ].map(frameField).join("");
+    return createHash("sha256").update(payload, "utf8").digest("hex");
+  }
+
+  throw new Error("Unsupported audit hash version: " + String(row.hash_version));
 }
 
 async function main() {
@@ -86,6 +112,7 @@ async function main() {
 
     const query = `
       SELECT id,
+             hash_version,
              event_type,
              actor_id,
              tenant_id,
@@ -173,6 +200,11 @@ async function main() {
       timestamp: new Date().toISOString(),
       scope: "GLOBAL",
       entriesChecked: rows.length,
+      hashVersionCounts: rows.reduce((counts, row) => {
+        const version = String(row.hash_version);
+        counts[version] = (counts[version] ?? 0) + 1;
+        return counts;
+      }, {}),
       databaseReportedValid: databaseValid,
       databaseVerifierAvailable: Boolean(dbVerification),
       visibilityMismatch,
