@@ -87,4 +87,4 @@ Any required gate that is FAIL => DENY. Any BLOCKED/NOT_TESTED/missing evidence 
 
 ## Current implementation boundary
 
-The Phase A self-monitoring evaluator is read-only and produces recommendations; it does not itself collect live telemetry, run continuously, execute rollback, or enforce production decisions. This document is a proposed runbook contract only. Production certification remains NOT CERTIFIED until repository certification gates are satisfied.
+This document is a proposed runbook contract only; it does not instantiate or connect a self-monitoring evaluator, collect live telemetry, run continuously, execute rollback, or enforce production decisions. Production certification remains NOT CERTIFIED until repository certification gates are satisfied.
