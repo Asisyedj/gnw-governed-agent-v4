@@ -40,6 +40,11 @@ describe("production control primitives",()=>{
  it("covers governance deny/allow/replay/approval/interlock paths",async()=>{
    expect(requiresHumanApproval({operation:"provider_job",classification:"public",agent:"video_producer",tool:"video.provider_job"})).toBe(true);
    expect(requiresHumanApproval({operation:"write_artifact",classification:"internal",agent:"engineering",tool:"docs.write"})).toBe(true);
+   for (const tool of ["exec.command","exec.test","exec.python","file.write","file.patch","git.commit","github.pr","deploy.production"]) {
+     expect(requiresHumanApproval({operation:"execute",classification:"internal",agent:"engineering",tool}), tool).toBe(true);
+   }
+   expect(requiresHumanApproval({operation:"search",classification:"internal",agent:"research",tool:"knowledge.search"})).toBe(false);
+   expect(requiresHumanApproval({operation:"read",classification:"internal",agent:"engineering",tool:"file.read"})).toBe(false);
    const stores=new MemoryGovernanceStores();
    const g=new GovernanceService(stores,undefined,()=>now);
    const valid=baseRequest();
