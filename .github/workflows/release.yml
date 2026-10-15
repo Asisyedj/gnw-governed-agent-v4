@@ -41,6 +41,17 @@ jobs:
           test -z "$(git status --porcelain)"
           git diff --check
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
+      - name: Verify direct mission runner is blocked in production
+        env:
+          NODE_ENV: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          if node scripts/run-governed-agent-mission.mjs >/tmp/gnw-mission-runner.log 2>&1; then
+            echo "Direct mission runner unexpectedly executed in production mode" >&2
+            exit 1
+          fi
+          grep -q "disabled in production" /tmp/gnw-mission-runner.log
       - name: Install from committed lockfile
         run: npm ci
       - name: Verify canonical Git release metadata
