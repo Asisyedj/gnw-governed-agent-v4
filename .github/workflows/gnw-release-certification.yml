@@ -51,14 +51,7 @@ jobs:
           test -z "$(git status --porcelain)"
           git diff --check
       - name: Verify direct mission runner is blocked in production
-        shell: bash
-        run: |
-          set -euo pipefail
-          if NODE_ENV=production node scripts/run-governed-agent-mission.mjs >/tmp/gnw-mission-runner.log 2>&1; then
-            echo "Direct mission runner unexpectedly executed in production mode" >&2
-            exit 1
-          fi
-          grep -q "disabled in production" /tmp/gnw-mission-runner.log
+        run: node scripts/check-mission-runner-production-guard.mjs
       - name: Clean dependency install
         run: npm ci
       - name: Provision disposable PostgreSQL roles
