@@ -14,6 +14,15 @@ import pg from 'pg';
 const { Client } = pg;
 
 async function main() {
+  // Enforce production-mode refusal before reading local files or opening any
+  // network/database connection. The process environment must explicitly opt in.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('This direct-call mission runner is disabled in production; use the governed execution API.');
+  }
+  if (process.env.GNW_ENABLE_LOCAL_MISSION_LAB !== 'true') {
+    throw new Error('Local mission lab is opt-in only. Set GNW_ENABLE_LOCAL_MISSION_LAB=true for a disposable local test.');
+  }
+
   const envContent = await readFile(resolve(process.cwd(), '.env'), 'utf8');
   const env = Object.fromEntries(
     envContent.split('\n').filter(l => l && !l.startsWith('#') && l.includes('=')).map(l => {
