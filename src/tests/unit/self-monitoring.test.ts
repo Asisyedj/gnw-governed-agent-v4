@@ -24,6 +24,17 @@ describe("governed self-monitoring evaluator", () => {
     expect(Object.isFrozen(first.findings)).toBe(true);
   });
 
+  it("binds the evaluated checks into the digest even when every check passes", () => {
+    const timestamp = 1_800_000_000_000;
+    const empty = evaluateSelfMonitoring([], timestamp);
+    const passing = evaluateSelfMonitoring([check()], timestamp);
+
+    expect(empty.decision).toBe("PASS");
+    expect(passing.decision).toBe("PASS");
+    expect(passing.findings).toHaveLength(0);
+    expect(passing.digest).not.toBe(empty.digest);
+  });
+
   it("denies sensitive execution when a security boundary fails", () => {
     const report = evaluateSelfMonitoring([
       check({ domain: "security", status: "fail", severity: "critical", summary: "RBAC policy failed" }),
@@ -77,6 +88,13 @@ describe("governed self-monitoring evaluator", () => {
   it("rejects duplicate check identifiers and invalid timestamps", () => {
     expect(() => evaluateSelfMonitoring([check(), check()], 10)).toThrow("monitor_check_invalid");
     expect(() => evaluateSelfMonitoring([], -1)).toThrow("monitor_timestamp_invalid");
+  });
+
+  it("rejects non-string evidence references", () => {
+    expect(() => evaluateSelfMonitoring([check({ evidenceRef: 123 as unknown as string })], 10))
+      .toThrow("monitor_evidence_ref_invalid");
+    expect(() => evaluateSelfMonitoring([check({ evidenceRef: null as unknown as string })], 10))
+      .toThrow("monitor_evidence_ref_invalid");
   });
 
   it("does not create findings for passing checks", () => {
