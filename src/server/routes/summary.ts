@@ -21,9 +21,9 @@ export const summaryRoutes: FastifyPluginAsync = async (app) => {
 
     const stats = {
       total: tasks.length,
-      running: tasks.filter(t => t.status === "running").length,
-      done: tasks.filter(t => t.status === "done").length,
-      failed: tasks.filter(t => t.status === "failed").length,
+      running: tasks.filter((t) => t.status === "running").length,
+      done: tasks.filter((t) => t.status === "done").length,
+      failed: tasks.filter((t) => t.status === "failed").length,
     };
 
     return reply.send({ tasks, approvals, interlock, stats });
