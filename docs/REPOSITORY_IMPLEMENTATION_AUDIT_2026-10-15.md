@@ -73,33 +73,33 @@ The connected remote Windows workspace is a different repository, Asisyedj/Asisy
 
 [1] Repository metadata/default branch: https://github.com/Asisyedj/gnw-governed-agent-v4  
 [2] Audited main commit: https://github.com/Asisyedj/gnw-governed-agent-v4/commit/a5e027416232d6b8b8219724e81792a6175093fb  
-[3] README: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/README.md  
-[4] Fastify app: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/app.ts  
-[5] Auth routes: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/routes/auth.ts  
-[6] Governance: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/governance.ts  
-[7] Governed execution: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/execution.ts  
-[8] Executor client: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/executor-client.ts  
-[9] Database schema: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/db/schema.ts  
-[10] Interlock route/guards: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/routes/interlock.ts ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/security/p1-guards.ts  
-[11] RLS migrations and suite: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/drizzle/0001_production_rls.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/drizzle/0002_governance_hardening.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/scripts/test-rls-policy-suite.mjs  
-[12] Audit hash chain migration: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/drizzle/0003_audit_hash_chain.sql  
-[13] Audit verifier and v2 framing: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/drizzle/0004_audit_verifier_hardening.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/drizzle/0005_audit_chain_v2_framing.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/docs/runbook-audit-chain.md  
-[14] Certification decision: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/docs/PRODUCTION_CERTIFICATION.md  
-[15] Current candidate workflow: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/.github/workflows/gnw-release-certification.yml  
+[3] README: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/README.md  
+[4] Fastify app: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/app.ts  
+[5] Auth routes: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/routes/auth.ts  
+[6] Governance: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/governance.ts  
+[7] Governed execution: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/execution.ts  
+[8] Executor client: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/executor-client.ts  
+[9] Database schema: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/db/schema.ts  
+[10] Interlock route/guards: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/routes/interlock.ts ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/security/p1-guards.ts  
+[11] RLS migrations and suite: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/drizzle/0001_production_rls.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/drizzle/0002_governance_hardening.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/scripts/test-rls-policy-suite.mjs  
+[12] Audit hash chain migration: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/drizzle/0003_audit_hash_chain.sql  
+[13] Audit verifier and v2 framing: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/drizzle/0004_audit_verifier_hardening.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/drizzle/0005_audit_chain_v2_framing.sql ; https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/docs/runbook-audit-chain.md  
+[14] Certification decision: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/docs/PRODUCTION_CERTIFICATION.md  
+[15] Current candidate workflow: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/.github/workflows/gnw-release-certification.yml  
 [16] Main CI run: https://github.com/Asisyedj/gnw-governed-agent-v4/actions/runs/38718731728  
 [17] Image publication/signing run: https://github.com/Asisyedj/gnw-governed-agent-v4/actions/runs/38718731740  
 [18] Failed certification-evidence run: https://github.com/Asisyedj/gnw-governed-agent-v4/actions/runs/38731098233  
 [19] PR #84: https://github.com/Asisyedj/gnw-governed-agent-v4/pull/84  
-[20] Audit-chain verifier: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/scripts/verify-audit-chain.mjs  
-[21] Egress controls: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/security.ts  
-[22] SSRF helpers: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/lib/ssrf.ts  
-[23] Kubernetes network policy: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/k8s/networkpolicy.yaml  
-[24] Production preflight: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/scripts/preflight-production.mjs  
-[25] Example environment template: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/.env.example  
-[26] Artifact storage: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/storage.ts  
-[27] GPU pipeline: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/pipelines/gpu/gpu_mesh_orchestrator.py  
-[28] Agricultural orchestration: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/orchestration/agriculturalOrchestration.ts  
-[29] Outbox: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/src/server/outbox/OutboxLedger.ts  
-[30] Kubernetes deployment: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/k8s/deployment.yaml  
-[31] Terraform: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/infra/terraform/main.tf  
-[32] Container release workflow: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/main/.github/workflows/release-container.yml
+[20] Audit-chain verifier: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/scripts/verify-audit-chain.mjs  
+[21] Egress controls: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/security.ts  
+[22] SSRF helpers: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/lib/ssrf.ts  
+[23] Kubernetes network policy: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/k8s/networkpolicy.yaml  
+[24] Production preflight: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/scripts/preflight-production.mjs  
+[25] Example environment template: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/.env.example  
+[26] Artifact storage: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/storage.ts  
+[27] GPU pipeline: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/pipelines/gpu/gpu_mesh_orchestrator.py  
+[28] Agricultural orchestration: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/orchestration/agriculturalOrchestration.ts  
+[29] Outbox: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/src/server/outbox/OutboxLedger.ts  
+[30] Kubernetes deployment: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/k8s/deployment.yaml  
+[31] Terraform: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/infra/terraform/main.tf  
+[32] Container release workflow: https://github.com/Asisyedj/gnw-governed-agent-v4/blob/a5e027416232d6b8b8219724e81792a6175093fb/.github/workflows/release-container.yml
