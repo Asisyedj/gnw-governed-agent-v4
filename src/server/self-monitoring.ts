@@ -83,6 +83,7 @@ export function evaluateSelfMonitoring(
   }
 
   const seen = new Set<string>();
+  const normalizedChecks: Readonly<SelfMonitoringCheck>[] = [];
   const findings: MonitoringFinding[] = [];
   let decision: MonitorDecision = "PASS";
 
@@ -102,9 +103,23 @@ export function evaluateSelfMonitoring(
     }
     seen.add(check.id);
 
-    if (check.evidenceRef !== undefined && !EVIDENCE_REF_PATTERN.test(check.evidenceRef)) {
+    if (
+      check.evidenceRef !== undefined &&
+      (typeof check.evidenceRef !== "string" || !EVIDENCE_REF_PATTERN.test(check.evidenceRef))
+    ) {
       throw new Error("monitor_evidence_ref_invalid");
     }
+
+    const normalizedCheck: Readonly<SelfMonitoringCheck> = Object.freeze({
+      id: check.id,
+      domain: check.domain,
+      status: check.status,
+      severity: check.severity,
+      summary: redactSummary(check.summary),
+      ...(check.evidenceRef === undefined ? {} : { evidenceRef: check.evidenceRef }),
+    });
+    normalizedChecks.push(normalizedCheck);
+
     if (check.status === "pass") continue;
 
     const recommendedAction = actionFor(check.domain);
@@ -113,9 +128,9 @@ export function evaluateSelfMonitoring(
       domain: check.domain,
       status: check.status,
       severity: check.severity,
-      summary: redactSummary(check.summary),
+      summary: normalizedCheck.summary,
       recommendedAction,
-      ...(check.evidenceRef === undefined ? {} : { evidenceRef: check.evidenceRef }),
+      ...(normalizedCheck.evidenceRef === undefined ? {} : { evidenceRef: normalizedCheck.evidenceRef }),
     };
     findings.push(Object.freeze(finding));
 
@@ -129,15 +144,20 @@ export function evaluateSelfMonitoring(
     }
   }
 
+  const frozenChecks = Object.freeze(normalizedChecks);
   const frozenFindings = Object.freeze(findings);
   const payload = {
     schema: "GNW.SelfMonitoringReport.v1" as const,
     evaluatedAt,
     decision,
+    checks: frozenChecks,
     findings: frozenFindings,
   };
   return Object.freeze({
-    ...payload,
+    schema: payload.schema,
+    evaluatedAt: payload.evaluatedAt,
+    decision: payload.decision,
+    findings: payload.findings,
     digest: sha256(canonicalize(payload)),
   });
 }
