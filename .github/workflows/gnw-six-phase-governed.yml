@@ -34,14 +34,17 @@ jobs:
           set -euo pipefail
           SHA="$(git rev-parse HEAD)"
           test -n "$SHA"
-          git diff --check
+          BASE_SHA="$(git merge-base origin/main "$SHA")"
+          test -n "$BASE_SHA"
+          git diff --check "$BASE_SHA...$SHA"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           {
             echo "## Phase 1 — PASS"
             echo "- Candidate SHA: $SHA"
+            echo "- Baseline SHA: $BASE_SHA"
             echo "- Ref: $GITHUB_REF"
             echo "- Event: $GITHUB_EVENT_NAME"
-            echo "- Repository diff whitespace check: PASS"
+            echo "- Candidate diff whitespace check: PASS"
             echo "- Candidate identity is not a release approval."
           } >> "$GITHUB_STEP_SUMMARY"
 
