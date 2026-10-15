@@ -50,8 +50,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain)"
           git diff --check
-      - name: Clean dependency install
-        run: npm ci
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
       - name: Verify direct mission runner is blocked in production
         run: node scripts/check-mission-runner-production-guard.mjs
       - name: Provision disposable PostgreSQL roles
