@@ -41,14 +41,7 @@ jobs:
       - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with: { node-version: "22.x", cache: npm }
       - name: Verify direct mission runner is blocked in production
-        shell: bash
-        run: |
-          set -euo pipefail
-          if NODE_ENV=production node scripts/run-governed-agent-mission.mjs >/tmp/gnw-mission-runner.log 2>&1; then
-            echo "Direct mission runner unexpectedly executed in production mode" >&2
-            exit 1
-          fi
-          grep -q "disabled in production" /tmp/gnw-mission-runner.log
+        run: node scripts/check-mission-runner-production-guard.mjs
       - run: npm ci
       - name: Database roles and migrations
         env:
