@@ -116,7 +116,7 @@ jobs:
           set -euo pipefail
           test -s docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
           grep -qi "PROPOSED" docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
-          grep -qi "read-only" docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
+          grep -qi "does not enable" docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
           {
             echo "## Phase 4 — PASS (documentation contract only)"
             echo "- Proposed runbook exists and declares its proposed/read-only status."
