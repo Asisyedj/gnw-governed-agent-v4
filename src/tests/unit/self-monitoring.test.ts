@@ -67,7 +67,7 @@ describe("governed self-monitoring evaluator", () => {
 
   it("redacts secret-like values from summaries", () => {
     const report = evaluateSelfMonitoring([
-      check({ summary: "api_key=sk-abcdefghijklmnopqrstuvwxyz must never be retained" }),
+      check({ status: "fail", summary: "api_key=sk-abcdefghijklmnopqrstuvwxyz must never be retained" }),
     ], 10);
 
     expect(report.findings[0]?.summary).not.toContain("sk-abcdefghijklmnopqrstuvwxyz");
