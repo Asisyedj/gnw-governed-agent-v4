@@ -40,9 +40,10 @@ jobs:
         with: { fetch-depth: 0, persist-credentials: false }
       - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with: { node-version: "22.x", cache: npm }
+      - name: Install dependencies from committed lockfile
+        run: npm ci
       - name: Verify direct mission runner is blocked in production
         run: node scripts/check-mission-runner-production-guard.mjs
-      - run: npm ci
       - name: Database roles and migrations
         env:
           PGPASSWORD: gnw_admin_pw
