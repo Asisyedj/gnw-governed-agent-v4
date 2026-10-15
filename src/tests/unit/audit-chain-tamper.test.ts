@@ -324,6 +324,31 @@ describe("Audit Ledger Cryptographic Hash Chain & Concurrency Guards", () => {
     }
   });
 
+  it("uses versioned length-framing for new audit rows with separators and Unicode", async () => {
+    const client = await pool.connect();
+    try {
+      const eventType = "test|audit|v2\nUnicode-کراچی-🌾";
+      const detail = JSON.stringify({ separator: "left|right", nested: { value: "x:y|z", unicode: "پاسرور" } });
+      const inserted = await client.query(`
+        INSERT INTO audit_log (event_type, tenant_id, outcome, detail)
+        VALUES ($1, 1, 'success', $2::jsonb)
+        RETURNING hash_version, prev_entry_hash, entry_hash
+      `, [eventType, detail]);
+      const row = inserted.rows[0];
+
+      expect(Number(row.hash_version)).toBe(2);
+      expect(row.prev_entry_hash).toMatch(/^[0-9a-f]{64}$|^GENESIS$/);
+      expect(row.entry_hash).toMatch(/^[0-9a-f]{64}$/);
+
+      const verification = await client.query("SELECT * FROM public.gnw_verify_audit_chain()");
+      expect(verification.rows[0].is_valid).toBe(true);
+      expect(Number(verification.rows[0].broken_links)).toBe(0);
+      expect(Number(verification.rows[0].hash_mismatches)).toBe(0);
+    } finally {
+      client.release();
+    }
+  });
+
   it("strictly denies UPDATE and DELETE from gnw_app role", async () => {
     const appPool = new Pool({
       connectionString: "postgresql://gnw_app:gnw_app_pw@localhost:5432/gnw_test",
