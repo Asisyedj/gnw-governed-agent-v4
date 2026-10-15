@@ -154,6 +154,7 @@ export const budgetReservations = pgTable("budget_reservations", {
 
 export const auditLog = pgTable("audit_log", {
   id:serial("id").primaryKey(),
+  hashVersion:integer("hash_version").notNull().default(2),
   eventType:text("event_type").notNull(),
   actorId:integer("actor_id"),
   tenantId:integer("tenant_id"),
