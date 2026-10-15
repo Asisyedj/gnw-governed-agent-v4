@@ -1,0 +1,172 @@
+name: GNW Six-Phase Governed Workflow
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/server/self-monitoring.ts"
+      - "src/tests/unit/self-monitoring.test.ts"
+      - "docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md"
+      - ".github/workflows/gnw-six-phase-governed.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: gnw-six-phase-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  phase-1-baseline:
+    name: "Phase 1 — Baseline and immutable identity"
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.baseline.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0 }
+      - id: baseline
+        name: Capture candidate identity and repository hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          test -n "$SHA"
+          git diff --check
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Phase 1 — PASS"
+            echo "- Candidate SHA: $SHA"
+            echo "- Ref: $GITHUB_REF"
+            echo "- Event: $GITHUB_EVENT_NAME"
+            echo "- Repository diff whitespace check: PASS"
+            echo "- Candidate identity is not a release approval."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  phase-2-security:
+    name: "Phase 2 — Read-only engine security checks"
+    needs: phase-1-baseline
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run self-monitoring unit tests
+        run: npx vitest run src/tests/unit/self-monitoring.test.ts
+      - name: Report security phase
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Phase 2 — ${{ job.status == 'success' && 'PASS' || 'FAIL' }}"
+            echo "- Self-monitoring unit tests target candidate SHA: ${{ needs.phase-1-baseline.outputs.sha }}"
+            echo "- Unit evidence is not an independent security review or live-provider validation."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  phase-3-ci-evidence:
+    name: "Phase 3 — CI and evidence checks"
+    needs: [phase-1-baseline, phase-2-security]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
+        with: { node-version: "22.x", cache: npm }
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Record evidence identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p gnw-phase-evidence
+          printf '%s\n' "$GITHUB_SHA" > gnw-phase-evidence/candidate-sha.txt
+          printf '%s\n' "$GITHUB_RUN_ID" > gnw-phase-evidence/workflow-run-id.txt
+          printf '%s\n' "$GITHUB_RUN_ATTEMPT" > gnw-phase-evidence/run-attempt.txt
+          {
+            echo "## Phase 3 — PASS"
+            echo "- Typecheck: PASS"
+            echo "- Lint: PASS"
+            echo "- Candidate SHA: $GITHUB_SHA"
+            echo "- Full repository CI remains separately authoritative for its own jobs."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gnw-six-phase-evidence-${{ github.sha }}
+          path: gnw-phase-evidence/
+          retention-days: 90
+
+  phase-4-observability:
+    name: "Phase 4 — Staging observability contract"
+    needs: [phase-1-baseline, phase-3-ci-evidence]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify proposed runbook and safe scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
+          grep -qi "PROPOSED" docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
+          grep -qi "read-only" docs/PRODUCTION_ANOMALY_RECOVERY_RUNBOOKS.md
+          {
+            echo "## Phase 4 — PASS (documentation contract only)"
+            echo "- Proposed runbook exists and declares its proposed/read-only status."
+            echo "- This workflow does not provision live telemetry or always-on monitoring."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  phase-5-recovery-drill-gate:
+    name: "Phase 5 — Recovery drill evidence gate"
+    needs: [phase-1-baseline, phase-4-observability]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify disposable-only drill exists; do not touch production
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "staging-rollback-drill:" .github/workflows/ci.yml
+          grep -q "disposable CI database only" .github/workflows/ci.yml
+          {
+            echo "## Phase 5 — PASS (precondition verified; no drill executed here)"
+            echo "- Existing CI defines a disposable-database rollback drill."
+            echo "- This phase does not execute rollback or connect to staging/production."
+            echo "- Exact-SHA CI success and its artifact must be checked separately before claiming drill success."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  phase-6-human-release-gate:
+    name: "Phase 6 — Human release gate (no auto-release)"
+    needs: [phase-1-baseline, phase-2-security, phase-3-ci-evidence, phase-4-observability, phase-5-recovery-drill-gate]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Summarize final decision
+        env:
+          P1: ${{ needs.phase-1-baseline.result }}
+          P2: ${{ needs.phase-2-security.result }}
+          P3: ${{ needs.phase-3-ci-evidence.result }}
+          P4: ${{ needs.phase-4-observability.result }}
+          P5: ${{ needs.phase-5-recovery-drill-gate.result }}
+          SHA: ${{ needs.phase-1-baseline.outputs.sha }}
+        shell: bash
+        run: |
+          {
+            echo "## Phase 6 — Human release gate"
+            echo "- Candidate SHA: $SHA"
+            echo "- Phase results: baseline=$P1; security=$P2; CI/evidence=$P3; observability=$P4; recovery-precondition=$P5"
+            if [[ "$P1" == success && "$P2" == success && "$P3" == success && "$P4" == success && "$P5" == success ]]; then
+              echo "- Decision: HOLD — human approval and independent review are still required."
+            else
+              echo "- Decision: DENY/HOLD — a phase failed or did not complete."
+            fi
+            echo "- No auto-merge, production deployment, destructive rollback, policy mutation, or certification."
+            echo "- Per-phase summaries and artifacts are available in GitHub Actions; chat streaming is not provided."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$P1" != success || "$P2" != success || "$P3" != success || "$P4" != success || "$P5" != success ]]; then
+            exit 1
+          fi
