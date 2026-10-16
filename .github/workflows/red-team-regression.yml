@@ -32,7 +32,7 @@ jobs:
           git rev-parse HEAD > red-team-evidence/commit-sha.txt
           printf "scope=authorization,tenant-isolation,replay,approval,egress,attestation,execution-order\n" > red-team-evidence/scope.txt
           printf "completed=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> red-team-evidence/scope.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: red-team-regression-${{ github.sha }}
           path: red-team-evidence/
