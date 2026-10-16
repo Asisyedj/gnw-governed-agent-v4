@@ -178,7 +178,7 @@ jobs:
         run: npm audit --audit-level=high
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: coverage-${{ github.sha }}
           path: |
@@ -237,7 +237,7 @@ jobs:
           printf "GNW-REP-1.0\\n" > evidence/policy-version.txt
           printf "DeepResearchModel=gpt-5.6-sol\\n" >> evidence/policy-version.txt
           jq -n --arg candidate "gnw-production-closure-v2" --arg sha "$(git rev-parse HEAD)" --arg ref "$GITHUB_REF" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg node "$(node --version)" --arg npm "$(npm --version)" '{schema:"GNW.BuildEvidence.v3",candidate:$candidate,sha:$sha,ref:$ref,ts:$ts,node:$node,npm:$npm}' > evidence/build.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: build-evidence-${{ github.sha }}
           path: evidence/
@@ -310,7 +310,7 @@ jobs:
         run: |
           set -euo pipefail
           psql -h 127.0.0.1 -U gnw_migrator -d gnw_rollback_test -v ON_ERROR_STOP=1 -c "SELECT 1 FROM gnw_migrations WHERE filename='9999_ci_rollback_drill.sql';" | grep -q "0 rows"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: gnw-staging-rollback-drill-${{ github.sha }}
@@ -382,7 +382,7 @@ jobs:
         run: npx vitest run --config vitest.operational.config.ts --reporter=verbose --reporter=json --outputFile=kill-switch-drill-results.json
       - name: Upload kill-switch drill evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: gnw-kill-switch-operational-drill-${{ github.sha }}
           path: kill-switch-drill-results.json

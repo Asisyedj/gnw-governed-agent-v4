@@ -50,7 +50,7 @@ jobs:
           mkdir -p zap-results
           docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" "$ZAP_IMAGE" \
             zap-baseline.py -t "$TARGET" -m 2 -I -r staging-baseline.html -J staging-baseline.json -w staging-baseline.md
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: zap-baseline-${{ github.sha }}
           path: zap-results/
@@ -72,7 +72,7 @@ jobs:
           mkdir -p zap-results
           docker run --rm -t -v "$PWD/zap-results:/zap/wrk:rw" "$ZAP_IMAGE" \
             zap-full-scan.py -t "$TARGET" -m 5 -I -r staging-active.html -J staging-active.json -w staging-active.md
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: zap-active-${{ github.sha }}
           path: zap-results/
