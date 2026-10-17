@@ -51,9 +51,15 @@ try {
     );
     const sessionId = 'rls-session-' + suffix;
     const sessionTokenHash = createHash('sha256').update(sessionId).digest('hex');
+    const otherSessionId = 'rls-session-other-' + suffix;
+    const otherSessionTokenHash = createHash('sha256').update(otherSessionId).digest('hex');
     await a.query(
       'INSERT INTO sessions(id,user_id,tenant_id,token_hash,expires_at) VALUES($1,$2,$3,$4,now() + interval \'1 hour\')',
       [sessionId,u1.id,t1,sessionTokenHash]
+    );
+    await a.query(
+      'INSERT INTO sessions(id,user_id,tenant_id,token_hash,expires_at) VALUES($1,$2,$3,$4,now() + interval \'1 hour\')',
+      [otherSessionId,u1.id,t1,otherSessionTokenHash]
     );
     await a.query('COMMIT');
 
@@ -76,6 +82,8 @@ try {
     if (visibleSessions.rowCount !== 1 || visibleSessions.rows[0].id !== sessionId) {
       throw new Error('session token scope permits cross-session enumeration');
     }
+    const crossTenantSessionDelete = await b.query('DELETE FROM sessions WHERE id=$1 RETURNING id',[sessionId]);
+    if (crossTenantSessionDelete.rowCount !== 0) throw new Error('session token lookup scope allowed cross-tenant deletion');
     await b.query('SELECT set_config(\'app.session_token_hash\',\'\',true)');
     const hiddenAfterTokenClear = await b.query('SELECT id FROM sessions WHERE tenant_id=$1',[t1]);
     if (hiddenAfterTokenClear.rowCount !== 0) throw new Error('session rows remained visible after token scope cleared');
