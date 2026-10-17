@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createTestApp } from "../lib/testApp.js";
@@ -87,17 +88,29 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    if (clientId) await db.delete(schema.oauthClients).where(eq(schema.oauthClients.clientId, clientId));
-    if (sessionId && tenantId) await deleteSession(db, sessionId, tenantId);
-    if (tenantId) await withTenant(db, tenantId, async tx => {
-      // This test intentionally creates governed tasks and approvals; remove tenant-scoped dependents before its fixture user.
-      await tx.delete(schema.remoteTasks).where(eq(schema.remoteTasks.tenantId, tenantId));
-      await tx.delete(schema.approvals).where(eq(schema.approvals.tenantId, tenantId));
-      await tx.delete(schema.tasks).where(eq(schema.tasks.tenantId, tenantId));
+    // Cleanup uses the test-only admin connection because the app role intentionally lacks
+    // unrestricted DELETE privileges under production RLS. Remove FK dependents in order.
+    const cleanupPool = new pg.Pool({
+      connectionString: process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL,
     });
-    if (userId && tenantId) await withTenant(db, tenantId, tx => tx.delete(schema.users).where(eq(schema.users.id, userId)));
-    if (tenantId) await db.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
-    await app?.close();
+    try {
+      if (clientId) await cleanupPool.query("DELETE FROM oauth_clients WHERE client_id = $1", [clientId]);
+      if (tenantId) {
+        await cleanupPool.query("DELETE FROM remote_tasks WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM capability_leases WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM artifacts WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM approvals WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM task_steps WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM tasks WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM sessions WHERE tenant_id = $1", [tenantId]);
+        await cleanupPool.query("DELETE FROM remote_agents WHERE tenant_id = $1", [tenantId]);
+        if (userId) await cleanupPool.query("DELETE FROM users WHERE id = $1 AND tenant_id = $2", [userId, tenantId]);
+        await cleanupPool.query("DELETE FROM tenants WHERE id = $1", [tenantId]);
+      }
+    } finally {
+      await cleanupPool.end();
+      await app?.close();
+    }
   } finally {
     for (const key of ENV_KEYS) {
       const value = originalEnv[key];
