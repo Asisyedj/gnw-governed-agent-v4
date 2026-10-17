@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 
 const required=[
   "package.json","package-lock.json",
-  "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql",
+  "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql","drizzle/0006_sessions_rls.sql",
   "docs/PRODUCTION_CLOSURE.md","docs/CONTINUOUS_SECURITY_PROGRAM.md","docs/TRUST_ANCHOR_AND_PENTEST_PLAN.md",
   "src/server/db/schema.ts","src/server/db/index.ts",
   "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts","src/server/trust-anchor.ts",
@@ -60,6 +60,14 @@ for(const token of ["SESSION_SECRET","EXECUTOR_SECRET","GNW_REQUIRE_SIGNED_GRANT
 const envExample=read(".env.example");
 for(const token of ["GNW_REQUIRE_TEE_ATTESTATION","GNW_TEE_ATTESTATION_ISSUER","GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM","GNW_TEE_ATTESTATION_MEASUREMENT","GNW_REQUIRE_MPC_TRUST_ANCHOR","GNW_MPC_TRUST_ANCHOR_JSON"]){if(!envExample.includes(token)) failures.push(`env:trust-anchor-setting-missing:${token}`);}
 for(const file of ["drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql"]){const sql=read(file);for(const token of ["ENABLE ROW LEVEL SECURITY","FORCE ROW LEVEL SECURITY","current_setting('app.tenant_id'"]){if(!sql.includes(token)) failures.push(`rls:${file}:${token}`);}}
+const sessionRls=read("drizzle/0006_sessions_rls.sql");
+for(const token of ["ALTER TABLE sessions ENABLE ROW LEVEL SECURITY","ALTER TABLE sessions FORCE ROW LEVEL SECURITY","sessions_tenant_isolation","sessions_token_hash_lookup","app.session_token_hash"]){if(!sessionRls.includes(token)) failures.push(`sessions:rls-control-missing:${token}`);}
+const sessionRepo=read("src/server/repo.ts");
+for(const token of ["app.session_token_hash","withTenant(db, tenantId","deleteSession(db: Db, id: string, tenantId: number)"]){if(!sessionRepo.includes(token)) failures.push(`sessions:tenant-scope-missing:${token}`);}
+const rlsSemantic=read("scripts/test-rls.mjs");
+for(const token of ["'users','sessions'","session lookup is visible without token-hash context","session token scope permits cross-session enumeration","session token lookup scope allowed cross-tenant deletion"]){if(!rlsSemantic.includes(token)) failures.push(`sessions:regression-test-missing:${token}`);}
+const rlsPolicySuite=read("scripts/test-rls-policy-suite.mjs");
+if(!rlsPolicySuite.includes("'users','sessions'")) failures.push("sessions:policy-suite-coverage-missing");
 const ci=read(".github/workflows/ci.yml");
 if(/continue-on-error:\s*true/.test(ci)) failures.push("ci:fail-open");
 if(!ci.includes("contents: read")) failures.push("ci:repository-permission-not-readonly");
