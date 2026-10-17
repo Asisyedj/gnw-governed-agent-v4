@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 
 const required=[
   "package.json","package-lock.json",
-  "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql","drizzle/0006_sessions_rls.sql",
+  "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql","drizzle/0006_sessions_rls.sql","drizzle/0007_remote_access.sql",
   "docs/PRODUCTION_CLOSURE.md","docs/CONTINUOUS_SECURITY_PROGRAM.md","docs/TRUST_ANCHOR_AND_PENTEST_PLAN.md",
   "src/server/db/schema.ts","src/server/db/index.ts",
   "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts","src/server/trust-anchor.ts",
@@ -129,6 +129,12 @@ const composeAppA=compose.match(/app-a:\n([\s\S]*?)\n  app-b:/)?.[1]??"";
 const composeAppB=compose.match(/app-b:\n([\s\S]*?)\nvolumes:/)?.[1]??"";
 if(!composeAppA.includes("shared-artifacts-data:/data")||!composeAppB.includes("shared-artifacts-data:/data")) failures.push("deploy:local-artifact-storage-not-shared-between-app-replicas");
 if(!compose.includes("  shared-artifacts-data:")) failures.push("deploy:shared-artifact-volume-not-declared");
+const remoteMigration=read("drizzle/0007_remote_access.sql");
+for(const token of ["oauth_authorization_codes ENABLE ROW LEVEL SECURITY","oauth_access_tokens ENABLE ROW LEVEL SECURITY","oauth_refresh_tokens ENABLE ROW LEVEL SECURITY","remote_agents ENABLE ROW LEVEL SECURITY","remote_tasks ENABLE ROW LEVEL SECURITY","oauth_code_hash","oauth_access_hash","oauth_refresh_hash","remote_agent_token_hash"]){if(!remoteMigration.includes(token)) failures.push(`remote-access:rls-control-missing:${token}`);}
+const remoteRoute=read("src/server/routes/remote-access.ts");
+for(const token of ["code_challenge_method","S256","token_endpoint_auth_methods_supported","oauth-protected-resource","www-authenticate","gnw:read","gnw:propose"]){if(!remoteRoute.includes(token)) failures.push(`remote-access:oauth-contract-missing:${token}`);}
+const remoteAgent=read("scripts/gnw-remote-agent.mjs");
+for(const token of ["ALLOWED_OPERATIONS","GNW_GATEWAY_URL","GNW_AGENT_TOKEN","git_status","typecheck","file_change"]){if(!remoteAgent.includes(token)) failures.push(`remote-access:agent-control-missing:${token}`);}
 const deployment=read("k8s/deployment.yaml");
 if(!deployment.includes("initContainers")||!deployment.includes('command: ["node","scripts/preflight-production.mjs"]')) failures.push("deploy:k8s-preflight-not-enforced");
 if(!read("k8s/configmap.yaml").includes("GNW_RELEASE_COMMIT_SHA")) failures.push("deploy:release-commit-binding-missing");
