@@ -137,8 +137,6 @@ const remoteAgent=read("scripts/gnw-remote-agent.mjs");
 for(const token of ["ALLOWED_OPERATIONS","GNW_GATEWAY_URL","GNW_AGENT_TOKEN","git_status","typecheck","file_change","VALIDATION_OPERATIONS","shell: false","backup"]){if(!remoteAgent.includes(token)) failures.push(`remote-access:agent-control-missing:${token}`);}
 const remoteE2e=read("src/tests/integration/remote-access.test.ts");
 for(const token of ["crossSiteConsent","unsupported_remote_operation","revokedFamilyAccessUse","revokedAgentHeartbeat","refresh_token","code_challenge_method"]){if(!remoteE2e.includes(token)) failures.push(`remote-access:e2e-control-missing:${token}`);}
-const remoteE2e=read("src/tests/integration/remote-access.test.ts");
-for(const token of ["crossSiteConsent","unsupported_remote_operation","revokedFamilyAccessUse","revokedAgentHeartbeat","refresh_token","code_challenge_method"]){if(!remoteE2e.includes(token)) failures.push(`remote-access:e2e-control-missing:${token}`);}
 const deployment=read("k8s/deployment.yaml");
 if(!deployment.includes("initContainers")||!deployment.includes('command: ["node","scripts/preflight-production.mjs"]')) failures.push("deploy:k8s-preflight-not-enforced");
 if(!read("k8s/configmap.yaml").includes("GNW_RELEASE_COMMIT_SHA")) failures.push("deploy:release-commit-binding-missing");
