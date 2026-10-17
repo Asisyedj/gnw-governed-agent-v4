@@ -49,7 +49,7 @@ const databaseUrl = env.DATABASE_URL ?? "";
 if (databaseUrl && !/[?&]sslmode=verify-full(?:&|$)/i.test(databaseUrl)) failures.push("DATABASE_URL must use sslmode=verify-full");
 if (!env.LLM_BASE_URL) failures.push("LLM_BASE_URL missing");
 if (!env.LLM_API_KEY) failures.push("LLM_API_KEY missing");
-if (!["local","s3"].includes((env.STORAGE_DRIVER ?? "").toLowerCase())) failures.push("STORAGE_DRIVER must be local or s3");
+if ((env.STORAGE_DRIVER ?? "").toLowerCase() !== "local") failures.push("STORAGE_DRIVER must be local until the S3 storage driver is implemented");
 if ((env.STORAGE_DRIVER ?? "local") === "local" && env.GNW_SHARED_STORAGE_CONFIRMED !== "true") failures.push("GNW_SHARED_STORAGE_CONFIRMED must be true for local shared storage");
 if (env.GNW_HOST && /example\.com$/i.test(env.GNW_HOST)) failures.push("GNW_HOST is still an example domain");
 function verifyKeyPair(privateName,publicName,label){

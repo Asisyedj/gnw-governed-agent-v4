@@ -61,6 +61,31 @@ describe("validateSecrets", () => {
     expect(() => validateSecrets()).toThrow("GNW_REQUIRE_SIGNED_GRANTS");
   });
 
+  it("rejects S3 until an S3 storage driver is implemented", () => {
+    process.env.NODE_ENV = "production";
+    process.env.DATABASE_URL = "postgresql://u:p@db.internal/gnw?sslmode=verify-full";
+    process.env.COOKIE_SECRET = "a".repeat(32);
+    process.env.SESSION_SECRET = "b".repeat(32);
+    process.env.EXECUTOR_URL = "https://executor.internal.example";
+    process.env.EXECUTOR_SECRET = "c".repeat(32);
+    process.env.GNW_REQUIRE_SIGNED_GRANTS = "true";
+    process.env.GNW_GRANT_ISSUER = "gnw-production";
+    process.env.GNW_GRANT_PRIVATE_KEY_PEM = "private";
+    process.env.GNW_GRANT_PUBLIC_KEY_PEM = "public";
+    process.env.GNW_LEASE_PRIVATE_KEY_PEM = "private";
+    process.env.GNW_REQUIRE_TEE_ATTESTATION = "true";
+    process.env.GNW_TEE_ATTESTATION_ISSUER = "tee-verifier";
+    process.env.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM = "public";
+    process.env.GNW_TEE_ATTESTATION_MEASUREMENT = "0".repeat(64);
+    process.env.GNW_EGRESS_ALLOW_LIST = "api.openai.com";
+    process.env.LLM_BASE_URL = "https://api.openai.com/v1";
+    process.env.LLM_API_KEY = "test-key";
+    process.env.STORAGE_DRIVER = "s3";
+    process.env.GNW_SHARED_STORAGE_CONFIRMED = "true";
+
+    expect(() => validateSecrets()).toThrow("STORAGE_DRIVER must be local until the S3 storage driver is implemented");
+  });
+
   it("accepts a complete production security configuration", () => {
     process.env.NODE_ENV = "production";
     process.env.DATABASE_URL = "postgresql://u:p@db.internal/gnw?sslmode=verify-full";
