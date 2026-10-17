@@ -91,8 +91,8 @@ afterAll(async () => {
     if (sessionId && tenantId) await deleteSession(db, sessionId, tenantId);
     if (tenantId) await withTenant(db, tenantId, async tx => {
       // This test intentionally creates governed tasks and approvals; remove tenant-scoped dependents before its fixture user.
-      await tx.delete(schema.approvals).where(eq(schema.approvals.tenantId, tenantId));
       await tx.delete(schema.remoteTasks).where(eq(schema.remoteTasks.tenantId, tenantId));
+      await tx.delete(schema.approvals).where(eq(schema.approvals.tenantId, tenantId));
       await tx.delete(schema.tasks).where(eq(schema.tasks.tenantId, tenantId));
     });
     if (userId && tenantId) await withTenant(db, tenantId, tx => tx.delete(schema.users).where(eq(schema.users.id, userId)));
