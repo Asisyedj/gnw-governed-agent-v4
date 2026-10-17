@@ -409,8 +409,17 @@ async function revokeToken(db: Db, form: Record<string, unknown>) {
   });
 }
 async function activeAgent(db: Db, tenantId: number) {
+  // Dispatch only to agents with a recent heartbeat. PostgreSQL sorts NULL first for DESC
+  // unless told otherwise, so an unconnected freshly registered agent must never win.
+  const connectedSince = new Date(Date.now() - 90_000);
   const rows = await withTenant(db, tenantId, tx => tx.select().from(remoteAgents)
-    .where(and(eq(remoteAgents.tenantId, tenantId), isNull(remoteAgents.revokedAt))).orderBy(desc(remoteAgents.lastSeenAt), desc(remoteAgents.createdAt)).limit(1));
+    .where(and(
+      eq(remoteAgents.tenantId, tenantId),
+      isNull(remoteAgents.revokedAt),
+      gt(remoteAgents.lastSeenAt, connectedSince),
+    ))
+    .orderBy(sql`${remoteAgents.lastSeenAt} DESC NULLS LAST`, desc(remoteAgents.createdAt))
+    .limit(1));
   return rows[0];
 }
 function taskTitle(kind: RemoteKind, args: Record<string, unknown>): string {
