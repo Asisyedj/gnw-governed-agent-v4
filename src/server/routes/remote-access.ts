@@ -872,6 +872,7 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
     if (!user || !user.isActive || (user.role !== "owner" && user.role !== "admin")) return reply.code(403).send({ error: "owner_or_admin_required" });
     const body = bodyRecord(request.body);
     const label = typeof body.label === "string" ? body.label.trim() : "";
+    // eslint-disable-next-line no-control-regex -- reject ASCII control characters in persisted labels.
     if (!label || label.length > 100 || /[\u0000-\u001f]/.test(label)) return reply.code(400).send({ error: "invalid_agent_label" });
     const rawToken = safeRandomToken("gnw_agent_");
     const agentId = randomUUID();
