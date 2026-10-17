@@ -286,7 +286,7 @@ async function insertIssuedTokens(tx: DbTransaction, input: {
 }) {
   const now = new Date();
   await tx.insert(oauthAccessTokens).values({
-    tokenHash: hash(input.accessToken), clientId: input.clientId, userId: input.userId, tenantId: input.tenantId,
+    tokenHash: hash(input.accessToken), familyId: input.familyId, clientId: input.clientId, userId: input.userId, tenantId: input.tenantId,
     scope: input.scope, resource: input.resource, expiresAt: new Date(now.getTime() + ACCESS_TOKEN_TTL_MS), createdAt: now,
   });
   await tx.insert(oauthRefreshTokens).values({
@@ -353,6 +353,7 @@ async function exchangeRefreshToken(db: Db, form: Record<string, unknown>, confi
     await setLocal(tx, "app.tenant_id", String(record.tenantId));
     if (record.consumedAt) {
       await tx.update(oauthRefreshTokens).set({ revokedAt: new Date() }).where(and(eq(oauthRefreshTokens.familyId, record.familyId), eq(oauthRefreshTokens.tenantId, record.tenantId), isNull(oauthRefreshTokens.revokedAt)));
+      await tx.update(oauthAccessTokens).set({ revokedAt: new Date() }).where(and(eq(oauthAccessTokens.familyId, record.familyId), eq(oauthAccessTokens.tenantId, record.tenantId), isNull(oauthAccessTokens.revokedAt)));
       return { replay: true as const };
     }
     const [consumed] = await tx.update(oauthRefreshTokens).set({ consumedAt: new Date() })
@@ -360,11 +361,13 @@ async function exchangeRefreshToken(db: Db, form: Record<string, unknown>, confi
       .returning();
     if (!consumed) {
       await tx.update(oauthRefreshTokens).set({ revokedAt: new Date() }).where(and(eq(oauthRefreshTokens.familyId, record.familyId), eq(oauthRefreshTokens.tenantId, record.tenantId), isNull(oauthRefreshTokens.revokedAt)));
+      await tx.update(oauthAccessTokens).set({ revokedAt: new Date() }).where(and(eq(oauthAccessTokens.familyId, record.familyId), eq(oauthAccessTokens.tenantId, record.tenantId), isNull(oauthAccessTokens.revokedAt)));
       return { replay: true as const };
     }
     const [user] = await tx.select().from(users).where(and(eq(users.id, record.userId), eq(users.tenantId, record.tenantId))).limit(1);
     if (!user || !user.isActive) {
       await tx.update(oauthRefreshTokens).set({ revokedAt: new Date() }).where(and(eq(oauthRefreshTokens.familyId, record.familyId), eq(oauthRefreshTokens.tenantId, record.tenantId), isNull(oauthRefreshTokens.revokedAt)));
+      await tx.update(oauthAccessTokens).set({ revokedAt: new Date() }).where(and(eq(oauthAccessTokens.familyId, record.familyId), eq(oauthAccessTokens.tenantId, record.tenantId), isNull(oauthAccessTokens.revokedAt)));
       return null;
     }
     await insertIssuedTokens(tx, {
@@ -397,6 +400,7 @@ async function revokeToken(db: Db, form: Record<string, unknown>) {
     if (refresh && refresh.clientId === clientId) {
       await setLocal(tx, "app.tenant_id", String(refresh.tenantId));
       await tx.update(oauthRefreshTokens).set({ revokedAt: new Date() }).where(and(eq(oauthRefreshTokens.familyId, refresh.familyId), eq(oauthRefreshTokens.tenantId, refresh.tenantId), isNull(oauthRefreshTokens.revokedAt)));
+      await tx.update(oauthAccessTokens).set({ revokedAt: new Date() }).where(and(eq(oauthAccessTokens.familyId, refresh.familyId), eq(oauthAccessTokens.tenantId, refresh.tenantId), isNull(oauthAccessTokens.revokedAt)));
     }
   });
 }

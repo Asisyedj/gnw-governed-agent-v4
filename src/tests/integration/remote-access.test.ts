@@ -19,6 +19,7 @@ let sessionId = "";
 let cookieHeader = "";
 let clientId = "";
 let registeredAgentToken = "";
+let registeredAgentId = "";
 let originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
 function setMcpEnabled(enabled: boolean) {
@@ -114,6 +115,12 @@ describe("GNW OAuth-protected MCP gateway", () => {
 
   it("enforces metadata, DCR, OAuth PKCE, scoped MCP tools, and agent approval gates", async () => {
     setMcpEnabled(true);
+    process.env.GNW_MCP_RESOURCE_URL = BASE_URL + "/wrong-resource";
+    const misconfiguredMetadata = await app.inject({
+      method: "GET", url: "/.well-known/oauth-authorization-server", headers: serverHeaders(),
+    });
+    expect(misconfiguredMetadata.statusCode).toBe(503);
+    setMcpEnabled(true);
 
     const authorizationMetadata = await app.inject({
       method: "GET", url: "/.well-known/oauth-authorization-server", headers: serverHeaders(),
@@ -193,6 +200,18 @@ describe("GNW OAuth-protected MCP gateway", () => {
     const interaction = /name="interaction" value="([^"]+)"/.exec(authorization.body)?.[1];
     expect(interaction).toBeTruthy();
 
+    const crossSiteConsent = await app.inject({
+      method: "POST", url: "/oauth/consent",
+      headers: serverHeaders({
+        cookie: cookieHeader,
+        origin: "https://attacker.example",
+        "sec-fetch-site": "cross-site",
+        "content-type": "application/x-www-form-urlencoded",
+      }),
+      payload: form({ interaction: interaction!, decision: "approve" }),
+    });
+    expect(crossSiteConsent.statusCode).toBe(403);
+
     const consent = await app.inject({
       method: "POST", url: "/oauth/consent",
       headers: serverHeaders({
@@ -267,8 +286,13 @@ describe("GNW OAuth-protected MCP gateway", () => {
     });
     expect(agentRegistration.statusCode).toBe(201);
     registeredAgentToken = agentRegistration.json().token;
+    registeredAgentId = agentRegistration.json().agentId;
     expect(registeredAgentToken).toMatch(/^gnw_agent_/);
     expect(agentRegistration.json().tokenDisplayWarning).toContain("not retrievable later");
+    const agentList = await app.inject({ method: "GET", url: "/api/remote-agents", headers: { cookie: cookieHeader } });
+    expect(agentList.statusCode).toBe(200);
+    expect(agentList.body).not.toContain(registeredAgentToken);
+    expect(agentList.body).not.toContain("tokenHash");
     const agentRows = await withTenant(db, tenantId, tx => tx.select().from(schema.remoteAgents).where(eq(schema.remoteAgents.tenantId, tenantId)));
     expect(agentRows).toHaveLength(1);
     expect(agentRows[0].tokenHash).toBe(sha256(registeredAgentToken));
@@ -276,6 +300,8 @@ describe("GNW OAuth-protected MCP gateway", () => {
 
     const safeStatus = await callTool(tokens.access_token, "gnw_remote_status");
     expect(Array.isArray(safeStatus.result)).toBe(true);
+    const arbitraryCommandDenied = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "shell", command: "id" });
+    expect(arbitraryCommandDenied.result).toMatchObject({ error: "unsupported_remote_operation" });
 
     const requestedTask = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "system_status" });
     expect(requestedTask.response.statusCode).toBe(200);
@@ -346,11 +372,37 @@ describe("GNW OAuth-protected MCP gateway", () => {
     expect(rotated.access_token).not.toBe(tokens.access_token);
     expect(rotated.refresh_token).not.toBe(tokens.refresh_token);
 
+    const revokeAccess = await app.inject({
+      method: "POST", url: "/oauth/revoke",
+      headers: serverHeaders({ "content-type": "application/x-www-form-urlencoded" }),
+      payload: form({ client_id: clientId, token: tokens.access_token, token_type_hint: "access_token" }),
+    });
+    expect(revokeAccess.statusCode).toBe(200);
+    const revokedAccessUse = await mcpRequest(tokens.access_token, {
+      jsonrpc: "2.0", id: "revoked-access", method: "initialize", params: {},
+    });
+    expect(revokedAccessUse.statusCode).toBe(401);
+
     const replay = await app.inject({
       method: "POST", url: "/oauth/token",
       headers: serverHeaders({ "content-type": "application/x-www-form-urlencoded" }),
       payload: form({ grant_type: "refresh_token", client_id: clientId, refresh_token: tokens.refresh_token, resource: RESOURCE }),
     });
     expect(replay.statusCode).toBe(400);
+    const revokedFamilyAccessUse = await mcpRequest(rotated.access_token, {
+      jsonrpc: "2.0", id: "revoked-family-access", method: "initialize", params: {},
+    });
+    expect(revokedFamilyAccessUse.statusCode).toBe(401);
+
+    const agentRevocation = await app.inject({
+      method: "DELETE", url: "/api/remote-agents/" + registeredAgentId, headers: { cookie: cookieHeader },
+    });
+    expect(agentRevocation.statusCode).toBe(200);
+    const revokedAgentHeartbeat = await app.inject({
+      method: "POST", url: "/mcp-agent/heartbeat",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: {},
+    });
+    expect(revokedAgentHeartbeat.statusCode).toBe(401);
   });
 });

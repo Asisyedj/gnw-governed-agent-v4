@@ -265,6 +265,7 @@ export const oauthAuthorizationCodes = pgTable("oauth_authorization_codes", {
 
 export const oauthAccessTokens = pgTable("oauth_access_tokens", {
   tokenHash:text("token_hash").primaryKey(),
+  familyId:text("family_id").notNull(),
   clientId:text("client_id").notNull().references(()=>oauthClients.clientId,{onDelete:"cascade"}),
   userId:integer("user_id").notNull(),
   tenantId:integer("tenant_id").notNull(),
@@ -275,6 +276,7 @@ export const oauthAccessTokens = pgTable("oauth_access_tokens", {
   createdAt:ts("created_at").notNull().defaultNow(),
 }, t=>({
   tenantIdx:index("oauth_access_tenant_idx").on(t.tenantId),
+  familyIdx:index("oauth_access_family_idx").on(t.familyId),
   expiresIdx:index("oauth_access_expires_idx").on(t.expiresAt),
   userTenantFk:foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"oauth_access_user_tenant_fk"}),
 }));

@@ -130,11 +130,13 @@ const composeAppB=compose.match(/app-b:\n([\s\S]*?)\nvolumes:/)?.[1]??"";
 if(!composeAppA.includes("shared-artifacts-data:/data")||!composeAppB.includes("shared-artifacts-data:/data")) failures.push("deploy:local-artifact-storage-not-shared-between-app-replicas");
 if(!compose.includes("  shared-artifacts-data:")) failures.push("deploy:shared-artifact-volume-not-declared");
 const remoteMigration=read("drizzle/0007_remote_access.sql");
-for(const token of ["oauth_authorization_interactions ENABLE ROW LEVEL SECURITY","oauth_authorization_codes ENABLE ROW LEVEL SECURITY","oauth_access_tokens ENABLE ROW LEVEL SECURITY","oauth_refresh_tokens ENABLE ROW LEVEL SECURITY","remote_agents ENABLE ROW LEVEL SECURITY","remote_tasks ENABLE ROW LEVEL SECURITY","oauth_code_hash","oauth_access_hash","oauth_refresh_hash","remote_agent_token_hash"]){if(!remoteMigration.includes(token)) failures.push(`remote-access:rls-control-missing:${token}`);}
+for(const token of ["oauth_authorization_interactions ENABLE ROW LEVEL SECURITY","oauth_authorization_codes ENABLE ROW LEVEL SECURITY","oauth_access_tokens ENABLE ROW LEVEL SECURITY","oauth_refresh_tokens ENABLE ROW LEVEL SECURITY","family_id TEXT NOT NULL","remote_agents ENABLE ROW LEVEL SECURITY","remote_tasks ENABLE ROW LEVEL SECURITY","oauth_code_hash","oauth_access_hash","oauth_refresh_hash","remote_agent_token_hash"]){if(!remoteMigration.includes(token)) failures.push(`remote-access:rls-control-missing:${token}`);}
 const remoteRoute=read("src/server/routes/remote-access.ts");
 for(const token of ["code_challenge_method","S256","token_endpoint_auth_methods_supported","oauth-protected-resource","www-authenticate","gnw:read","gnw:propose"]){if(!remoteRoute.includes(token)) failures.push(`remote-access:oauth-contract-missing:${token}`);}
 const remoteAgent=read("scripts/gnw-remote-agent.mjs");
 for(const token of ["ALLOWED_OPERATIONS","GNW_GATEWAY_URL","GNW_AGENT_TOKEN","git_status","typecheck","file_change","VALIDATION_OPERATIONS","shell: false","backup"]){if(!remoteAgent.includes(token)) failures.push(`remote-access:agent-control-missing:${token}`);}
+const remoteE2e=read("src/tests/integration/remote-access.test.ts");
+for(const token of ["crossSiteConsent","unsupported_remote_operation","revokedFamilyAccessUse","revokedAgentHeartbeat","refresh_token","code_challenge_method"]){if(!remoteE2e.includes(token)) failures.push(`remote-access:e2e-control-missing:${token}`);}
 const deployment=read("k8s/deployment.yaml");
 if(!deployment.includes("initContainers")||!deployment.includes('command: ["node","scripts/preflight-production.mjs"]')) failures.push("deploy:k8s-preflight-not-enforced");
 if(!read("k8s/configmap.yaml").includes("GNW_RELEASE_COMMIT_SHA")) failures.push("deploy:release-commit-binding-missing");
