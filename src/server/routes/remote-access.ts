@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { schema, type Db, type DbTransaction, withTenant } from "../db/index.js";
@@ -47,6 +47,10 @@ type McpConfig = { baseUrl: string; origin: string; host: string; resource: stri
 
 function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+function canonicalOperationDigest(operation: string, rationale: string): string {
+  // Fixed-order tuple plus a domain separator prevents ambiguous operation/rationale bindings.
+  return hash(`GNW-REMOTE-VALIDATION-V1\\0${JSON.stringify([operation, rationale])}`);
 }
 function b64urlHash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("base64url");
@@ -674,7 +678,7 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
     return reply.header("Cache-Control", "public, max-age=300").send(oauthMetadata(config));
   });
 
-  app.post("/oauth/register", async (request, reply) => {
+  app.post("/oauth/register", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const config = configOrReply(reply, request);
     if (!config) return;
     const body = bodyRecord(request.body);
@@ -706,7 +710,7 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
     } catch {
       return json(reply, { error: "client_registration_failed" }, 500);
     }
-  }, { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } });
+  });
 
   app.get("/oauth/authorize", async (request, reply) => {
     const config = configOrReply(reply, request);
@@ -738,7 +742,7 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
     return reply.type("text/html; charset=utf-8").header("Cache-Control", "no-store").send(consentHtml(client.clientName, parameters.scope, interactionId));
   });
 
-  app.post("/oauth/login", async (request, reply) => {
+  app.post("/oauth/login", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const config = configOrReply(reply, request);
     if (!config) return;
     if (!browserOriginIsCanonical(request, config)) return reply.code(403).send({ error: "cross_origin_login_denied" });
@@ -770,7 +774,7 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
     reply.setCookie("session", rawSession, { httpOnly: true, secure: config.origin.startsWith("https://"), sameSite: "lax", path: "/", maxAge: SESSION_TTL_MS / 1000 });
     await insertAuditLog(app.db, { eventType: "mcp.oauth.login", actorId: user.id, tenantId: tenant.id, outcome: "success", ipAddress: request.ip });
     return reply.code(303).header("Location", returnTo).send();
-  }, { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } });
+  });
 
   app.post("/oauth/consent", async (request, reply) => {
     const config = configOrReply(reply, request);
