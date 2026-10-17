@@ -29,7 +29,8 @@ function canonicalFileChangeDigest(path, content, rationale) {
   return sha256(JSON.stringify(["file_change", path, sha256(content), rationale]));
 }
 function canonicalOperationDigest(kind, rationale) {
-  return sha256(JSON.stringify(["remote_operation", kind, rationale]));
+  // Must match the server's exact domain-separated operation/rationale digest.
+  return sha256(`GNW-REMOTE-VALIDATION-V1\\0${JSON.stringify([kind, rationale])}`);
 }
 function safePath(input) {
   if (typeof input !== "string" || input.length < 1 || input.length > 240 || input.includes("\\") || input.startsWith("/") || input.includes("\0")) return null;
