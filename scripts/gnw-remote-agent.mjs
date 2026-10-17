@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import {
-  appendFile, chmod, lstat, mkdir, readFile, realpath, readdir, rename, stat, writeFile,
+  appendFile, chmod, lstat, mkdir, open as openFile, readFile, realpath, readdir, rename, stat, writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -134,11 +135,20 @@ async function verifySafeParent(root, relativePath) {
 async function readProjectFile(root, relativePath) {
   const { safe, target, parent } = await verifySafeParent(root, relativePath);
   if (parent !== await realpath(dirname(target))) throw new Error("Project path changed during validation.");
-  const targetStat = await lstat(target);
-  if (!targetStat.isFile() || targetStat.isSymbolicLink() || targetStat.size > MAX_FILE_BYTES) throw new Error("Project file is not a bounded regular text file.");
-  const bytes = await readFile(target);
-  const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  return { path: safe, content, size: bytes.byteLength, sha256: sha256(bytes) };
+  // Open without following a final symlink, then verify the pinned descriptor resolves
+  // inside the workspace before reading. This closes the lstat/readFile pathname race.
+  const handle = await openFile(target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  try {
+    const targetStat = await handle.stat();
+    if (!targetStat.isFile() || targetStat.size > MAX_FILE_BYTES) throw new Error("Project file is not a bounded regular text file.");
+    const descriptorPath = await realpath(`/proc/self/fd/${handle.fd}`);
+    if (!withinRoot(root, descriptorPath)) throw new Error("Opened project file resolves outside the workspace.");
+    const bytes = await handle.readFile();
+    const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { path: safe, content, size: bytes.byteLength, sha256: sha256(bytes) };
+  } finally {
+    await handle.close();
+  }
 }
 async function writeApprovedFileChange(root, task) {
   const args = task.arguments;
