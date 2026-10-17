@@ -210,7 +210,8 @@ describe("GNW OAuth-protected MCP gateway", () => {
       }),
       payload: form({ interaction: interaction!, decision: "approve" }),
     });
-    expect(crossSiteConsent.statusCode).toBe(403);
+    // The canonical host/origin gate rejects the attacker origin before the CSRF-specific guard.
+    expect(crossSiteConsent.statusCode).toBe(421);
 
     const consent = await app.inject({
       method: "POST", url: "/oauth/consent",
