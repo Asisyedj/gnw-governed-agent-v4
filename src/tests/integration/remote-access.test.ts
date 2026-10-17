@@ -323,6 +323,14 @@ describe("GNW OAuth-protected MCP gateway", () => {
     const arbitraryCommandDenied = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "shell", command: "id" });
     expect(arbitraryCommandDenied.result).toMatchObject({ error: "unsupported_remote_operation" });
 
+    // A newly registered agent is intentionally not dispatchable until it has checked in.
+    const initialHeartbeat = await app.inject({
+      method: "POST", url: "/mcp-agent/heartbeat",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: {},
+    });
+    expect(initialHeartbeat.statusCode).toBe(200);
+
     const requestedTask = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "system_status" });
     expect(requestedTask.response.statusCode).toBe(200);
     const task = requestedTask.result as { remoteTaskId: string; status: string };
