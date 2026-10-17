@@ -295,7 +295,7 @@ describe("GNW OAuth-protected MCP gateway", () => {
     expect(agentList.body).not.toContain("tokenHash");
     const agentRows = await withTenant(db, tenantId, tx => tx.select().from(schema.remoteAgents).where(eq(schema.remoteAgents.tenantId, tenantId)));
     expect(agentRows).toHaveLength(1);
-    expect(agentRows[0].tokenHash).toBe(sha256(registeredAgentToken));
+    expect(agentRows[0]?.tokenHash).toBe(sha256(registeredAgentToken));
     expect(JSON.stringify(agentRows[0])).not.toContain(registeredAgentToken);
 
     const safeStatus = await callTool(tokens.access_token, "gnw_remote_status");
