@@ -51,6 +51,17 @@ if (!env.LLM_BASE_URL) failures.push("LLM_BASE_URL missing");
 if (!env.LLM_API_KEY) failures.push("LLM_API_KEY missing");
 if ((env.STORAGE_DRIVER ?? "").toLowerCase() !== "local") failures.push("STORAGE_DRIVER must be local until the S3 storage driver is implemented");
 if ((env.STORAGE_DRIVER ?? "local") === "local" && env.GNW_SHARED_STORAGE_CONFIRMED !== "true") failures.push("GNW_SHARED_STORAGE_CONFIRMED must be true for local shared storage");
+const mcpEnabled = env.GNW_MCP_ENABLED ?? "false";
+if (!["true","false"].includes(mcpEnabled)) failures.push("GNW_MCP_ENABLED must be true or false");
+if (mcpEnabled === "true") {
+  const base = req("GNW_MCP_PUBLIC_BASE_URL"), resource = req("GNW_MCP_RESOURCE_URL");
+  if (!base || !resource) failures.push("GNW_MCP_PUBLIC_BASE_URL and GNW_MCP_RESOURCE_URL required when GNW_MCP_ENABLED=true");
+  try {
+    const baseUrl = new URL(base), resourceUrl = new URL(resource);
+    if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || (baseUrl.pathname !== "/" && baseUrl.pathname !== "")) failures.push("GNW_MCP_PUBLIC_BASE_URL must be an HTTPS origin without credentials, path, query or fragment");
+    if (resource !== baseUrl.origin + "/mcp" || resourceUrl.origin !== baseUrl.origin || resourceUrl.pathname !== "/mcp" || resourceUrl.search || resourceUrl.hash || resourceUrl.username || resourceUrl.password) failures.push("GNW_MCP_RESOURCE_URL must exactly equal GNW_MCP_PUBLIC_BASE_URL origin plus /mcp");
+  } catch { failures.push("GNW MCP public base/resource URL configuration is invalid"); }
+}
 if (env.GNW_HOST && /example\.com$/i.test(env.GNW_HOST)) failures.push("GNW_HOST is still an example domain");
 function verifyKeyPair(privateName,publicName,label){
   try{

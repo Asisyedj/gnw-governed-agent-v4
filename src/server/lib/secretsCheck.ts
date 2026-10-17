@@ -73,6 +73,26 @@ export function validateSecrets(): void {
     if (storageDriver === "local" && process.env.GNW_SHARED_STORAGE_CONFIRMED !== "true") {
       errors.push("GNW_SHARED_STORAGE_CONFIRMED must be true when local shared storage is used in production");
     }
+
+    const mcpEnabled = process.env.GNW_MCP_ENABLED ?? "false";
+    if (!["true", "false"].includes(mcpEnabled)) errors.push("GNW_MCP_ENABLED must be true or false");
+    if (mcpEnabled === "true") {
+      const base = process.env.GNW_MCP_PUBLIC_BASE_URL ?? "";
+      const resource = process.env.GNW_MCP_RESOURCE_URL ?? "";
+      if (!base || !resource) errors.push("GNW_MCP_PUBLIC_BASE_URL and GNW_MCP_RESOURCE_URL are required when GNW_MCP_ENABLED=true");
+      try {
+        const baseUrl = new URL(base);
+        const resourceUrl = new URL(resource);
+        if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || (baseUrl.pathname !== "/" && baseUrl.pathname !== "")) {
+          errors.push("GNW_MCP_PUBLIC_BASE_URL must be an HTTPS origin without credentials, path, query or fragment");
+        }
+        if (resource !== baseUrl.origin + "/mcp" || resourceUrl.origin !== baseUrl.origin || resourceUrl.pathname !== "/mcp" || resourceUrl.search || resourceUrl.hash || resourceUrl.username || resourceUrl.password) {
+          errors.push("GNW_MCP_RESOURCE_URL must exactly equal GNW_MCP_PUBLIC_BASE_URL origin plus /mcp");
+        }
+      } catch {
+        errors.push("GNW MCP public base/resource URL configuration is invalid");
+      }
+    }
   }
 
   if (errors.length > 0) {

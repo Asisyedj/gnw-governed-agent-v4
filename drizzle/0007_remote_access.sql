@@ -98,9 +98,10 @@ CREATE TABLE remote_tasks (
   task_id INTEGER NOT NULL,
   requested_by_user_id INTEGER NOT NULL,
   agent_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('system_status','git_status','git_diff_check','current_commit','list_project_root','typecheck','lint','production_closure','compliance','crypto_closure','build','file_change')),
+  kind TEXT NOT NULL CHECK (kind IN ('system_status','git_status','git_diff_check','current_commit','list_project_root','typecheck','lint','production_closure','compliance','crypto_closure','build','file_read','file_change')),
   arguments_json JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (pg_column_size(arguments_json) <= 160000),
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','pending_approval','running','completed','failed','denied','cancelled','expired')),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 100),
   approval_id INTEGER,
   action_digest TEXT CHECK (action_digest IS NULL OR action_digest ~ '^[0-9a-f]{64}$'),
   output JSONB CHECK (output IS NULL OR pg_column_size(output) <= 1000000),
@@ -138,7 +139,7 @@ ALTER TABLE remote_tasks FORCE ROW LEVEL SECURITY;
 CREATE POLICY oauth_interactions_tenant ON oauth_authorization_interactions
   USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer)
   WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer);
-CREATE POLICY oauth_codes_lookup ON oauth_authorization_codes
+CREATE POLICY oauth_codes_lookup ON oauth_authorization_codes FOR SELECT
   USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer
      OR code_hash = nullif(current_setting('app.oauth_code_hash',true),''));
 CREATE POLICY oauth_codes_insert_tenant ON oauth_authorization_codes
@@ -146,7 +147,7 @@ CREATE POLICY oauth_codes_insert_tenant ON oauth_authorization_codes
 CREATE POLICY oauth_codes_update_tenant ON oauth_authorization_codes
   FOR UPDATE USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer)
   WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer);
-CREATE POLICY oauth_access_lookup ON oauth_access_tokens
+CREATE POLICY oauth_access_lookup ON oauth_access_tokens FOR SELECT
   USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer
      OR token_hash = nullif(current_setting('app.oauth_access_hash',true),''));
 CREATE POLICY oauth_access_insert_tenant ON oauth_access_tokens
@@ -154,7 +155,7 @@ CREATE POLICY oauth_access_insert_tenant ON oauth_access_tokens
 CREATE POLICY oauth_access_update_tenant ON oauth_access_tokens
   FOR UPDATE USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer)
   WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer);
-CREATE POLICY oauth_refresh_lookup ON oauth_refresh_tokens
+CREATE POLICY oauth_refresh_lookup ON oauth_refresh_tokens FOR SELECT
   USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer
      OR token_hash = nullif(current_setting('app.oauth_refresh_hash',true),''));
 CREATE POLICY oauth_refresh_insert_tenant ON oauth_refresh_tokens
@@ -162,7 +163,7 @@ CREATE POLICY oauth_refresh_insert_tenant ON oauth_refresh_tokens
 CREATE POLICY oauth_refresh_update_tenant ON oauth_refresh_tokens
   FOR UPDATE USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer)
   WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer);
-CREATE POLICY remote_agents_tenant_or_token ON remote_agents
+CREATE POLICY remote_agents_tenant_or_token ON remote_agents FOR SELECT
   USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::integer
      OR token_hash = nullif(current_setting('app.remote_agent_token_hash',true),''));
 CREATE POLICY remote_agents_insert_tenant ON remote_agents
