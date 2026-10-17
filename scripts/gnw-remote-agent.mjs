@@ -157,54 +157,94 @@ async function writeApprovedFileChange(root, task) {
   const rationale = typeof args?.rationale === "string" ? args.rationale.trim() : "";
   if (!path || content === null || Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES || !rationale || rationale.length > 1000) throw new Error("Approved file-change payload is invalid.");
   if (args.contentSha256 !== sha256(content) || !task.actionDigest || task.actionDigest !== canonicalFileChangeDigest(path, content, rationale)) throw new Error("Approved file-change digest mismatch.");
+
   const { target, parent } = await verifySafeParent(root, path);
-  let originalBytes = null;
-  let originalMode = 0o600;
+  // Pin the validated directory inode. All target/temp paths below go through this
+  // descriptor rather than resolving the mutable workspace pathname again.
+  const parentHandle = await openFile(parent, fsConstants.O_RDONLY | (fsConstants.O_DIRECTORY ?? 0) | (fsConstants.O_NOFOLLOW ?? 0));
   try {
-    const metadata = await lstat(target);
-    if (metadata.isSymbolicLink() || !metadata.isFile() || metadata.size > MAX_FILE_BYTES) throw new Error("Target is not an allowed regular file.");
-    originalBytes = await readFile(target);
-    originalMode = metadata.mode & 0o777;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      originalBytes = null;
-    } else throw error;
+    const parentDescriptorPath = `/proc/self/fd/${parentHandle.fd}`;
+    const pinnedParent = await realpath(parentDescriptorPath);
+    if (!(await parentHandle.stat()).isDirectory() || pinnedParent !== parent || !withinRoot(root, pinnedParent)) {
+      throw new Error("Target parent could not be pinned inside the workspace.");
+    }
+    const targetPath = resolve(parentDescriptorPath, basename(target));
+    const assertPinnedParent = async () => {
+      const current = await realpath(parentDescriptorPath);
+      if (current !== parent || !withinRoot(root, current)) throw new Error("Pinned target parent moved outside the workspace.");
+    };
+    const readCurrentTarget = async () => {
+      const handle = await openFile(targetPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+      try {
+        const metadata = await handle.stat();
+        if (!metadata.isFile() || metadata.size > MAX_FILE_BYTES) throw new Error("Target is not an allowed bounded regular file.");
+        const descriptorPath = await realpath(`/proc/self/fd/${handle.fd}`);
+        if (!withinRoot(root, descriptorPath)) throw new Error("Opened target resolves outside the workspace.");
+        return { bytes: await handle.readFile(), mode: metadata.mode & 0o777 };
+      } finally {
+        await handle.close();
+      }
+    };
+
+    let originalBytes = null;
+    let originalMode = 0o600;
+    try {
+      const original = await readCurrentTarget();
+      originalBytes = original.bytes;
+      originalMode = original.mode;
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+    }
+
+    const backupDirectory = resolve(STATE_ROOT, "backups");
+    await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
+    await chmod(backupDirectory, 0o700);
+    const backupId = task.id.replace(/[^0-9a-f-]/gi, "");
+    const backupPath = resolve(backupDirectory, backupId + ".bak");
+    const metadataPath = resolve(backupDirectory, backupId + ".json");
+    const backupMetadata = {
+      taskId: task.id, path, existed: originalBytes !== null,
+      previousSha256: originalBytes ? sha256(originalBytes) : null,
+      proposedSha256: sha256(content), actionDigest: task.actionDigest,
+      createdAt: new Date().toISOString(),
+    };
+    if (originalBytes !== null) await writeFile(backupPath, originalBytes, { flag: "wx", mode: 0o600 });
+    await writeFile(metadataPath, JSON.stringify(backupMetadata, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+
+    await assertPinnedParent();
+    if (originalBytes !== null) {
+      const latest = await readCurrentTarget();
+      if (sha256(latest.bytes) !== sha256(originalBytes) || latest.mode !== originalMode) {
+        throw new Error("Target changed while creating the approval-bound backup.");
+      }
+    } else {
+      try {
+        await readCurrentTarget();
+        throw new Error("A new file appeared after approval.");
+      } catch (error) {
+        if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+      }
+    }
+
+    const tempPath = resolve(parentDescriptorPath, ".gnw-write-" + backupId);
+    await assertPinnedParent();
+    await writeFile(tempPath, content, { flag: "wx", mode: originalMode });
+    try {
+      await assertPinnedParent();
+      await rename(tempPath, targetPath);
+      await assertPinnedParent();
+    } catch (error) {
+      try { const { unlink } = await import("node:fs/promises"); await unlink(tempPath); } catch {}
+      throw error;
+    }
+
+    const written = await readCurrentTarget();
+    if (sha256(written.bytes) !== sha256(content)) throw new Error("Post-write digest check failed; backup was retained.");
+    await audit({ event: "approved_file_change_applied", taskId: task.id, path, contentSha256: sha256(content), actionDigest: task.actionDigest, backupId, previousFileExisted: originalBytes !== null });
+    return { path, contentSha256: sha256(content), backupId, previousFileExisted: originalBytes !== null, bytes: written.bytes.byteLength };
+  } finally {
+    await parentHandle.close();
   }
-  const backupDirectory = resolve(STATE_ROOT, "backups");
-  await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
-  await chmod(backupDirectory, 0o700);
-  const backupId = task.id.replace(/[^0-9a-f-]/gi, "");
-  const backupPath = resolve(backupDirectory, backupId + ".bak");
-  const metadataPath = resolve(backupDirectory, backupId + ".json");
-  const backupMetadata = {
-    taskId: task.id, path, existed: originalBytes !== null,
-    previousSha256: originalBytes ? sha256(originalBytes) : null,
-    proposedSha256: sha256(content), actionDigest: task.actionDigest,
-    createdAt: new Date().toISOString(),
-  };
-  if (originalBytes !== null) await writeFile(backupPath, originalBytes, { flag: "wx", mode: 0o600 });
-  await writeFile(metadataPath, JSON.stringify(backupMetadata, null, 2) + "\n", { flag: "wx", mode: 0o600 });
-  const currentParent = await realpath(dirname(target));
-  if (currentParent !== parent || !withinRoot(root, currentParent)) throw new Error("Target parent changed during file-change validation.");
-  if (originalBytes !== null) {
-    const latest = await lstat(target);
-    if (latest.isSymbolicLink() || !latest.isFile() || sha256(await readFile(target)) !== sha256(originalBytes)) throw new Error("Target changed while creating the approval-bound backup.");
-  } else {
-    try { await lstat(target); throw new Error("A new file appeared after approval."); }
-    catch (error) { if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error; }
-  }
-  const tempPath = resolve(parent, ".gnw-write-" + backupId);
-  await writeFile(tempPath, content, { flag: "wx", mode: originalMode });
-  try {
-    await rename(tempPath, target);
-  } catch (error) {
-    try { const { unlink } = await import("node:fs/promises"); await unlink(tempPath); } catch {}
-    throw error;
-  }
-  const written = await readFile(target);
-  if (sha256(written) !== sha256(content)) throw new Error("Post-write digest check failed; backup was retained.");
-  await audit({ event: "approved_file_change_applied", taskId: task.id, path, contentSha256: sha256(content), actionDigest: task.actionDigest, backupId, previousFileExisted: originalBytes !== null });
-  return { path, contentSha256: sha256(content), backupId, previousFileExisted: originalBytes !== null, bytes: written.byteLength };
 }
 async function executeTask(root, task) {
   if (!task || typeof task !== "object" || !ALLOWED_OPERATIONS.has(task.kind)) throw new Error("Remote task kind is not allowlisted.");
