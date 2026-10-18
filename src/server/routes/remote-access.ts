@@ -1086,6 +1086,13 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
             status: "expired", errorSummary: "Remote task expired before execution.",
             completedAt: now, leaseExpiresAt: null, updatedAt: now,
           }).where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running")));
+          await tx.update(tasks).set({
+            status: "failed", errorMessage: "Remote task expired before execution.",
+            completedAt: now, updatedAt: now,
+          }).where(and(
+            eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId),
+            eq(tasks.status, "running"),
+          ));
         }
         return null;
       }
