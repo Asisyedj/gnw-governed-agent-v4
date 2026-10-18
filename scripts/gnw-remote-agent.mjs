@@ -150,7 +150,7 @@ async function readProjectFile(root, relativePath) {
     await handle.close();
   }
 }
-async function writeApprovedFileChange(root, task) {
+async function writeApprovedFileChange(root, task, revalidate) {
   const args = task.arguments;
   const path = safePath(args?.path);
   const content = typeof args?.content === "string" ? args.content : null;
@@ -230,6 +230,9 @@ async function writeApprovedFileChange(root, task) {
     await assertPinnedParent();
     await writeFile(tempPath, content, { flag: "wx", mode: originalMode });
     try {
+      // Fail closed if cancellation, approval expiry, agent revocation, or the kill switch
+      // changed while the approved write was being staged.
+      await revalidate();
       await assertPinnedParent();
       await rename(tempPath, targetPath);
       await assertPinnedParent();
@@ -246,8 +249,9 @@ async function writeApprovedFileChange(root, task) {
     await parentHandle.close();
   }
 }
-async function executeTask(root, task) {
+async function executeTask(root, task, revalidate) {
   if (!task || typeof task !== "object" || !ALLOWED_OPERATIONS.has(task.kind)) throw new Error("Remote task kind is not allowlisted.");
+  await revalidate();
   if (task.kind === "system_status") {
     const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
     return { ok: true, result: { platform: process.platform, arch: process.arch, nodeVersion: process.version, workspace: basename(root), package: packageJson.name, packageVersion: packageJson.version }, durationMs: 0 };
@@ -264,7 +268,7 @@ async function executeTask(root, task) {
     return { ok: true, result, durationMs: 0 };
   }
   if (task.kind === "file_change") {
-    return { ok: true, result: await writeApprovedFileChange(root, task) , durationMs: 0 };
+    return { ok: true, result: await writeApprovedFileChange(root, task, revalidate) , durationMs: 0 };
   }
   if (VALIDATION_OPERATIONS.has(task.kind)) {
     const rationale = typeof task.arguments?.rationale === "string" ? task.arguments.rationale.trim() : "";
@@ -350,7 +354,15 @@ async function main() {
       let errorSummary = "";
       const started = Date.now();
       try {
-        output = await executeTask(root, task);
+        output = await executeTask(root, task, async () => {
+          const authorization = await postJson(baseUrl, token, "/mcp-agent/authorize", {
+            taskId: task.id,
+            actionDigest: task.actionDigest ?? null,
+          });
+          if (authorization?.authorized !== true || authorization.taskId !== task.id) {
+            throw new Error("Remote task authorization was revoked or expired; refusing local execution.");
+          }
+        });
         if (!output || output.ok !== true) {
           status = "failed";
           errorSummary = "Fixed GNW operation returned a non-zero status or timeout.";
