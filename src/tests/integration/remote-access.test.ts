@@ -353,6 +353,13 @@ describe("GNW OAuth-protected MCP gateway", () => {
     const claimed = next.json().task as { id: string; kind: string; actionDigest?: string | null };
     expect(claimed.id).toBe(task.remoteTaskId);
     expect(claimed.kind).toBe("system_status");
+    const authorized = await app.inject({
+      method: "POST", url: "/mcp-agent/authorize",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: { taskId: claimed.id, actionDigest: claimed.actionDigest ?? null },
+    });
+    expect(authorized.statusCode).toBe(200);
+    expect(authorized.json()).toMatchObject({ ok: true, authorized: true, taskId: claimed.id });
 
     const result = await app.inject({
       method: "POST", url: "/mcp-agent/result",
@@ -364,6 +371,63 @@ describe("GNW OAuth-protected MCP gateway", () => {
 
     const storedResult = await callTool(tokens.access_token, "gnw_get_task_result", { remoteTaskId: task.remoteTaskId });
     expect(storedResult.result).toMatchObject({ status: "completed", output: { ok: true } });
+
+    // A parent cancellation after claim must make the agent's fresh authorization fail.
+    const inFlightCancellation = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "system_status" });
+    const inFlight = inFlightCancellation.result as { taskId: number; remoteTaskId: string };
+    const inFlightClaimResponse = await app.inject({
+      method: "POST", url: "/mcp-agent/next",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: {},
+    });
+    expect(inFlightClaimResponse.statusCode).toBe(200);
+    const inFlightClaim = inFlightClaimResponse.json().task as { id: string; actionDigest?: string | null };
+    expect(inFlightClaim.id).toBe(inFlight.remoteTaskId);
+    await withTenant(db, tenantId, tx => tx.update(schema.tasks).set({
+      status: "cancelled", errorMessage: "Integration-test cancellation.", completedAt: new Date(), updatedAt: new Date(),
+    }).where(eq(schema.tasks.id, inFlight.taskId)));
+    const deniedAfterCancellation = await app.inject({
+      method: "POST", url: "/mcp-agent/authorize",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: { taskId: inFlightClaim.id, actionDigest: inFlightClaim.actionDigest ?? null },
+    });
+    expect(deniedAfterCancellation.statusCode).toBe(409);
+    const cancelledRemote = await withTenant(db, tenantId, tx => tx.select().from(schema.remoteTasks).where(eq(schema.remoteTasks.id, inFlight.remoteTaskId)));
+    expect(cancelledRemote[0]?.status).toBe("cancelled");
+
+    // A queued task whose parent is already cancelled must never be claimed.
+    const queuedCancellation = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "system_status" });
+    const queued = queuedCancellation.result as { taskId: number; remoteTaskId: string };
+    await withTenant(db, tenantId, tx => tx.update(schema.tasks).set({
+      status: "cancelled", errorMessage: "Integration-test queued cancellation.", completedAt: new Date(), updatedAt: new Date(),
+    }).where(eq(schema.tasks.id, queued.taskId)));
+    const noCancelledDispatch = await app.inject({
+      method: "POST", url: "/mcp-agent/next",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: {},
+    });
+    expect(noCancelledDispatch.statusCode).toBe(200);
+    expect(noCancelledDispatch.json().task).toBeNull();
+    const cancelledQueuedRemote = await withTenant(db, tenantId, tx => tx.select().from(schema.remoteTasks).where(eq(schema.remoteTasks.id, queued.remoteTaskId)));
+    expect(cancelledQueuedRemote[0]?.status).toBe("cancelled");
+
+    // Expired queued work must transition to terminal state instead of lingering indefinitely.
+    const queuedExpiry = await callTool(tokens.access_token, "gnw_request_safe_check", { operation: "system_status" });
+    const expired = queuedExpiry.result as { taskId: number; remoteTaskId: string };
+    await withTenant(db, tenantId, tx => tx.update(schema.remoteTasks).set({
+      expiresAt: new Date(Date.now() - 60000), updatedAt: new Date(),
+    }).where(eq(schema.remoteTasks.id, expired.remoteTaskId)));
+    const noExpiredDispatch = await app.inject({
+      method: "POST", url: "/mcp-agent/next",
+      headers: serverHeaders({ authorization: "Bearer " + registeredAgentToken, "content-type": "application/json" }),
+      payload: {},
+    });
+    expect(noExpiredDispatch.statusCode).toBe(200);
+    expect(noExpiredDispatch.json().task).toBeNull();
+    const expiredRemote = await withTenant(db, tenantId, tx => tx.select().from(schema.remoteTasks).where(eq(schema.remoteTasks.id, expired.remoteTaskId)));
+    expect(expiredRemote[0]?.status).toBe("expired");
+    const expiredParent = await withTenant(db, tenantId, tx => tx.select().from(schema.tasks).where(eq(schema.tasks.id, expired.taskId)));
+    expect(expiredParent[0]?.status).toBe("failed");
 
     const validationProposal = await callTool(tokens.access_token, "gnw_propose_validation", {
       operation: "git_status", rationale: "Check the current GNW worktree status for the requested audit.",
