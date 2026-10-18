@@ -931,38 +931,205 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
     const agent = await authenticateAgent(app.db, request);
     if (!agent) return reply.code(401).send({ error: "agent_authentication_failed" });
     const result = await withTenant(app.db, agent.tenantId, async tx => {
-      const candidates = await tx.select().from(remoteTasks)
-        .where(and(eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId), inArray(remoteTasks.status, ["queued", "pending_approval"]), gt(remoteTasks.expiresAt, new Date())))
-        .orderBy(asc(remoteTasks.createdAt)).limit(20);
-      for (const candidate of candidates) {
-        if (candidate.status !== "pending_approval" || candidate.approvalId === null) continue;
-        const [approval] = await tx.select().from(approvals).where(and(eq(approvals.id, candidate.approvalId), eq(approvals.tenantId, agent.tenantId))).limit(1);
-        if (!approval) continue;
-        if (approval.status === "approved" && approval.actionDigest === candidate.actionDigest && approval.expiresAt > new Date()) {
-          await tx.update(remoteTasks).set({ status: "queued", updatedAt: new Date() }).where(and(eq(remoteTasks.id, candidate.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "pending_approval")));
-          await tx.update(tasks).set({ status: "pending", updatedAt: new Date() }).where(and(eq(tasks.id, candidate.taskId), eq(tasks.tenantId, agent.tenantId)));
-        } else if (approval.status === "denied" || approval.expiresAt <= new Date()) {
-          await tx.update(remoteTasks).set({ status: approval.expiresAt <= new Date() ? "expired" : "denied", updatedAt: new Date() }).where(and(eq(remoteTasks.id, candidate.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "pending_approval")));
-          await tx.update(tasks).set({ status: "cancelled", errorMessage: "Approval denied or expired.", completedAt: new Date(), updatedAt: new Date() }).where(and(eq(tasks.id, candidate.taskId), eq(tasks.tenantId, agent.tenantId)));
+      const now = new Date();
+
+      // Expire tasks before candidate filtering so dead queued jobs cannot remain pending forever.
+      const expiredTasks = await tx.select().from(remoteTasks)
+        .where(and(
+          eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId),
+          inArray(remoteTasks.status, ["queued", "pending_approval", "running"]),
+          lt(remoteTasks.expiresAt, now),
+        ))
+        .for("update", { skipLocked: true });
+      for (const expiredTask of expiredTasks) {
+        await tx.update(remoteTasks).set({
+          status: "expired", errorSummary: "Remote task expired before dispatch.",
+          completedAt: now, leaseExpiresAt: null, updatedAt: now,
+        }).where(and(
+          eq(remoteTasks.id, expiredTask.id), eq(remoteTasks.tenantId, agent.tenantId),
+          inArray(remoteTasks.status, ["queued", "pending_approval", "running"]),
+        ));
+        const [parent] = await tx.select().from(tasks)
+          .where(and(eq(tasks.id, expiredTask.taskId), eq(tasks.tenantId, agent.tenantId)))
+          .for("update").limit(1);
+        if (parent && (parent.status === "pending" || parent.status === "waiting_approval" || parent.status === "running")) {
+          await tx.update(tasks).set({
+            status: "failed", errorMessage: "Remote task expired before dispatch.",
+            completedAt: now, updatedAt: now,
+          }).where(and(eq(tasks.id, expiredTask.taskId), eq(tasks.tenantId, agent.tenantId)));
         }
       }
-      await tx.update(remoteTasks).set({ status: "queued", updatedAt: new Date() })
-        .where(and(eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running"), lt(remoteTasks.leaseExpiresAt, new Date()), lt(remoteTasks.attempts, 3)));
-      await tx.update(remoteTasks).set({ status: "failed", errorSummary: "Host agent lease expired after the retry limit.", completedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running"), lt(remoteTasks.leaseExpiresAt, new Date()), gt(remoteTasks.attempts, 2)));
+
+      const candidates = await tx.select().from(remoteTasks)
+        .where(and(
+          eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId),
+          inArray(remoteTasks.status, ["queued", "pending_approval"]),
+          gt(remoteTasks.expiresAt, now),
+        ))
+        .orderBy(asc(remoteTasks.createdAt)).limit(20);
+
+      for (const candidate of candidates) {
+        const [parent] = await tx.select().from(tasks)
+          .where(and(eq(tasks.id, candidate.taskId), eq(tasks.tenantId, agent.tenantId)))
+          .for("update").limit(1);
+        if (!parent || parent.status === "cancelled" || parent.status === "done" || parent.status === "failed") {
+          const terminalStatus = parent?.status === "cancelled" ? "cancelled" : "failed";
+          await tx.update(remoteTasks).set({
+            status: terminalStatus, errorSummary: "Parent task is no longer eligible for remote execution.",
+            completedAt: now, leaseExpiresAt: null, updatedAt: now,
+          }).where(and(eq(remoteTasks.id, candidate.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, candidate.status)));
+          continue;
+        }
+        if (candidate.status !== "pending_approval" || candidate.approvalId === null) continue;
+        const [approval] = await tx.select().from(approvals)
+          .where(and(eq(approvals.id, candidate.approvalId), eq(approvals.tenantId, agent.tenantId)))
+          .for("update").limit(1);
+        if (!approval) continue;
+        if (approval.status === "approved" && approval.actionDigest === candidate.actionDigest && approval.expiresAt > now) {
+          await tx.update(remoteTasks).set({ status: "queued", updatedAt: now })
+            .where(and(eq(remoteTasks.id, candidate.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "pending_approval")));
+          if (parent.status === "waiting_approval") {
+            await tx.update(tasks).set({ status: "pending", updatedAt: now })
+              .where(and(eq(tasks.id, candidate.taskId), eq(tasks.tenantId, agent.tenantId), eq(tasks.status, "waiting_approval")));
+          }
+        } else if (approval.status === "denied" || approval.expiresAt <= now) {
+          await tx.update(remoteTasks).set({
+            status: approval.expiresAt <= now ? "expired" : "denied",
+            errorSummary: approval.expiresAt <= now ? "Remote task approval expired." : "Remote task approval was denied.",
+            completedAt: now, updatedAt: now,
+          }).where(and(eq(remoteTasks.id, candidate.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "pending_approval")));
+          await tx.update(tasks).set({
+            status: "cancelled", errorMessage: "Approval denied or expired.", completedAt: now, updatedAt: now,
+          }).where(and(eq(tasks.id, candidate.taskId), eq(tasks.tenantId, agent.tenantId), eq(tasks.status, "waiting_approval")));
+        }
+      }
+
+      await tx.update(remoteTasks).set({ status: "queued", updatedAt: now })
+        .where(and(
+          eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId),
+          eq(remoteTasks.status, "running"), lt(remoteTasks.leaseExpiresAt, now),
+          lt(remoteTasks.attempts, 3), gt(remoteTasks.expiresAt, now),
+        ));
+      await tx.update(remoteTasks).set({
+        status: "failed", errorSummary: "Host agent lease expired after the retry limit.",
+        completedAt: now, leaseExpiresAt: null, updatedAt: now,
+      }).where(and(
+        eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId),
+        eq(remoteTasks.status, "running"), lt(remoteTasks.leaseExpiresAt, now),
+        gt(remoteTasks.attempts, 2), gt(remoteTasks.expiresAt, now),
+      ));
+
       const [job] = await tx.select().from(remoteTasks)
-        .where(and(eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "queued"), gt(remoteTasks.expiresAt, new Date())))
+        .where(and(
+          eq(remoteTasks.agentId, agent.id), eq(remoteTasks.tenantId, agent.tenantId),
+          eq(remoteTasks.status, "queued"), gt(remoteTasks.expiresAt, now),
+        ))
         .orderBy(asc(remoteTasks.createdAt)).for("update", { skipLocked: true }).limit(1);
       if (!job) return null;
+
+      // Lock and verify the parent task before claiming; a cancelled parent is terminal.
+      const [parent] = await tx.select().from(tasks)
+        .where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId)))
+        .for("update").limit(1);
+      if (!parent || (parent.status !== "pending" && parent.status !== "running")) {
+        const terminalStatus = parent?.status === "cancelled" || parent?.status === "waiting_approval" ? "cancelled" : "failed";
+        await tx.update(remoteTasks).set({
+          status: terminalStatus, errorSummary: "Parent task is no longer eligible for dispatch.",
+          completedAt: now, leaseExpiresAt: null, updatedAt: now,
+        }).where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "queued")));
+        if (parent?.status === "waiting_approval") {
+          await tx.update(tasks).set({
+            status: "cancelled", errorMessage: "Remote task was queued before approval completed.",
+            completedAt: now, updatedAt: now,
+          }).where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId), eq(tasks.status, "waiting_approval")));
+        }
+        return null;
+      }
+
       const nextAttempts = job.attempts + 1;
-      const now = new Date();
-      const [claimed] = await tx.update(remoteTasks).set({ status: "running", attempts: nextAttempts, startedAt: now, leaseExpiresAt: new Date(now.getTime() + REMOTE_TASK_LEASE_MS), updatedAt: now })
-        .where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "queued"))).returning();
+      const claimedAt = new Date();
+      const [claimed] = await tx.update(remoteTasks).set({
+        status: "running", attempts: nextAttempts, startedAt: claimedAt,
+        leaseExpiresAt: new Date(claimedAt.getTime() + REMOTE_TASK_LEASE_MS), updatedAt: claimedAt,
+      }).where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "queued"))).returning();
       if (!claimed) return null;
-      await tx.update(tasks).set({ status: "running", startedAt: now, updatedAt: now }).where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId)));
+      await tx.update(tasks).set({ status: "running", startedAt: claimedAt, updatedAt: claimedAt })
+        .where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId)));
       return { id: claimed.id, taskId: claimed.taskId, kind: claimed.kind, arguments: claimed.argumentsJson, actionDigest: claimed.actionDigest, expiresAt: claimed.expiresAt };
     });
     return reply.send({ ok: true, task: result });
+  });
+
+  // The host checks current authorization immediately before every governed execution.
+  app.post("/mcp-agent/authorize", async (request, reply) => {
+    const config = configOrReply(reply, request);
+    if (!config) return;
+    if (!hostIsCanonical(request, config)) return reply.code(421).send({ error: "host_rejected" });
+    const agent = await authenticateAgent(app.db, request);
+    if (!agent) return reply.code(401).send({ error: "agent_authentication_failed" });
+    const body = bodyRecord(request.body);
+    const id = stringField(body, "taskId", 36);
+    const requestedDigest = body.actionDigest === undefined || body.actionDigest === null ? null : stringField(body, "actionDigest", 64);
+    if (!/^[0-9a-f-]{36}$/i.test(id) || (requestedDigest !== null && !/^[0-9a-f]{64}$/i.test(requestedDigest))) {
+      return reply.code(400).send({ error: "invalid_authorization_request" });
+    }
+
+    const authorization = await withTenant(app.db, agent.tenantId, async tx => {
+      const now = new Date();
+      const [job] = await tx.select().from(remoteTasks)
+        .where(and(eq(remoteTasks.id, id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.agentId, agent.id)))
+        .for("update").limit(1);
+      if (!job || job.status !== "running") return null;
+      if (!job.leaseExpiresAt || job.leaseExpiresAt <= now || job.expiresAt <= now || (job.actionDigest ?? null) !== requestedDigest) {
+        if (job.expiresAt <= now) {
+          await tx.update(remoteTasks).set({
+            status: "expired", errorSummary: "Remote task expired before execution.",
+            completedAt: now, leaseExpiresAt: null, updatedAt: now,
+          }).where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running")));
+        }
+        return null;
+      }
+      const [parent] = await tx.select().from(tasks)
+        .where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId)))
+        .for("update").limit(1);
+      if (!parent || parent.status !== "running") {
+        const terminalStatus = parent?.status === "cancelled" ? "cancelled" : "failed";
+        await tx.update(remoteTasks).set({
+          status: terminalStatus, errorSummary: "Parent task is no longer running; remote execution denied.",
+          completedAt: now, leaseExpiresAt: null, updatedAt: now,
+        }).where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running")));
+        if (parent && (parent.status === "pending" || parent.status === "waiting_approval")) {
+          await tx.update(tasks).set({
+            status: "cancelled", errorMessage: "Remote execution was denied because the parent task is no longer eligible.",
+            completedAt: now, updatedAt: now,
+          }).where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId), eq(tasks.status, parent.status)));
+        }
+        return null;
+      }
+      if (job.kind === "file_change" || APPROVABLE_OPERATIONS.has(job.kind)) {
+        if (job.approvalId === null || !job.actionDigest) return null;
+        const [approval] = await tx.select().from(approvals)
+          .where(and(eq(approvals.id, job.approvalId), eq(approvals.tenantId, agent.tenantId)))
+          .for("update").limit(1);
+        if (!approval || approval.status !== "approved" || approval.actionDigest !== job.actionDigest || approval.expiresAt <= now) {
+          await tx.update(remoteTasks).set({
+            status: "denied", errorSummary: "Required approval is missing, denied, or expired.",
+            completedAt: now, leaseExpiresAt: null, updatedAt: now,
+          }).where(and(eq(remoteTasks.id, job.id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running")));
+          await tx.update(tasks).set({
+            status: "cancelled", errorMessage: "Required remote operation approval is no longer valid.",
+            completedAt: now, updatedAt: now,
+          }).where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId), eq(tasks.status, "running")));
+          return null;
+        }
+      }
+      return {
+        ok: true as const, authorized: true as const, taskId: job.id,
+        expiresAt: new Date(Math.min(job.expiresAt.getTime(), job.leaseExpiresAt.getTime())).toISOString(),
+      };
+    });
+    if (!authorization) return reply.code(409).send({ error: "remote_task_authorization_expired_or_revoked" });
+    return reply.send(authorization);
   });
 
   app.post("/mcp-agent/result", async (request, reply) => {
@@ -980,13 +1147,36 @@ export const remoteAccessRoutes: FastifyPluginAsync = async (app) => {
         Buffer.byteLength(JSON.stringify(output), "utf8") > MAX_TASK_OUTPUT_BYTES) return reply.code(400).send({ error: "invalid_task_result" });
     const result = await withTenant(app.db, agent.tenantId, async tx => {
       const [job] = await tx.select().from(remoteTasks).where(and(eq(remoteTasks.id, id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.agentId, agent.id))).for("update").limit(1);
-      if (!job || job.status !== "running" || !job.leaseExpiresAt || job.leaseExpiresAt <= new Date()) return null;
+      const now = new Date();
+      if (!job || job.status !== "running" || !job.leaseExpiresAt || job.leaseExpiresAt <= now) return null;
+      if (job.expiresAt <= now) {
+        await tx.update(remoteTasks).set({
+          status: "expired", errorSummary: "Remote task expired before result acceptance.",
+          completedAt: now, leaseExpiresAt: null, updatedAt: now,
+        }).where(and(eq(remoteTasks.id, id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running")));
+        const [expiredParent] = await tx.select().from(tasks)
+          .where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId))).for("update").limit(1);
+        if (expiredParent && expiredParent.status === "running") {
+          await tx.update(tasks).set({ status: "failed", errorMessage: "Remote task expired before result acceptance.", completedAt: now, updatedAt: now })
+            .where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId), eq(tasks.status, "running")));
+        }
+        return null;
+      }
+      const [parent] = await tx.select().from(tasks)
+        .where(and(eq(tasks.id, job.taskId), eq(tasks.tenantId, agent.tenantId))).for("update").limit(1);
+      if (!parent || parent.status !== "running") {
+        await tx.update(remoteTasks).set({
+          status: parent?.status === "cancelled" ? "cancelled" : "failed",
+          errorSummary: "Parent task is no longer running; remote result rejected.",
+          completedAt: now, leaseExpiresAt: null, updatedAt: now,
+        }).where(and(eq(remoteTasks.id, id), eq(remoteTasks.tenantId, agent.tenantId), eq(remoteTasks.status, "running")));
+        return null;
+      }
       if (job.kind === "file_change" || APPROVABLE_OPERATIONS.has(job.kind)) {
         if (job.approvalId === null || !job.actionDigest) return null;
         const [approval] = await tx.select().from(approvals).where(and(eq(approvals.id, job.approvalId), eq(approvals.tenantId, agent.tenantId))).limit(1);
         if (!approval || approval.status !== "approved" || approval.actionDigest !== job.actionDigest || approval.expiresAt <= new Date()) return null;
       }
-      const now = new Date();
       const [saved] = await tx.update(remoteTasks).set({
         status: status as "completed" | "failed", output, errorSummary: status === "failed" ? (errorSummary || "Remote operation failed.") : null,
         completedAt: now, leaseExpiresAt: null, updatedAt: now,
