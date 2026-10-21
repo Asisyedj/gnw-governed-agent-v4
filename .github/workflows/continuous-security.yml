@@ -92,7 +92,7 @@ jobs:
           cp docs/RUNTIME_EXECUTION_POLICY.md security-evidence/runtime-policy.md
           printf "GNW-REP-1.0\n" > security-evidence/policy-version.txt
           printf "continuous-security=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> security-evidence/policy-version.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: continuous-security-${{ github.sha }}
           path: security-evidence/
