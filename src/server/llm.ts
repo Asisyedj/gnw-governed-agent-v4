@@ -3,7 +3,7 @@ import { assertEgressUrl, governedFetch } from "./security.js";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type LlmOptions = { model?: string; temperature?: number; maxTokens?: number; timeoutMs?: number };
-export type LlmResult = { content: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } };
+export type LlmResult = { content: string; citations?: string[]; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } };
 
 const MAX_LLM_RESPONSE_BYTES = 4 * 1024 * 1024;
 
@@ -46,13 +46,16 @@ export class LlmClient {
       if (!resp.ok) throw new Error(`LLM API error: ${resp.status} ${resp.statusText}`);
       const json = await resp.json() as {
         choices: Array<{ message: { content: string } }>;
-        usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+        usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }; citations?: unknown;
       };
       const content = json.choices[0]?.message?.content ?? "";
       const usage = json.usage
         ? { promptTokens: json.usage.prompt_tokens, completionTokens: json.usage.completion_tokens, totalTokens: json.usage.total_tokens }
         : undefined;
-      return usage ? { content, usage } : { content };
+      const citations = Array.isArray(json.citations)
+        ? json.citations.filter((value): value is string => typeof value === "string").slice(0, 20)
+        : [];
+      return { content, ...(usage ? { usage } : {}), ...(citations.length ? { citations } : {}) };
     } finally {
       clearTimeout(timeout);
     }

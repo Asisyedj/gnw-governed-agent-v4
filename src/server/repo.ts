@@ -39,7 +39,51 @@ export async function findPendingApprovalByDigest(db: Db, tenantId: number, acti
 export async function listPendingApprovals(db: Db, tenantId: number) { return withTenant(db, tenantId, tx => tx.select().from(approvals).where(and(eq(approvals.tenantId,tenantId),eq(approvals.status,"pending"))).orderBy(asc(approvals.createdAt))); }
 export async function reviewApproval(db: Db, id: number, tenantId: number, reviewedByUserId: number, status: "approved" | "denied", reason?: string) { return withTenant(db, tenantId, async tx => { const [row] = await tx.update(approvals).set({ status, reason: reason ?? null, reviewedByUserId, reviewedAt: new Date() }).where(and(eq(approvals.id,id),eq(approvals.tenantId,tenantId),eq(approvals.status,"pending"))).returning(); return row; }); }
 
-export async function claimNonce(db: Db, kind: string, nonce: string, taskId?: number): Promise<boolean> { try { await db.insert(nonces).values({ kind, nonce, taskId: taskId ?? null }); return true; } catch { return false; } }
+export async function claimNonce(db: Db, kind: "approval" | "grant", nonce: string, taskId?: number): Promise<boolean> {
+  if (typeof nonce !== "string" || !nonce.trim() || nonce.length > 256) throw new Error("nonce_claim_invalid");
+  const [row] = await db.insert(nonces).values({ kind, nonce, taskId: taskId ?? null })
+    .onConflictDoNothing({ target: [nonces.kind, nonces.nonce] })
+    .returning({ id: nonces.id });
+  return Boolean(row);
+}
+
+export type GovernanceNonceClaim = { kind: "approval" | "grant"; nonce: string; taskId?: number };
+export type GovernanceNonceClaimResult = true | "approval_replay" | "grant_replay";
+
+class NonceReplayConflict extends Error {
+  constructor(readonly claimKind: GovernanceNonceClaim["kind"]) { super(`${claimKind}_replay`); }
+}
+
+/** Claim a set of single-use governance nonces as one transaction.
+ * If any nonce was already consumed, all inserts in this batch roll back.
+ * Infrastructure/database errors are propagated rather than misreported as replay.
+ */
+export async function claimNoncesAtomically(db: Db, claims: GovernanceNonceClaim[]): Promise<GovernanceNonceClaimResult> {
+  const seen = new Set<string>();
+  for (const claim of claims) {
+    if (claim.kind !== "approval" && claim.kind !== "grant") throw new Error("nonce_claim_kind_invalid");
+    if (!claim.nonce || typeof claim.nonce !== "string" || !claim.nonce.trim() || claim.nonce.length > 256) throw new Error("nonce_claim_invalid");
+    const key = `${claim.kind}:${claim.nonce}`;
+    if (seen.has(key)) return claim.kind === "approval" ? "approval_replay" : "grant_replay";
+    seen.add(key);
+  }
+  try {
+    return await db.transaction(async tx => {
+      for (const claim of claims) {
+        const [row] = await tx.insert(nonces).values({
+          kind: claim.kind,
+          nonce: claim.nonce,
+          taskId: claim.taskId ?? null,
+        }).onConflictDoNothing({ target: [nonces.kind, nonces.nonce] }).returning({ id: nonces.id });
+        if (!row) throw new NonceReplayConflict(claim.kind);
+      }
+      return true as const;
+    });
+  } catch (error) {
+    if (error instanceof NonceReplayConflict) return error.claimKind === "approval" ? "approval_replay" : "grant_replay";
+    throw error;
+  }
+}
 
 export async function getInterlock(db: Db): Promise<Interlock> { const [row] = await db.select().from(interlocks).orderBy(desc(interlocks.updatedAt)).limit(1); return row ?? { killSwitch:false, circuitOpen:false, generation:0 }; }
 export async function setInterlock(db: Db, patch: Partial<Interlock>, updatedByUserId?: number) { return db.transaction(async tx => { await tx.execute(`select pg_advisory_xact_lock(hashtext('gnw:interlock-generation'))`); const [current] = await tx.select().from(interlocks).orderBy(desc(interlocks.updatedAt), desc(interlocks.id)).limit(1); const [row] = await tx.insert(interlocks).values({ killSwitch: patch.killSwitch ?? current?.killSwitch ?? false, circuitOpen: patch.circuitOpen ?? current?.circuitOpen ?? false, reason: patch.reason ?? current?.reason ?? null, generation: (current?.generation ?? 0) + 1, updatedByUserId: updatedByUserId ?? null }).returning(); return row!; }); }

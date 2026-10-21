@@ -1,3 +1,6 @@
+import "dotenv/config";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyHelmet from "@fastify/helmet";
@@ -20,6 +23,7 @@ import { recordRequest } from "./metrics.js";
 import type { FastifyRequest } from "fastify";
 
 const PORT = Number(process.env.PORT ?? 3000);
+const HOST = process.env.HOST ?? "127.0.0.1";
 
 export async function buildApp() {
   validateSecrets();
@@ -196,10 +200,11 @@ async function main() {
   process.on("uncaughtException",  (err) => { app.log.error(err, "Uncaught exception"); process.exit(1); });
   process.on("unhandledRejection", (r)   => { app.log.error({ reason: r }, "Unhandled rejection"); process.exit(1); });
 
-  await app.listen({ port: PORT, host: "0.0.0.0" });
+  await app.listen({ port: PORT, host: HOST });
   app.log.info(`GNW server ready on :${PORT}`);
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+const isMain = Boolean(process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url));
+if (isMain) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }

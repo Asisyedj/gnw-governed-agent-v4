@@ -40,6 +40,16 @@ if(authzIndex<0||handlerIndex<0||authzIndex>handlerIndex) failures.push("executi
 for(const token of ["persistCapabilityLease","consumeCapabilityLease","governance_digest_mismatch","teeAttestationRequired","mpcTrustAnchor","requireMpcTrustAnchor"]){if(!exec.includes(token)) failures.push(`execution:trust-control-missing:${token}`);}
 const attestation=read("src/server/attestation.ts");
 for(const token of ["GNW-TEE-ATTESTATION-V1","cryptoVerify","expectedMeasurement","maxAgeMs"]){if(!attestation.includes(token)) failures.push(`attestation:control-missing:${token}`);}
+if(!attestation.includes("Math.min(policy.maxAgeMs??120000,120000)")) failures.push("attestation:maximum-age-not-hard-capped");
+const runtimeEnv=read("src/server/env.ts");
+if(!runtimeEnv.includes("Math.min(int(source.GNW_TEE_ATTESTATION_MAX_AGE_MS,120000),120000)")) failures.push("env:tee-maximum-age-not-hard-capped");
+const productionPreflight=read("scripts/preflight-production.mjs");
+if(!productionPreflight.includes("maxAge > maxAllowedAge")||!productionPreflight.includes("expiresAt - issuedAt > maxAllowedAge")) failures.push("preflight:tee-freshness-policy-not-pinned");
+const releaseEvidenceVerifier=read("scripts/verify-release-evidence.mjs");
+if(!releaseEvidenceVerifier.includes("configuredMaxAgeMs>120000")||!releaseEvidenceVerifier.includes("e.expiresAt-e.issuedAt>120000")) failures.push("release-evidence:tee-freshness-policy-not-pinned");
+if(pkg.includes('"verify:production:closure": "node scripts/generate-production-closure-environment.mjs')) failures.push("production:closure-command-must-not-generate-untrusted-credentials");
+const fixtureGenerator=read("scripts/generate-production-closure-environment.mjs");
+if(!fixtureGenerator.includes("--test-fixture")||!fixtureGenerator.includes("TEST_FIXTURE_GENERATED")||!fixtureGenerator.includes("flag: 'wx'")) failures.push("production:fixture-generator-not-isolated-or-overwrite-safe");
 const trustAnchor=read("src/server/trust-anchor.ts");
 for(const token of ["GNW-TRUST-ANCHOR-V1","verifyThresholdAttestation","threshold","participantId"]){if(!trustAnchor.includes(token)) failures.push(`trust-anchor:control-missing:${token}`);}
 const governance=read("src/server/governance.ts");
