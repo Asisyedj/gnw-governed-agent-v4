@@ -11,6 +11,7 @@ vi.mock("../../server/repo.js", () => ({ listArtifacts: mocks.listArtifacts, fin
 vi.mock("../../server/storage.js", () => ({ createStorage: mocks.createStorage }));
 
 import { executeReadOnlyAgentTool, isReadOnlyAgentTool } from "../../server/agent-tools.js";
+import { loadEnv } from "../../server/env.js";
 
 const content = Buffer.from("GNW governs safe agents. Documents provide evidence. Safe agents verify evidence.", "utf8");
 const digest = createHash("sha256").update(content).digest("hex");
@@ -57,6 +58,47 @@ describe("governed read-only agent tools", () => {
     expect(status).toMatchObject({ taskId: 10, status: "done" });
     await expect(executeReadOnlyAgentTool(ctx, "task.status", { taskId: 11 })).rejects.toThrow("agent_tool_task_scope_denied");
     expect(mocks.findTaskById).toHaveBeenCalledWith(ctx.db, 10, 20);
+  });
+
+  it("runs bounded Perplexity-compatible deep research through the configured LLM client and filters citations", async () => {
+    const env = loadEnv({
+      NODE_ENV: "test",
+      GNW_DEEP_RESEARCH_BASE_URL: "https://api.perplexity.ai",
+      GNW_DEEP_RESEARCH_API_KEY: "test-only-key",
+      GNW_DEEP_RESEARCH_MODEL: "sonar-deep-research",
+      GNW_DEEP_RESEARCH_TIMEOUT_MS: "5000",
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: "A bounded evidence summary." } }],
+      citations: ["https://research.example/source#section", "http://insecure.example/", "https://user:pass@credential.example/", "https://second.example/path"],
+      usage: { prompt_tokens: 12, completion_tokens: 34, total_tokens: 46 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      expect(isReadOnlyAgentTool("deep.research")).toBe(true);
+      const result = await executeReadOnlyAgentTool({ ...ctx, env }, "deep.research", { query: "Research GNW governance architecture" }) as { answer: string; citations: string[]; model: string; usage: { totalTokens: number } };
+      expect(result.answer).toBe("A bounded evidence summary.");
+      expect(result.model).toBe("sonar-deep-research");
+      expect(result.citations).toEqual(["https://research.example/source", "https://second.example/path"]);
+      expect(result.usage.totalTokens).toBe(46);
+      const request = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+      expect(request[0].toString()).toBe("https://api.perplexity.ai/chat/completions");
+      expect((request[1].headers as Record<string, string>).Authorization).toBe("Bearer test-only-key");
+      const body = JSON.parse(String(request[1].body)) as { model: string; max_tokens: number; messages: Array<{ role: string; content: string }> };
+      expect(body.model).toBe("sonar-deep-research");
+      expect(body.max_tokens).toBe(1536);
+      expect(body.messages[0]?.content).toContain("untrusted data");
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("fails closed when deep research credentials are missing", async () => {
+    const env = loadEnv({ NODE_ENV: "test", GNW_DEEP_RESEARCH_API_KEY: "", LLM_API_KEY: "" });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(executeReadOnlyAgentTool({ ...ctx, env }, "deep.research", { query: "Research GNW governance" })).rejects.toThrow("deep_research_api_key_missing");
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("rejects unknown fields, invalid inputs, and unknown tool names", async () => {

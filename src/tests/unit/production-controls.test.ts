@@ -108,6 +108,7 @@ describe("production control primitives",()=>{
 vi.mock("../../server/audit.js",()=>({audit:vi.fn(async()=>undefined)}));
 vi.mock("../../server/repo.js",()=>({
  claimNonce:vi.fn(async()=>true),
+ claimNoncesAtomically:vi.fn(async()=>true),
  getInterlock:vi.fn(async()=>({killSwitch:false,circuitOpen:false,generation:0})),
  reserveBudget:vi.fn(async()=>true),
  createCapabilityLease:vi.fn(async()=>undefined),
