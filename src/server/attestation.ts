@@ -30,7 +30,8 @@ export function verifyRuntimeAttestation(a:RuntimeAttestation,policy:Attestation
   if(!/^[0-9a-f]{32,128}$/i.test(a.nonce))return false;
   if(!/^[0-9a-f]+$/i.test(a.signature))return false;
   if(a.expiresAt<=a.issuedAt||now<a.issuedAt||now>=a.expiresAt)return false;
-  if(policy.maxAgeMs!==undefined&&(now-a.issuedAt)>policy.maxAgeMs)return false;
+  const maxAgeMs=Math.min(policy.maxAgeMs??120000,120000);
+  if((a.expiresAt-a.issuedAt)>maxAgeMs||(now-a.issuedAt)>maxAgeMs)return false;
   if(policy.expectedMeasurement&&a.measurement!==policy.expectedMeasurement)return false;
   return cryptoVerify(null,Buffer.from(payload(a)),policy.publicKeyPem,Buffer.from(a.signature,"hex"));
 }

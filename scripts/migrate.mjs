@@ -24,7 +24,8 @@ try {
   await client.query('CREATE TABLE IF NOT EXISTS gnw_migrations (id SERIAL PRIMARY KEY, filename TEXT NOT NULL UNIQUE, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
   const files = (await readdir(join(process.cwd(), 'drizzle'))).filter(f => /^\d+_.*\.sql$/.test(f)).sort();
   for (const filename of files) {
-    const sql = await readFile(join(process.cwd(), 'drizzle', filename), 'utf8');
+    const rawSql = await readFile(join(process.cwd(), 'drizzle', filename), 'utf8');
+    const sql = rawSql.replace(/\r\n/g, '\n');
     const checksum = createHash('sha256').update(sql).digest('hex');
     const prior = await client.query('SELECT checksum FROM gnw_migrations WHERE filename=$1', [filename]);
     if (prior.rowCount) {

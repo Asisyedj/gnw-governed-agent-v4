@@ -1,3 +1,6 @@
+import "dotenv/config";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyHelmet from "@fastify/helmet";
@@ -200,6 +203,7 @@ async function main() {
   app.log.info(`GNW server ready on :${PORT}`);
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+const isMain = Boolean(process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url));
+if (isMain) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }

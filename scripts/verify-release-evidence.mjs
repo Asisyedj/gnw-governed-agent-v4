@@ -11,13 +11,14 @@ const sealPublicKey=env.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM;
 const teePublicKey=env.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM;
 const expectedIssuer=env.GNW_TEE_ATTESTATION_ISSUER;
 const expectedMeasurement=(env.GNW_TEE_ATTESTATION_MEASUREMENT??"").toLowerCase();
-const maxAgeMs=Number(env.GNW_TEE_ATTESTATION_MAX_AGE_MS??120000);
+const configuredMaxAgeMs=Number(env.GNW_TEE_ATTESTATION_MAX_AGE_MS??120000);
+const maxAgeMs=Number.isFinite(configuredMaxAgeMs)?Math.min(configuredMaxAgeMs,120000):0;
 if(!evidenceRaw)fail.push("release-evidence-secret-missing");
 if(!sealPublicKey)fail.push("release-seal-public-key-missing");
 if(!teePublicKey)fail.push("tee-attestation-public-key-missing");
 if(!expectedIssuer)fail.push("tee-attestation-issuer-missing");
 if(!hex64.test(expectedMeasurement))fail.push("tee-attestation-measurement-missing");
-if(!Number.isFinite(maxAgeMs)||maxAgeMs<=0)fail.push("tee-attestation-max-age-invalid");
+if(!Number.isSafeInteger(configuredMaxAgeMs)||configuredMaxAgeMs<=0||configuredMaxAgeMs>120000)fail.push("tee-attestation-max-age-out-of-policy");
 
 let evidence;
 try{evidence=JSON.parse(evidenceRaw??"{}");}catch{fail.push("release-evidence-invalid-json");}
@@ -36,7 +37,7 @@ function verifyTee(e){
   if(e.issuer!==expectedIssuer)fail.push("tee:issuer");
   if(String(e.measurement??"").toLowerCase()!==expectedMeasurement)fail.push("tee:measurement");
   if(!hex64.test(e.measurement??"")||!hexNonce.test(e.nonce??""))fail.push("tee:format");
-  if(!Number.isInteger(e.issuedAt)||!Number.isInteger(e.expiresAt)||e.expiresAt<=e.issuedAt||Date.now()<e.issuedAt||Date.now()>=e.expiresAt||Date.now()-e.issuedAt>maxAgeMs)fail.push("tee:freshness");
+  if(!Number.isInteger(e.issuedAt)||!Number.isInteger(e.expiresAt)||e.expiresAt<=e.issuedAt||e.expiresAt-e.issuedAt>120000||Date.now()<e.issuedAt||Date.now()>=e.expiresAt||Date.now()-e.issuedAt>maxAgeMs)fail.push("tee:freshness");
   const payload=`GNW-TEE-ATTESTATION-V1|${e.issuer}|${e.measurement}|${e.nonce}|${e.issuedAt}|${e.expiresAt}`;
   try{if(!cryptoVerify(null,Buffer.from(payload),teePublicKey,Buffer.from(e.signature??"","hex")))fail.push("tee:signature");}catch{fail.push("tee:signature-invalid");}
   const expectedAction=sha(`GNW-TEE-RELEASE-BINDING-V1|${evidence.gitCommitSha}|${evidence.releaseTag}|${evidence.artifactManifestSha256}`);

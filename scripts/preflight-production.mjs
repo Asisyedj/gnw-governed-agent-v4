@@ -63,14 +63,28 @@ function verifyKeyPair(privateName,publicName,label){
 verifyKeyPair("GNW_GRANT_PRIVATE_KEY_PEM","GNW_GRANT_PUBLIC_KEY_PEM","GRANT");
 verifyKeyPair("GNW_LEASE_PRIVATE_KEY_PEM","GNW_LEASE_PUBLIC_KEY_PEM","LEASE");
 
-function parseJson(name) {
-  try { return JSON.parse(env[name] ?? ""); }
-  catch { failures.push(name + " invalid JSON"); return undefined; }
+function parseJsonObject(name) {
+  const raw = env[name];
+  if (raw === undefined || raw === null || typeof raw !== "string" || !raw.trim()) {
+    failures.push(name + " missing");
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      failures.push(name + " must be a valid non-null JSON object");
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    failures.push(name + " invalid JSON");
+    return undefined;
+  }
 }
 
 function verifyReleaseTeeEvidence() {
-  const evidence = parseJson("GNW_TEE_ATTESTATION_EVIDENCE_JSON");
-  if (!evidence || typeof evidence !== "object") return;
+  const evidence = parseJsonObject("GNW_TEE_ATTESTATION_EVIDENCE_JSON");
+  if (!evidence) return;
   const subject = typeof evidence.subject === "string" ? evidence.subject : "";
   const issuer = typeof evidence.issuer === "string" ? evidence.issuer : "";
   const measurement = typeof evidence.measurement === "string" ? evidence.measurement.toLowerCase() : "";
@@ -85,8 +99,16 @@ function verifyReleaseTeeEvidence() {
   if (!/^[0-9a-f]{32,128}$/i.test(nonce)) failures.push("TEE evidence nonce invalid");
   if (!Number.isInteger(issuedAt) || !Number.isInteger(expiresAt) || expiresAt <= issuedAt) failures.push("TEE evidence validity window invalid");
   const now = Date.now();
-  const maxAge = Number.parseInt(env.GNW_TEE_ATTESTATION_MAX_AGE_MS ?? "120000", 10);
-  if (now < issuedAt || now >= expiresAt || now - issuedAt > maxAge) failures.push("TEE evidence expired or too old");
+  const maxAge = Number(env.GNW_TEE_ATTESTATION_MAX_AGE_MS ?? "120000");
+  const maxAllowedAge = 120000;
+  if (!Number.isSafeInteger(maxAge) || maxAge <= 0 || maxAge > maxAllowedAge) {
+    failures.push("GNW_TEE_ATTESTATION_MAX_AGE_MS must be between 1 and 120000 ms");
+  }
+  if (Number.isInteger(issuedAt) && Number.isInteger(expiresAt) && expiresAt - issuedAt > maxAllowedAge) {
+    failures.push("TEE evidence validity window exceeds maximum 120000 ms");
+  }
+  const effectiveMaxAge = Number.isSafeInteger(maxAge) ? Math.min(maxAge, maxAllowedAge) : 0;
+  if (now < issuedAt || now >= expiresAt || now - issuedAt > effectiveMaxAge) failures.push("TEE evidence expired or too old");
   if (!/^[0-9a-f]+$/i.test(signature)) failures.push("TEE evidence signature invalid");
   try {
     const key = createPublicKey(env.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM ?? "");
@@ -96,8 +118,8 @@ function verifyReleaseTeeEvidence() {
 }
 
 function verifyMpcReleaseEvidence() {
-  const anchor = parseJson("GNW_MPC_TRUST_ANCHOR_JSON");
-  const evidence = parseJson("GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON");
+  const anchor = parseJsonObject("GNW_MPC_TRUST_ANCHOR_JSON");
+  const evidence = parseJsonObject("GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON");
   if (!anchor || !evidence) return;
   const threshold = Number(anchor.threshold);
   const participants = anchor.participants && typeof anchor.participants === "object" && !Array.isArray(anchor.participants) ? anchor.participants : {};

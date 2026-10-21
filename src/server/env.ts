@@ -40,7 +40,7 @@ export function loadEnv(source:NodeJS.ProcessEnv=process.env){
   teeAttestationIssuer:source.GNW_TEE_ATTESTATION_ISSUER??"",
   teeAttestationPublicKeyPem:source.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM??"",
   teeAttestationMeasurement:(source.GNW_TEE_ATTESTATION_MEASUREMENT??"").toLowerCase(),
-  teeAttestationMaxAgeMs:int(source.GNW_TEE_ATTESTATION_MAX_AGE_MS,120000),
+  teeAttestationMaxAgeMs:Math.min(int(source.GNW_TEE_ATTESTATION_MAX_AGE_MS,120000),120000),
   mpcTrustAnchor:trustAnchor(source.GNW_MPC_TRUST_ANCHOR_JSON),
   requireMpcTrustAnchor:bool(source.GNW_REQUIRE_MPC_TRUST_ANCHOR,isProduction),
   killSwitchUrl:source.GNW_KILL_SWITCH_URL??"",egressAllowList:egress,
