@@ -41,7 +41,7 @@ jobs:
           npm run verify:crypto > compliance-evidence/crypto.txt
           npm run verify:production > compliance-evidence/closure.txt
           cp git-release-metadata.json compliance-evidence/git-release-metadata.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: compliance-gate-${{ github.sha }}
           path: compliance-evidence/
