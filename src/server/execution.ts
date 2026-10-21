@@ -3,7 +3,7 @@ import type { Env } from "./env.js";
 import { audit } from "./audit.js";
 import { callExecutor } from "./executor-client.js";
 import { governedFetch, assertEgressUrl } from "./security.js";
-import { claimNonce, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
+import { claimNonce, claimNoncesAtomically, consumeCapabilityLease, createCapabilityLease, getInterlock, reserveBudget } from "./repo.js";
 import { GovernanceService, type ApprovalRecord, type GovernanceRequest } from "./governance.js";
 import { verifyCapabilityLeaseSignature, type CapabilityLease } from "./capability.js";
 import { validateEnvelope, digestEnvelope, type ActionEnvelope } from "./action-envelope.js";
@@ -68,6 +68,7 @@ export async function executeWithGovernance(
   const governance=new GovernanceService(
     {
       claimNonce:(k,n,t)=>claimNonce(ctx.db,k,n,t),
+      claimNonces:claims=>claimNoncesAtomically(ctx.db,claims),
       reserveBudget:(tenantId,taskId,nonce,tokens,bytes)=>reserveBudget(ctx.db,tenantId,taskId,nonce,tokens,bytes),
       getInterlock:()=>getInterlock(ctx.db),
       persistCapabilityLease: lease => createCapabilityLease(ctx.db,{

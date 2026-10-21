@@ -2,8 +2,26 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema.js";
-if(!process.env.DATABASE_URL) throw new Error("DATABASE_URL environment variable is required.");
-const pool=new Pool({connectionString:process.env.DATABASE_URL,max:20,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.GNW_POSTGRES_SSL_REQUIRED==="true"?{rejectUnauthorized:true}:false});
+const databaseUrl=process.env.DATABASE_URL;
+if(!databaseUrl) throw new Error("DATABASE_URL environment variable is required.");
+let parsedDatabaseUrl:URL;
+try{parsedDatabaseUrl=new URL(databaseUrl);}catch{throw new Error("DATABASE_URL must be a valid PostgreSQL URL.");}
+if(!["postgres:","postgresql:"].includes(parsedDatabaseUrl.protocol)) throw new Error("DATABASE_URL must use the PostgreSQL protocol.");
+const sslMode=(parsedDatabaseUrl.searchParams.get("sslmode")??"").toLowerCase();
+const isProduction=process.env.NODE_ENV==="production";
+if(isProduction&&process.env.GNW_POSTGRES_SSL_REQUIRED==="false") throw new Error("GNW_POSTGRES_SSL_REQUIRED=false is forbidden in production.");
+const requirePostgresSsl=isProduction||process.env.GNW_POSTGRES_SSL_REQUIRED==="true";
+if(requirePostgresSsl&&sslMode!=="verify-full") throw new Error("DATABASE_URL must use sslmode=verify-full when PostgreSQL TLS is required.");
+// When sslmode is present in the URL, let node-postgres parse sslmode and sslrootcert itself.
+// Passing an explicit ssl option would override those URL parameters and can silently discard the CA.
+const poolOptions={
+ connectionString:databaseUrl,
+ max:20,
+ idleTimeoutMillis:30000,
+ connectionTimeoutMillis:5000,
+ ...(sslMode?{}:{ssl:false}),
+};
+const pool=new Pool(poolOptions);
 pool.on("error",err=>console.error("Unexpected pg pool error",err));
 export const db=drizzle(pool,{schema,logger:process.env.NODE_ENV!=="production"});
 export type Db=typeof db;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { verifyRuntimeAttestation } from "../../server/attestation.js";
+import { loadEnv } from "../../server/env.js";
 import { verifyThresholdAttestation } from "../../server/trust-anchor.js";
 import { GovernanceService, MemoryGovernanceStores, digestRequest, type GovernanceRequest } from "../../server/governance.js";
 
@@ -28,6 +29,22 @@ describe("runtime attestation",()=>{
  it("accepts a valid signed measurement",()=>{
    const a=makeAttestation();
    expect(verifyRuntimeAttestation(a,{issuer:"tee-verifier",publicKeyPem:keys.publicKey,expectedMeasurement:measurement,maxAgeMs:120000},now)).toBe(true);
+ });
+ it("caps attestation age configuration and rejects an eight-hour evidence window",()=>{
+   expect(loadEnv({NODE_ENV:"test",GNW_TEE_ATTESTATION_MAX_AGE_MS:"28800000"}).teeAttestationMaxAgeMs).toBe(120000);
+   const a=makeAttestation();
+   a.expiresAt=a.issuedAt+28_800_000;
+   const payload=`GNW-TEE-ATTESTATION-V1|${a.issuer}|${a.measurement}|${a.nonce}|${a.issuedAt}|${a.expiresAt}`;
+   a.signature=sign(null,Buffer.from(payload),keys.privateKey).toString("hex");
+   expect(verifyRuntimeAttestation(a,{issuer:"tee-verifier",publicKeyPem:keys.publicKey,maxAgeMs:28_800_000},now)).toBe(false);
+ });
+ it("atomically claims approval and grant nonces without partial consumption on replay",async()=>{
+   const stores=new MemoryGovernanceStores();
+   expect(await stores.claimNonces!([{kind:"approval",nonce:"approval-original"},{kind:"grant",nonce:"grant-original"}])).toBe(true);
+   expect(await stores.claimNonces!([{kind:"approval",nonce:"approval-new"},{kind:"grant",nonce:"grant-original"}])).toBe("grant_replay");
+   // The failed batch must not burn the new approval nonce.
+   expect(await stores.claimNonces!([{kind:"approval",nonce:"approval-new"},{kind:"grant",nonce:"grant-new"}])).toBe(true);
+   expect(await stores.claimNonces!([{kind:"approval",nonce:"approval-original"},{kind:"grant",nonce:"grant-reused"}])).toBe("approval_replay");
  });
  it("rejects tampering, wrong measurement and expiry",()=>{
    const a=makeAttestation();
