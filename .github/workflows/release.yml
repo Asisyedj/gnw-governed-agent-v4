@@ -41,10 +41,10 @@ jobs:
           test -z "$(git status --porcelain)"
           git diff --check
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
-      - name: Verify direct mission runner is blocked in production
-        run: node scripts/check-mission-runner-production-guard.mjs
       - name: Install from committed lockfile
         run: npm ci
+      - name: Verify direct mission runner is blocked in production
+        run: node scripts/check-mission-runner-production-guard.mjs
       - name: Verify canonical Git release metadata
         run: npm run verify:git-release-metadata
       - name: Validate Pakistan compliance matrix
