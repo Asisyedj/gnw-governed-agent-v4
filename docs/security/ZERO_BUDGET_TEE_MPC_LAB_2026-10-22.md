@@ -117,3 +117,22 @@ Before any WAN access, replace LAN endpoints with authenticated HTTPS/VPN links 
 - Test a deliberately stale quote, wrong measurement, wrong artifact hash, replayed nonce, bad signature and insufficient quorum; each must DENY.
 - Run GNW full tests, release metadata gate, production preflight, DB migration dry-run/backup and local health/API smoke tests. Deploy only after every gate passes.
 - At this report's initial writing, MPyC functional smoke test and GNW build output were observed, but OP-TEE/QEMU build, swtpm/Keylime integration, cross-device MPC, real TPM/TEE and independent signer quorum were not yet verified. Update this file with exact logs and exit codes before changing the status.
+
+## Status update — 2026-10-22 (direct device verification)
+
+### Passed
+- **Phone ARM64 Ubuntu/PRoot:** MPyC 0.11 three-party sum smoke test returned `GNW_MPC_SELFTEST=PASS; parties=3; expected=6; result=6`.
+- **Windows 11 / WSL1 Ubuntu:** the same MPyC smoke test also returned `GNW_MPC_SELFTEST=PASS; parties=3; expected=6; result=6`.
+- **SWTPM software TPM:** `tpm2_startup -c`, `tpm2_getcap properties-fixed`, and `tpm2_pcrread sha256:0,1,2,7` completed successfully against a simulator bound to 127.0.0.1 only. The new virtual TPM's PCRs were initially zero. The simulator was stopped after the check; its local state directory was preserved.
+- **GNW application:** `npm run build` built the TypeScript server and Vite client. A complete test run with `DATABASE_URL` set to the restricted local test database completed with **30/30 test files and 228/228 tests passing**. Log: `D:\GNW\outputs\gnw-full-tests-localdb-final.log`.
+- **WSL packages:** `dpkg --audit` was empty after a local WSL1-specific package post-install repair.
+
+### Not passed / production blockers
+- **Windows TPM:** `tpmtool getdeviceinformation` still reports `0x800710df` (“device is not ready for use”). The actual hardware TPM, Secure Boot/VBS status and a genuine hardware quote have not been verified.
+- **OP-TEE:** QEMU v8 manifest/source synchronization has been started, but the source sync has not been positively verified as complete; `make toolchains` and `make run` have not passed in this session.
+- **Keylime:** no end-to-end agent enrollment, quote verification, measured-boot/IMA policy evaluation or tamper-negative test has been passed.
+- **Malicious-secure MPC:** MPyC results are same-host functional smoke tests, not independent parties. The MP-SPDZ dependencies/source are still being prepared; no MP-SPDZ MASCOT two-machine protocol run or independent signer quorum has been verified.
+- **GNW local server:** startup was attempted only with a restricted test database and loopback binding (`127.0.0.1:4175`). Startup validation first correctly reported missing `COOKIE_SECRET`; a second launch using temporary local-only secrets was attempted, but `GET /api/health` still failed to connect. Therefore the app is **not confirmed running**, and no deployment success is claimed.
+
+### Release decision
+**DEVELOPMENT PARTIALLY VERIFIED; PRODUCTION DENY / NOT READY.** Do not turn on the TEE/MPC production gate using simulator output. Production requires a trusted hardware attestation source bound to the exact release artifact, fresh nonce/timestamp and verified measurement, plus independently controlled MPC signers/quorum. Keep test DB credentials and ephemeral local secrets out of Git. Do not expose the SWTPM ports or the GNW dev server to the LAN/WAN.
