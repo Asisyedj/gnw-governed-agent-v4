@@ -136,3 +136,11 @@ Before any WAN access, replace LAN endpoints with authenticated HTTPS/VPN links 
 
 ### Release decision
 **DEVELOPMENT PARTIALLY VERIFIED; PRODUCTION DENY / NOT READY.** Do not turn on the TEE/MPC production gate using simulator output. Production requires a trusted hardware attestation source bound to the exact release artifact, fresh nonce/timestamp and verified measurement, plus independently controlled MPC signers/quorum. Keep test DB credentials and ephemeral local secrets out of Git. Do not expose the SWTPM ports or the GNW dev server to the LAN/WAN.
+
+### Local server verification correction — 2026-10-22
+
+After the preceding status section was recorded, the **built GNW server** was started successfully from `dist/server/app.js` using only the local test DB, temporary development secrets, `NODE_ENV=development`, `HOST=127.0.0.1`, and `PORT=4175`.
+
+- `GET http://127.0.0.1:4175/api/health` → **HTTP 200**, `{"status":"ok","ok":true,"version":"1.0.0",...}`.
+- `GET http://127.0.0.1:4175/api/ready` → **HTTP 200**, `status:"ready"`, `dependenciesReady:true`; the route successfully read the DB interlock state (`killSwitch:false`, `circuitOpen:false`, `generation:0`).
+- This is **local development/test deployment only**. The readiness helper intentionally treats dependencies as ready when `NODE_ENV !== "production"`; therefore `governedActionsReady:true` here is not evidence of production attestation or release approval. The server binds to loopback and is not configured for LAN/WAN access.
