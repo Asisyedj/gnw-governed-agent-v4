@@ -67,8 +67,9 @@ export function validateSecrets(): void {
     requiredHttps(errors,"LLM_BASE_URL",llmBase);
     if (!process.env.LLM_API_KEY) errors.push("LLM_API_KEY is required in production");
 
-    const storageDriver=(process.env.STORAGE_DRIVER ?? "local").toLowerCase();
-    if (storageDriver !== "local" && storageDriver !== "s3") errors.push("STORAGE_DRIVER must be local or s3");
+    const storageDriver=(process.env.STORAGE_DRIVER ?? "").toLowerCase();
+    if (!storageDriver) errors.push("STORAGE_DRIVER is required in production");
+    if (storageDriver !== "local") errors.push("STORAGE_DRIVER must be local until the S3 storage driver is implemented");
     if (storageDriver === "local" && process.env.GNW_SHARED_STORAGE_CONFIRMED !== "true") {
       errors.push("GNW_SHARED_STORAGE_CONFIRMED must be true when local shared storage is used in production");
     }

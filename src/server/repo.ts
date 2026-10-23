@@ -17,10 +17,26 @@ export async function createUser(db: Db, input: { tenantId: number; email: strin
 export async function updateUserLastLogin(db: Db, userId: number, tenantId: number) { await withTenant(db, tenantId, tx => tx.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(and(eq(users.id, userId), eq(users.tenantId, tenantId)))); }
 export async function listUsersByTenant(db: Db, tenantId: number) { return withTenant(db, tenantId, tx => tx.select().from(users).where(eq(users.tenantId, tenantId)).orderBy(asc(users.id))); }
 
-export async function createSession(db: Db, userId: number, tenantId: number, tokenHash: string, expiresAt: Date) { const [row] = await db.insert(sessions).values({ id: randomUUID(), userId, tenantId, tokenHash, expiresAt }).returning(); return row!; }
-export async function findSessionByTokenHash(db: Db, tokenHash: string) { return db.query.sessions.findFirst({ where: eq(sessions.tokenHash, tokenHash) }); }
-export async function deleteSession(db: Db, id: string, tenantId?: number) { await db.delete(sessions).where(tenantId === undefined ? eq(sessions.id, id) : and(eq(sessions.id, id), eq(sessions.tenantId, tenantId))); }
-export async function deleteExpiredSessions(db: Db) { await db.delete(sessions).where(lt(sessions.expiresAt, new Date())); }
+export async function createSession(db: Db, userId: number, tenantId: number, tokenHash: string, expiresAt: Date) {
+  return withTenant(db, tenantId, async tx => {
+    const [row] = await tx.insert(sessions).values({ id: randomUUID(), userId, tenantId, tokenHash, expiresAt }).returning();
+    return row!;
+  });
+}
+export async function findSessionByTokenHash(db: Db, tokenHash: string) {
+  // Only permit lookup by a SHA-256-sized token digest; RLS uses this exact digest as the temporary lookup capability.
+  if (!/^[0-9a-f]{64}$/i.test(tokenHash)) return undefined;
+  return db.transaction(async tx => {
+    await tx.execute(sql`select set_config('app.session_token_hash', ${tokenHash}, true)`);
+    return tx.query.sessions.findFirst({ where: eq(sessions.tokenHash, tokenHash) });
+  });
+}
+export async function deleteSession(db: Db, id: string, tenantId: number) {
+  await withTenant(db, tenantId, tx => tx.delete(sessions).where(and(eq(sessions.id, id), eq(sessions.tenantId, tenantId))));
+}
+export async function deleteExpiredSessions(db: Db, tenantId: number) {
+  await withTenant(db, tenantId, tx => tx.delete(sessions).where(and(lt(sessions.expiresAt, new Date()), eq(sessions.tenantId, tenantId))));
+}
 
 export async function createTask(db: Db, input: { tenantId: number; createdByUserId: number; title: string; description?: string; classification?: string; budgetTokensAllocated?: number; budgetBytesAllocated?: number; metadata?: unknown }) { return withTenant(db, input.tenantId, async tx => { const [row] = await tx.insert(tasks).values({ tenantId: input.tenantId, createdByUserId: input.createdByUserId, title: input.title, description: input.description ?? null, classification: input.classification ?? "standard", budgetTokensAllocated: input.budgetTokensAllocated ?? 10000, budgetBytesAllocated: input.budgetBytesAllocated ?? 10485760, metadata: input.metadata ?? null }).returning(); return row!; }); }
 export async function findTaskById(db: Db, id: number, tenantId: number) { return withTenant(db, tenantId, async tx => { const [row] = await tx.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.tenantId, tenantId))).limit(1); return row; }); }

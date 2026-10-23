@@ -5,6 +5,7 @@ import pg from "pg";
 import type { FastifyInstance } from "fastify";
 import { createTestApp } from "../src/tests/lib/testApp.js";
 import { schema, withTenant, type Db } from "../src/server/db/index.js";
+import { createSession, deleteSession } from "../src/server/repo.js";
 
 const { Pool } = pg;
 const adminUrl = process.env.TEST_DATABASE_URL;
@@ -39,14 +40,14 @@ beforeAll(async () => {
   userId = user.id;
 
   const rawToken = randomBytes(32).toString("hex");
-  sessionId = randomUUID();
-  await db.insert(schema.sessions).values({
-    id: sessionId,
+  const session = await createSession(
+    db,
     userId,
     tenantId,
-    tokenHash: createHash("sha256").update(rawToken).digest("hex"),
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-  });
+    createHash("sha256").update(rawToken).digest("hex"),
+    new Date(Date.now() + 60 * 60 * 1000),
+  );
+  sessionId = session.id;
   cookieHeader = `session=${rawToken}`;
 
   const current = await db.select().from(schema.interlocks).orderBy(schema.interlocks.generation).limit(1);
@@ -68,7 +69,7 @@ afterAll(async () => {
   );
   // Clear FK references from immutable interlock history before deleting the disposable test owner.
   if (userId) await adminPool.query("UPDATE interlocks SET updated_by_user_id = NULL WHERE updated_by_user_id = $1", [userId]);
-  if (sessionId) await db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
+  if (sessionId && tenantId) await deleteSession(db, sessionId, tenantId);
   if (userId && tenantId) {
     await withTenant(db, tenantId, tx => tx.delete(schema.users).where(eq(schema.users.id, userId!)));
   }

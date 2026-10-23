@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createTestApp } from "../lib/testApp.js";
 import { schema, withTenant, type Db } from "../../server/db/index.js";
+import { createSession, deleteSession } from "../../server/repo.js";
 
 let app: FastifyInstance;
 let db: Db;
@@ -36,19 +37,19 @@ beforeAll(async () => {
   userId = user.id;
 
   const rawToken = randomBytes(32).toString("hex");
-  sessionId = randomUUID();
-  await db.insert(schema.sessions).values({
-    id: sessionId,
+  const session = await createSession(
+    db,
     userId,
     tenantId,
-    tokenHash: createHash("sha256").update(rawToken).digest("hex"),
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-  });
+    createHash("sha256").update(rawToken).digest("hex"),
+    new Date(Date.now() + 60 * 60 * 1000),
+  );
+  sessionId = session.id;
   cookieHeader = `session=${rawToken}`;
 });
 
 afterAll(async () => {
-  if (sessionId) await db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
+  if (sessionId && tenantId) await deleteSession(db, sessionId, tenantId);
   if (userId && tenantId) {
     await withTenant(db, tenantId, tx => tx.delete(schema.users).where(eq(schema.users.id, userId)));
   }
