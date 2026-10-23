@@ -61,18 +61,17 @@ jobs:
         with:
           image-ref: local/gnw:${{ github.sha }}
           version: v0.76.1
-          format: sarif
-          output: trivy-results.sarif
-          ignore-unfixed: true
+          format: json
+          output: trivy-results.json
           vuln-type: os,library
-          severity: HIGH,CRITICAL
+          severity: UNKNOWN,HIGH,CRITICAL
           exit-code: "1"
       - name: Upload Trivy report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-results
-          path: trivy-results.sarif
+          path: trivy-results.json
           if-no-files-found: warn
           retention-days: 14
 
