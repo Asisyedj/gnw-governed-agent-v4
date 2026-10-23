@@ -12,9 +12,34 @@ function quoteIdent(str) {
   return `"${str}"`;
 }
 
+const databaseUrl = process.env.DATABASE_URL;
+const postgresSslRequired = process.env.GNW_POSTGRES_SSL_REQUIRED === 'true';
+const requirePostgresTls = process.env.NODE_ENV === 'production' || postgresSslRequired;
+
+if (requirePostgresTls) {
+  const errors = [];
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error('GNW migration denied: DATABASE_URL must be a valid PostgreSQL URL');
+  }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') errors.push('PostgreSQL protocol required');
+  if (!parsed.hostname || parsed.pathname.length < 2) errors.push('database host and name required');
+  const modes = parsed.searchParams.getAll('sslmode');
+  if (modes.length !== 1 || modes[0] !== 'verify-full') errors.push('exactly one sslmode=verify-full required');
+  if (!postgresSslRequired) errors.push('GNW_POSTGRES_SSL_REQUIRED must be true');
+  if (errors.length) throw new Error('GNW migration TLS policy denied: ' + errors.join('; '));
+}
+
+const tlsParams = ['ssl', 'sslmode', 'sslcert', 'sslkey', 'sslrootcert'];
+const urlOwnsTlsPolicy = (() => {
+  const parsed = new URL(databaseUrl);
+  return tlsParams.some((name) => parsed.searchParams.has(name));
+})();
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.GNW_POSTGRES_SSL_REQUIRED === 'true' ? { rejectUnauthorized: true } : false,
+  connectionString: databaseUrl,
+  ...(urlOwnsTlsPolicy ? {} : { ssl: postgresSslRequired ? { rejectUnauthorized: true } : false }),
 });
 const client = await pool.connect();
 try {
