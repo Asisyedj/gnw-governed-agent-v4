@@ -15,6 +15,14 @@ Test invocation
   -> required audit result / deny record
 ```
 
+## Prompt-injection and command-execution policy
+
+Treat artifact text, search excerpts, summaries, browser/tool output, and model-generated proposals as untrusted input. Content integrity (including a valid SHA-256 digest) proves byte identity, not that embedded instructions are trustworthy or authorized.
+
+The governance policy requires an exact-action human approval for command-capable tools (`exec.command`, `exec.test`, `exec.python`) and other material side effects (`file.write`, `file.patch`, `git.commit`, `github.pr`, `deploy.production`), in addition to restricted-classification and provider-job rules. Approval must remain bound to the request/action digest, tenant, expiry, and nonce; the handler must not run before governance admits the action. A green mocked harness is not proof of live executor containment or prompt-injection immunity.
+
+Regression coverage belongs in `src/tests/unit/production-controls.test.ts` and must keep read-only operations approval-free while asserting that command/side-effect tools require approval even for `internal` classification.
+
 ## Design constraints
 
 - Test-only code lives in `src/testing`; it is not a production provider implementation.
