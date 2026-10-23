@@ -1,9 +1,10 @@
 import { URL } from "node:url";
+import { teeReleaseAttestationPayload } from "./lib/tee-release-attestation.mjs";
 import { createHash, createPrivateKey, createPublicKey, sign, verify as cryptoVerify } from "node:crypto";
 
 const required = [
   "DATABASE_URL", "COOKIE_SECRET", "SESSION_SECRET", "EXECUTOR_URL", "EXECUTOR_SECRET",
-  "GNW_REQUIRE_SIGNED_GRANTS", "GNW_GRANT_ISSUER", "GNW_GRANT_PRIVATE_KEY_PEM",
+  "GNW_REQUIRE_SIGNED_GRANTS", "GNW_POSTGRES_SSL_REQUIRED", "GNW_GRANT_ISSUER", "GNW_GRANT_PRIVATE_KEY_PEM",
   "GNW_GRANT_PUBLIC_KEY_PEM", "GNW_LEASE_PRIVATE_KEY_PEM", "GNW_LEASE_PUBLIC_KEY_PEM", "GNW_EGRESS_ALLOW_LIST",
   "GNW_REQUIRE_TEE_ATTESTATION", "GNW_TEE_ATTESTATION_ISSUER", "GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM",
   "GNW_TEE_ATTESTATION_MEASUREMENT", "GNW_TEE_ATTESTATION_EVIDENCE_JSON",
@@ -26,6 +27,7 @@ for (const name of ["COOKIE_SECRET","SESSION_SECRET","EXECUTOR_SECRET"]) {
   if (value && value.length < 32) failures.push(name + " must be at least 32 characters");
 }
 if (env.GNW_REQUIRE_SIGNED_GRANTS !== "true") failures.push("GNW_REQUIRE_SIGNED_GRANTS must be true");
+if (env.GNW_POSTGRES_SSL_REQUIRED !== "true") failures.push("GNW_POSTGRES_SSL_REQUIRED must be true");
 if (env.GNW_REQUIRE_TEE_ATTESTATION !== "true") failures.push("GNW_REQUIRE_TEE_ATTESTATION must be true");
 if (!/^[0-9a-f]{64}$/i.test(env.GNW_TEE_ATTESTATION_MEASUREMENT ?? "")) failures.push("GNW_TEE_ATTESTATION_MEASUREMENT must be 64 hex characters");
 if (!env.GNW_EGRESS_ALLOW_LIST?.split(",").map(x => x.trim()).filter(Boolean).length) failures.push("GNW_EGRESS_ALLOW_LIST must contain at least one host");
@@ -46,7 +48,17 @@ for (const name of ["EXECUTOR_URL","LLM_BASE_URL","GNW_DEEP_RESEARCH_BASE_URL","
 }
 
 const databaseUrl = env.DATABASE_URL ?? "";
-if (databaseUrl && !/[?&]sslmode=verify-full(?:&|$)/i.test(databaseUrl)) failures.push("DATABASE_URL must use sslmode=verify-full");
+if (databaseUrl) {
+  try {
+    const parsed = new URL(databaseUrl);
+    if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") failures.push("DATABASE_URL must use PostgreSQL");
+    if (!parsed.hostname || parsed.pathname.length < 2) failures.push("DATABASE_URL must include a database host and name");
+    const modes = parsed.searchParams.getAll("sslmode");
+    if (modes.length !== 1 || modes[0] !== "verify-full") failures.push("DATABASE_URL must contain exactly one sslmode=verify-full parameter");
+  } catch {
+    failures.push("DATABASE_URL must be a valid PostgreSQL URL");
+  }
+}
 if (!env.LLM_BASE_URL) failures.push("LLM_BASE_URL missing");
 if (!env.LLM_API_KEY) failures.push("LLM_API_KEY missing");
 if (!["local","s3"].includes((env.STORAGE_DRIVER ?? "").toLowerCase())) failures.push("STORAGE_DRIVER must be local or s3");
@@ -85,12 +97,14 @@ function verifyReleaseTeeEvidence() {
   if (!/^[0-9a-f]{32,128}$/i.test(nonce)) failures.push("TEE evidence nonce invalid");
   if (!Number.isInteger(issuedAt) || !Number.isInteger(expiresAt) || expiresAt <= issuedAt) failures.push("TEE evidence validity window invalid");
   const now = Date.now();
-  const maxAge = Number.parseInt(env.GNW_TEE_ATTESTATION_MAX_AGE_MS ?? "120000", 10);
+  const maxAgeInput = req("GNW_TEE_ATTESTATION_MAX_AGE_MS");
+  const maxAge = maxAgeInput ? Number(maxAgeInput) : 120000;
+  if (!Number.isSafeInteger(maxAge) || maxAge <= 0) failures.push("GNW_TEE_ATTESTATION_MAX_AGE_MS must be a positive integer");
   if (now < issuedAt || now >= expiresAt || now - issuedAt > maxAge) failures.push("TEE evidence expired or too old");
   if (!/^[0-9a-f]+$/i.test(signature)) failures.push("TEE evidence signature invalid");
   try {
     const key = createPublicKey(env.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM ?? "");
-    const payload = `GNW-TEE-RELEASE-ATTESTATION-V1|${subject}|${issuer}|${measurement}|${nonce}|${issuedAt}|${expiresAt}`;
+    const payload = teeReleaseAttestationPayload({ subject, issuer, measurement, nonce, issuedAt, expiresAt });
     if (!cryptoVerify(null, Buffer.from(payload), key, Buffer.from(signature, "hex"))) failures.push("TEE evidence signature verification failed");
   } catch { failures.push("TEE evidence public key/signature verification failed"); }
 }
