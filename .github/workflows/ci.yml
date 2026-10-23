@@ -42,6 +42,8 @@ jobs:
           test -z "$(git status --porcelain)"
           test -n "$(git rev-parse HEAD)"
           git diff --check
+      - name: Enforce supported Node.js runtime
+        run: node scripts/verify-node-version.mjs
       - name: Verify npm cache integrity
         run: npm cache verify
       - name: Clean install from committed lockfile
@@ -66,6 +68,8 @@ jobs:
         run: node scripts/check-mission-runner-production-guard.mjs
       - name: Syntax-check production preflight
         run: node --check scripts/preflight-production.mjs
+      - name: Verify release TEE signing contract
+        run: npm run test:release-contract
       - name: Lint
         run: npm run lint
       - name: Run migrations with dedicated migrator role
@@ -127,11 +131,77 @@ jobs:
         run: npm run build
       - name: Production container build
         run: docker build --pull -t gnw-production-smoke:${GITHUB_SHA} .
+      - name: Configure TLS on disposable CI PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-tls
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
+            -keyout .ci-tls/ca.key -out .ci-tls/ca.crt \
+            -subj "/CN=GNW CI PostgreSQL CA" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
+            -addext "subjectKeyIdentifier=hash"
+          openssl req -new -newkey rsa:2048 -nodes \
+            -keyout .ci-tls/server.key -out .ci-tls/server.csr \
+            -subj "/CN=127.0.0.1"
+          cat > .ci-tls/server.ext <<'EOF'
+          basicConstraints=critical,CA:FALSE
+          keyUsage=critical,digitalSignature,keyEncipherment
+          extendedKeyUsage=serverAuth
+          subjectAltName=IP:127.0.0.1
+          EOF
+          openssl x509 -req -sha256 -days 2 \
+            -in .ci-tls/server.csr -CA .ci-tls/ca.crt -CAkey .ci-tls/ca.key \
+            -CAcreateserial -out .ci-tls/server.crt -extfile .ci-tls/server.ext
+          chmod 0644 .ci-tls/ca.crt .ci-tls/server.crt
+          chmod 0600 .ci-tls/server.key
+          sudo chown 70:70 .ci-tls/server.key
+
+          # Start a separate PostgreSQL instance with TLS enabled at process startup.
+          # Do not restart the GitHub service container: that can terminate its PID 1.
+          docker run -d --name gnw-tls-postgres \
+            -p 127.0.0.1:55432:5432 \
+            -v "$GITHUB_WORKSPACE/.ci-tls/server.crt:/tls/server.crt:ro" \
+            -v "$GITHUB_WORKSPACE/.ci-tls/server.key:/tls/server.key:ro" \
+            -e POSTGRES_DB=gnw_test \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=gnw_admin_pw \
+            postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685 \
+            postgres -c ssl=on -c ssl_cert_file=/tls/server.crt -c ssl_key_file=/tls/server.key
+
+          for _ in {1..45}; do
+            if docker exec gnw-tls-postgres pg_isready -h 127.0.0.1 -p 5432 -U postgres -d gnw_test; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec gnw-tls-postgres pg_isready -h 127.0.0.1 -p 5432 -U postgres -d gnw_test
+
+          # Recreate the least-privilege role contract in the disposable TLS database.
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_app LOGIN PASSWORD 'gnw_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_migrator LOGIN PASSWORD 'gnw_migrator_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "CREATE ROLE gnw_audit_verifier NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT gnw_audit_verifier TO gnw_migrator;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT CONNECT, TEMPORARY ON DATABASE gnw_test TO gnw_app, gnw_migrator;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO gnw_app;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_migrator;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, CREATE ON SCHEMA public TO gnw_audit_verifier;"
+
+          export NODE_EXTRA_CA_CERTS="$GITHUB_WORKSPACE/.ci-tls/ca.crt"
+          export GNW_POSTGRES_SSL_REQUIRED=true
+          export DATABASE_URL="postgresql://gnw_migrator:gnw_migrator_pw@127.0.0.1:55432/gnw_test?sslmode=verify-full"
+          npm run db:migrate
+
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gnw_app;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gnw_app;"
+          docker exec -u postgres gnw-tls-postgres psql -U postgres -d gnw_test -v ON_ERROR_STOP=1 -c "REVOKE UPDATE, DELETE ON audit_log, nonces, interlocks FROM gnw_app;"
+          PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres PGDATABASE=gnw_test PGPASSWORD=gnw_admin_pw PGSSLMODE=verify-full PGSSLROOTCERT="$GITHUB_WORKSPACE/.ci-tls/ca.crt" sh deploy/postgres/20-finalize-audit-verifier.sh
       - name: Production container runtime smoke test
         shell: bash
         env:
           NODE_ENV: production
-          DATABASE_URL: postgresql://gnw_app:gnw_app_pw@127.0.0.1:5432/gnw_test
+          DATABASE_URL: postgresql://gnw_app:gnw_app_pw@127.0.0.1:55432/gnw_test?sslmode=verify-full
           COOKIE_SECRET: ci-smoke-cookie-secret-012345678901234567890123456789
           SESSION_SECRET: ci-smoke-session-secret-012345678901234567890123456789
           EXECUTOR_URL: https://127.0.0.1:8788
@@ -155,15 +225,16 @@ jobs:
           LLM_API_KEY: ci-smoke-api-key
           STORAGE_DRIVER: local
           GNW_SHARED_STORAGE_CONFIRMED: "true"
-          GNW_POSTGRES_SSL_REQUIRED: "false"
+          GNW_POSTGRES_SSL_REQUIRED: "true"
+          NODE_EXTRA_CA_CERTS: /tls/ca.crt
           TRUST_PROXY: "false"
           PORT: "3000"
           LOG_LEVEL: silent
         run: |
           set -euo pipefail
           docker rm -f gnw-production-smoke >/dev/null 2>&1 || true
-          docker run -d --network host --name gnw-production-smoke -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_LEASE_PUBLIC_KEY_PEM -e GNW_RELEASE_COMMIT_SHA -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_REQUIRE_MPC_TRUST_ANCHOR -e GNW_MPC_TRUST_ANCHOR_JSON -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
-          trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --network host --name gnw-production-smoke -v "$GITHUB_WORKSPACE/.ci-tls/ca.crt:/tls/ca.crt:ro" -e NODE_EXTRA_CA_CERTS -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_LEASE_PUBLIC_KEY_PEM -e GNW_RELEASE_COMMIT_SHA -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_REQUIRE_MPC_TRUST_ANCHOR -e GNW_MPC_TRUST_ANCHOR_JSON -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
+          trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true; docker rm -f gnw-tls-postgres >/dev/null 2>&1 || true; rm -rf .ci-tls' EXIT
           for _ in {1..30}; do
             if curl -fsS http://127.0.0.1:3000/api/health >/tmp/gnw-health.json && curl -fsS http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json; then
               grep -q '"ok":true' /tmp/gnw-health.json
@@ -232,7 +303,20 @@ jobs:
           git rev-parse HEAD > evidence/commit-sha.txt
           cp git-release-metadata.json evidence/git-release-metadata.json
           git diff --check > evidence/diff-check.txt
+          set +e
           npm audit --json > evidence/npm-audit.json
+          audit_exit=$?
+          set -e
+          printf '%s\n' "$audit_exit" > evidence/npm-audit-exit-code.txt
+          node -e '
+            const fs = require("node:fs");
+            const report = JSON.parse(fs.readFileSync("evidence/npm-audit.json", "utf8"));
+            const v = report.metadata && report.metadata.vulnerabilities;
+            if (!v) throw new Error("npm audit report is missing vulnerability metadata");
+            const summary = { low: v.low || 0, moderate: v.moderate || 0, high: v.high || 0, critical: v.critical || 0 };
+            console.log("npm audit evidence:", JSON.stringify(summary), "rawExitCode=" + fs.readFileSync("evidence/npm-audit-exit-code.txt", "utf8").trim());
+            if (summary.high > 0 || summary.critical > 0) process.exit(1);
+          '
           cp docs/RUNTIME_EXECUTION_POLICY.md evidence/runtime-policy.md
           printf "GNW-REP-1.0\\n" > evidence/policy-version.txt
           printf "DeepResearchModel=gpt-5.6-sol\\n" >> evidence/policy-version.txt

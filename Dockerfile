@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
 WORKDIR /app
-RUN apk add --no-cache tini zlib=1.3.2-r1 \
+# Refresh the pinned Alpine branch security packages before building; do not retain a stale musl/zlib pin.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache tini \
+    && apk info -v musl zlib \
     && npm --version
 
 FROM base AS deps
@@ -24,8 +27,11 @@ RUN addgroup -S -g 10001 gnw && adduser -S -u 10001 -G gnw gnw
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json ./
+COPY scripts/verify-node-version.mjs ./scripts/verify-node-version.mjs
 COPY scripts/preflight-production.mjs ./scripts/preflight-production.mjs
-RUN rm -f /usr/local/bin/npm /usr/local/bin/npx \
+COPY scripts/lib/tee-release-attestation.mjs ./scripts/lib/tee-release-attestation.mjs
+RUN node scripts/verify-node-version.mjs \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx \
     && rm -rf /usr/local/lib/node_modules/npm \
     && chown -R gnw:gnw /app
 USER gnw

@@ -1,5 +1,6 @@
 import { createHash, createHmac, generateKeyPairSync, sign, verify } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { teeReleaseAttestationPayload } from "./lib/tee-release-attestation.mjs";
 const fail=[];
 const sha=createHash("sha256").update("abc").digest("hex");
 if(sha!=="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")fail.push("sha256-vector");
@@ -11,14 +12,23 @@ const read=p=>readFileSync(p,"utf8");
 
 const gov=read("src/server/governance.ts"),exec=read("src/server/execution.ts"),env=read("src/server/action-envelope.ts"),att=read("src/server/attestation.ts"),ta=read("src/server/trust-anchor.ts"),client=read("src/server/executor-client.ts"),cap=read("src/server/capability.ts"),repo=read("src/server/repo.ts");
 for(const [label,text,needle] of [["governance-domain",gov,"GNW-ACTION-ENVELOPE-V1"],["governance",gov,"envelopeDigest"],["execution",exec,"governance_digest_mismatch"],["envelope",env,"digestEnvelope"],["tee",att,"GNW-TEE-ATTESTATION-V1"],["trust-anchor",ta,"GNW-TRUST-ANCHOR-V1"],["executor",client,"actionDigest"],["executor-required",client,"executor_action_digest_required"],["capability-verifier",cap,"verifyCapabilityLeaseSignature"],["execution-capability-verifier",exec,"verifyCapabilityLeaseSignature"],["execution-capability-public-key",exec,"leasePublicKeyPem"],["execution-capability-fail-closed",exec,"capability_lease_signature_invalid"],["repo-capability-verifier",repo,"verifyCapabilityLeaseSignature"],["repo-capability-public-key",repo,"input.publicKeyPem"],["repo-capability-signature-binding",repo,"lease.signature!==input.signature"]])if(!text.includes(needle))fail.push(label+"-binding-missing");
-const preflight=readFileSync("scripts/preflight-production.mjs","utf8");
-for(const needle of ["GNW_TEE_ATTESTATION_EVIDENCE_JSON","GNW-TEE-RELEASE-ATTESTATION-V1","GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON","GNW-RELEASE-V1"])if(!preflight.includes(needle))fail.push("release-evidence-gate-missing:"+needle);
+const preflight=read("scripts/preflight-production.mjs");
+const releaseVerifier=read("scripts/verify-release-evidence.mjs");
+const releaseTeeContract=read("scripts/lib/tee-release-attestation.mjs");
+for(const [label,text,needle] of [
+ ["preflight-tee-evidence",preflight,"GNW_TEE_ATTESTATION_EVIDENCE_JSON"],
+ ["preflight-shared-tee-contract",preflight,"teeReleaseAttestationPayload"],
+ ["final-verifier-shared-tee-contract",releaseVerifier,"teeReleaseAttestationPayload"],
+ ["canonical-tee-payload-format",releaseTeeContract,"GNW-TEE-RELEASE-ATTESTATION-V1"],
+ ["preflight-mpc-evidence",preflight,"GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON"],
+ ["preflight-release-subject-binding",preflight,"GNW-RELEASE-V1"]
+])if(!text.includes(needle))fail.push("release-evidence-gate-missing:"+label+":"+needle);
 const rk=generateKeyPairSync("ed25519");
 const subject="0".repeat(40);
 const measurement="a".repeat(64);
 const nonce="b".repeat(32);
 const issuedAt=1700000000000,expiresAt=1700000120000;
-const teePayload=`GNW-TEE-RELEASE-ATTESTATION-V1|${subject}|verifier|${measurement}|${nonce}|${issuedAt}|${expiresAt}`;
+const teePayload=teeReleaseAttestationPayload({subject,issuer:"verifier",measurement,nonce,issuedAt,expiresAt});
 if(!verify(null,Buffer.from(teePayload),rk.publicKey,sign(null,Buffer.from(teePayload),rk.privateKey)))fail.push("release-tee-ed25519-roundtrip");
 const releaseDigest=createHash("sha256").update(`GNW-RELEASE-V1|${subject}`).digest("hex");
 const taPayload=`GNW-TRUST-ANCHOR-V1|${releaseDigest}|${measurement}|${nonce}`;

@@ -64,6 +64,7 @@ describe("validateSecrets", () => {
   it("accepts a complete production security configuration", () => {
     process.env.NODE_ENV = "production";
     process.env.DATABASE_URL = "postgresql://u:p@db.internal/gnw?sslmode=verify-full";
+    process.env.GNW_POSTGRES_SSL_REQUIRED = "true";
     process.env.COOKIE_SECRET = "a".repeat(32);
     process.env.SESSION_SECRET = "b".repeat(32);
     process.env.EXECUTOR_URL = "https://executor.internal.example";

@@ -41,6 +41,8 @@ jobs:
           test -z "$(git status --porcelain)"
           git diff --check
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
+      - name: Enforce supported Node.js runtime
+        run: node scripts/verify-node-version.mjs
       - name: Install from committed lockfile
         run: npm ci
       - name: Verify direct mission runner is blocked in production
@@ -51,6 +53,8 @@ jobs:
         run: npm run verify:compliance
       - name: Syntax-check production preflight
         run: node --check scripts/preflight-production.mjs
+      - name: Verify release TEE signing contract
+        run: npm run test:release-contract
       - name: Production environment preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -59,6 +63,8 @@ jobs:
           EXECUTOR_URL: ${{ secrets.EXECUTOR_URL }}
           EXECUTOR_SECRET: ${{ secrets.EXECUTOR_SECRET }}
           GNW_REQUIRE_SIGNED_GRANTS: ${{ secrets.GNW_REQUIRE_SIGNED_GRANTS }}
+          GNW_POSTGRES_SSL_REQUIRED: "true"
+          GNW_REQUIRE_TEE_ATTESTATION: "true"
           GNW_GRANT_ISSUER: ${{ secrets.GNW_GRANT_ISSUER }}
           GNW_GRANT_PRIVATE_KEY_PEM: ${{ secrets.GNW_GRANT_PRIVATE_KEY_PEM }}
           GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
@@ -70,7 +76,7 @@ jobs:
           GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
           GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
           GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}
-          GNW_REQUIRE_MPC_TRUST_ANCHOR: ${{ secrets.GNW_REQUIRE_MPC_TRUST_ANCHOR }}
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
           GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
           GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
           GNW_SHARED_STORAGE_CONFIRMED: ${{ secrets.GNW_SHARED_STORAGE_CONFIRMED }}
@@ -153,6 +159,15 @@ jobs:
           GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
           GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
           GNW_RELEASE_ARTIFACT_REQUIRED: "true"
+          GNW_REQUIRE_TEE_ATTESTATION: "true"
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
+          GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}
+          GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
+          GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
+          GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
+          GNW_TEE_ATTESTATION_MAX_AGE_MS: ${{ secrets.GNW_TEE_ATTESTATION_MAX_AGE_MS }}
+          GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}
+          GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}
         run: npm run verify:release:evidence
       - name: GitHub Release
         env:
