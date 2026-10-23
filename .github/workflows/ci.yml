@@ -42,6 +42,8 @@ jobs:
           test -z "$(git status --porcelain)"
           test -n "$(git rev-parse HEAD)"
           git diff --check
+      - name: Enforce supported Node.js runtime
+        run: node scripts/verify-node-version.mjs
       - name: Verify npm cache integrity
         run: npm cache verify
       - name: Clean install from committed lockfile
@@ -66,6 +68,8 @@ jobs:
         run: node scripts/check-mission-runner-production-guard.mjs
       - name: Syntax-check production preflight
         run: node --check scripts/preflight-production.mjs
+      - name: Verify release TEE signing contract
+        run: npm run test:release-contract
       - name: Lint
         run: npm run lint
       - name: Run migrations with dedicated migrator role
@@ -127,11 +131,51 @@ jobs:
         run: npm run build
       - name: Production container build
         run: docker build --pull -t gnw-production-smoke:${GITHUB_SHA} .
+      - name: Configure TLS on disposable CI PostgreSQL
+        shell: bash
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-tls
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
+            -keyout .ci-tls/ca.key -out .ci-tls/ca.crt \
+            -subj "/CN=GNW CI PostgreSQL CA" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
+            -addext "subjectKeyIdentifier=hash"
+          openssl req -new -newkey rsa:2048 -nodes \
+            -keyout .ci-tls/server.key -out .ci-tls/server.csr \
+            -subj "/CN=127.0.0.1"
+          cat > .ci-tls/server.ext <<'EOF'
+          basicConstraints=critical,CA:FALSE
+          keyUsage=critical,digitalSignature,keyEncipherment
+          extendedKeyUsage=serverAuth
+          subjectAltName=IP:127.0.0.1
+          EOF
+          openssl x509 -req -sha256 -days 2 \
+            -in .ci-tls/server.csr -CA .ci-tls/ca.crt -CAkey .ci-tls/ca.key \
+            -CAcreateserial -out .ci-tls/server.crt -extfile .ci-tls/server.ext
+          docker cp .ci-tls/server.crt "$POSTGRES_CONTAINER_ID:/tmp/gnw-server.crt"
+          docker cp .ci-tls/server.key "$POSTGRES_CONTAINER_ID:/tmp/gnw-server.key"
+          docker exec -u 0 "$POSTGRES_CONTAINER_ID" sh -c \
+            'chown postgres:postgres /tmp/gnw-server.crt /tmp/gnw-server.key && chmod 600 /tmp/gnw-server.key'
+          docker exec -u postgres "$POSTGRES_CONTAINER_ID" psql -d gnw_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ssl = 'on';"
+          docker exec -u postgres "$POSTGRES_CONTAINER_ID" psql -d gnw_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ssl_cert_file = '/tmp/gnw-server.crt';"
+          docker exec -u postgres "$POSTGRES_CONTAINER_ID" psql -d gnw_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ssl_key_file = '/tmp/gnw-server.key';"
+          docker exec -u postgres "$POSTGRES_CONTAINER_ID" sh -c 'pg_ctl restart -D "$PGDATA" -m fast -w'
+          for _ in {1..30}; do
+            if docker exec "$POSTGRES_CONTAINER_ID" pg_isready -h 127.0.0.1 -p 5432 -U postgres -d gnw_test; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$POSTGRES_CONTAINER_ID" pg_isready -h 127.0.0.1 -p 5432 -U postgres -d gnw_test
       - name: Production container runtime smoke test
         shell: bash
         env:
           NODE_ENV: production
-          DATABASE_URL: postgresql://gnw_app:gnw_app_pw@127.0.0.1:5432/gnw_test
+          DATABASE_URL: postgresql://gnw_app:gnw_app_pw@127.0.0.1:5432/gnw_test?sslmode=verify-full
           COOKIE_SECRET: ci-smoke-cookie-secret-012345678901234567890123456789
           SESSION_SECRET: ci-smoke-session-secret-012345678901234567890123456789
           EXECUTOR_URL: https://127.0.0.1:8788
@@ -155,15 +199,16 @@ jobs:
           LLM_API_KEY: ci-smoke-api-key
           STORAGE_DRIVER: local
           GNW_SHARED_STORAGE_CONFIRMED: "true"
-          GNW_POSTGRES_SSL_REQUIRED: "false"
+          GNW_POSTGRES_SSL_REQUIRED: "true"
+          NODE_EXTRA_CA_CERTS: /tls/ca.crt
           TRUST_PROXY: "false"
           PORT: "3000"
           LOG_LEVEL: silent
         run: |
           set -euo pipefail
           docker rm -f gnw-production-smoke >/dev/null 2>&1 || true
-          docker run -d --network host --name gnw-production-smoke -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_LEASE_PUBLIC_KEY_PEM -e GNW_RELEASE_COMMIT_SHA -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_REQUIRE_MPC_TRUST_ANCHOR -e GNW_MPC_TRUST_ANCHOR_JSON -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
-          trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --network host --name gnw-production-smoke -v "$GITHUB_WORKSPACE/.ci-tls/ca.crt:/tls/ca.crt:ro" -e NODE_EXTRA_CA_CERTS -e NODE_ENV -e DATABASE_URL -e COOKIE_SECRET -e SESSION_SECRET -e EXECUTOR_URL -e EXECUTOR_SECRET -e GNW_REQUIRE_SIGNED_GRANTS -e GNW_GRANT_ISSUER -e GNW_GRANT_PRIVATE_KEY_PEM -e GNW_GRANT_PUBLIC_KEY_PEM -e GNW_LEASE_PRIVATE_KEY_PEM -e GNW_LEASE_PUBLIC_KEY_PEM -e GNW_RELEASE_COMMIT_SHA -e GNW_REQUIRE_TEE_ATTESTATION -e GNW_TEE_ATTESTATION_ISSUER -e GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM -e GNW_TEE_ATTESTATION_MEASUREMENT -e GNW_TEE_ATTESTATION_MAX_AGE_MS -e GNW_REQUIRE_MPC_TRUST_ANCHOR -e GNW_MPC_TRUST_ANCHOR_JSON -e GNW_EGRESS_ALLOW_LIST -e LLM_BASE_URL -e LLM_API_KEY -e STORAGE_DRIVER -e GNW_SHARED_STORAGE_CONFIRMED -e GNW_POSTGRES_SSL_REQUIRED -e TRUST_PROXY -e PORT -e LOG_LEVEL gnw-production-smoke:${GITHUB_SHA}
+          trap 'docker logs gnw-production-smoke || true; docker rm -f gnw-production-smoke >/dev/null 2>&1 || true; rm -rf .ci-tls' EXIT
           for _ in {1..30}; do
             if curl -fsS http://127.0.0.1:3000/api/health >/tmp/gnw-health.json && curl -fsS http://127.0.0.1:3000/api/ready >/tmp/gnw-ready.json; then
               grep -q '"ok":true' /tmp/gnw-health.json
