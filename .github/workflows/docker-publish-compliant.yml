@@ -34,6 +34,7 @@ jobs:
       - name: Validate compliance, cryptographic closure and production closure
         run: |
           npm run test:release-contract
+          npm run test:trivy-contract
           npm run verify:compliance
           npm run verify:crypto
           npm run verify:production
@@ -116,16 +117,25 @@ jobs:
         id: image
         shell: bash
         run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}@${{ steps.push.outputs.digest }}" >> "$GITHUB_OUTPUT"
-      - name: Scan image for HIGH/CRITICAL vulnerabilities
+      - name: Scan immutable image and record full vulnerability report
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0, verified release tag commit
         with:
           image-ref: ${{ steps.image.outputs.ref }}
           version: v0.76.1
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
+          format: json
+          output: trivy-results.json
           vuln-type: os,library
-          severity: CRITICAL,HIGH
+          exit-code: "0"
+      - name: Enforce HIGH/CRITICAL vulnerability policy
+        run: node scripts/verify-trivy-report.mjs trivy-results.json
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: trivy-results-${{ github.sha }}
+          path: trivy-results.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@9d57eef8c06cd9d6b433effeeb7a6a77b3ff94ad
         with:
