@@ -111,7 +111,7 @@ for(const [label,workflow] of [["container-release",containerRelease],["docker-p
  if(workflow.includes("ignore-unfixed: true")) failures.push("security:unfixed-image-vulnerabilities-ignored:"+label);
 }
 if(!containerRelease.includes("node scripts/verify-node-version.mjs")) failures.push("release-container:node22-guard-missing");
-if(!s.includes('"test:trivy-contract"')) failures.push("package:trivy-contract-test-script-missing");
+if(!pkg.includes('"test:trivy-contract"')) failures.push("package:trivy-contract-test-script-missing");
 const workflowDir=".github/workflows";
 if(existsSync(workflowDir)){
  for(const name of readdirSync(workflowDir)){
