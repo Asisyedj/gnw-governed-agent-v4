@@ -7,6 +7,7 @@ RUN set -eu \
     && test "$(cat /etc/alpine-release)" = "3.24.3" \
     && apk upgrade --no-cache \
     && apk add --no-cache ca-certificates libatomic libstdc++ tini zlib \
+    && test "$(node -p 'process.versions.node')" = "22.23.4" \
     && node --version \
     && npm --version \
     && awk -F: '$1 == "P" { pkg = $2 } pkg == "musl" && $1 == "V" { if ($2 == "1.2.6-r3") ok = 1 } END { exit !ok }' /lib/apk/db/installed \
