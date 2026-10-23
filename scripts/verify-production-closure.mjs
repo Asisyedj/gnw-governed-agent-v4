@@ -122,5 +122,23 @@ if(!deployment.includes("initContainers")||!deployment.includes('command: ["node
 if(!read("k8s/configmap.yaml").includes("GNW_RELEASE_COMMIT_SHA")) failures.push("deploy:release-commit-binding-missing");
 for(const token of ["runAsNonRoot: true","readOnlyRootFilesystem: true","allowPrivilegeEscalation: false","drop: [\"ALL\"]","seccompProfile:","emptyDir:","sizeLimit: 128Mi"]){if(!deployment.includes(token)) failures.push(`k8s:deployment-hardening-missing:${token}`);}
 try{execFileSync("git",["rev-parse","--is-inside-work-tree"],{stdio:"ignore"});execFileSync("git",["diff","--check"],{stdio:"ignore"});}catch{failures.push("git:checkout-or-diff-check-unavailable");}
+// Release-hardening contracts: keep these structural controls covered by the static gate.
+const nodePackage=read("package.json");
+if(!/"node"\s*:\s*"\^22\.12\.0"/.test(nodePackage)) failures.push("runtime:node22-engine-range-missing");
+const nodeGuard=read("scripts/verify-node-version.mjs");
+if(!nodeGuard.includes("major !== 22") || !nodeGuard.includes("minor < 12")) failures.push("runtime:node22-guard-missing");
+const dbTlsPolicy=read("src/server/db/ssl-policy.ts");
+for(const token of ['searchParams.getAll("sslmode")','sslModes[0] !== "verify-full"','requiredFlag !== "true"']) if(!dbTlsPolicy.includes(token)) failures.push("db:strict-tls-policy-missing:"+token);
+if(!read("src/server/db/index.ts").includes("assertProductionPostgresTls")) failures.push("db:production-tls-policy-not-enforced");
+const productionPreflight=read("scripts/preflight-production.mjs");
+const releaseEvidenceVerifier=read("scripts/verify-release-evidence.mjs");
+const releaseTeeContract=read("scripts/lib/tee-release-attestation.mjs");
+if(!productionPreflight.includes('GNW_POSTGRES_SSL_REQUIRED !== "true"') || !productionPreflight.includes("sslmode=verify-full")) failures.push("preflight:strict-postgres-tls-check-missing");
+if(!releaseTeeContract.includes("GNW-TEE-RELEASE-ATTESTATION-V1") || !productionPreflight.includes("teeReleaseAttestationPayload") || !releaseEvidenceVerifier.includes("teeReleaseAttestationPayload")) failures.push("attestation:shared-release-payload-contract-missing");
+if((envExample.match(/^GNW_TEE_ATTESTATION_EVIDENCE_JSON=/gm)||[]).length!==1) failures.push("env:tee-evidence-setting-must-not-be-duplicated");
+if(!dockerfile.includes("COPY scripts/verify-node-version.mjs ./scripts/verify-node-version.mjs")) failures.push("deploy:node22-guard-not-packaged");
+if(!dockerfile.includes("COPY scripts/lib/tee-release-attestation.mjs ./scripts/lib/tee-release-attestation.mjs")) failures.push("deploy:tee-contract-helper-not-packaged");
+if(!release.includes('GNW_REQUIRE_TEE_ATTESTATION: "true"') || !release.includes('GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"') || !release.includes('GNW_POSTGRES_SSL_REQUIRED: "true"')) failures.push("release:required-trust-and-tls-flags-missing");
+if(!release.includes("GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}") || !release.includes("GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}")) failures.push("release:final-verifier-evidence-env-mapping-missing");
 if(failures.length){console.error("GNW production closure: DENY");for(const failure of failures) console.error(` - ${failure}`);process.exit(1);}
 console.log("GNW production closure: static gate PASS");
