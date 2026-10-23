@@ -1,4 +1,5 @@
 import { URL } from "node:url";
+import { productionPostgresTlsErrors } from "../db/ssl-policy.js";
 
 function minSecret(errors: string[], name: string, value: string | undefined, min = 32): void {
   if (!value) errors.push(name + " is required");
@@ -26,9 +27,8 @@ export function validateSecrets(): void {
 
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) errors.push("DATABASE_URL is required");
-  else if (process.env.NODE_ENV === "production" &&
-    !dbUrl.startsWith("postgresql://") && !dbUrl.startsWith("postgres://")) {
-    errors.push("DATABASE_URL must be a valid PostgreSQL connection string");
+  else if (process.env.NODE_ENV === "production") {
+    errors.push(...productionPostgresTlsErrors(dbUrl, process.env.GNW_POSTGRES_SSL_REQUIRED));
   }
 
   minSecret(errors,"COOKIE_SECRET",process.env.COOKIE_SECRET);
