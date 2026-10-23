@@ -303,7 +303,20 @@ jobs:
           git rev-parse HEAD > evidence/commit-sha.txt
           cp git-release-metadata.json evidence/git-release-metadata.json
           git diff --check > evidence/diff-check.txt
+          set +e
           npm audit --json > evidence/npm-audit.json
+          audit_exit=$?
+          set -e
+          printf '%s\n' "$audit_exit" > evidence/npm-audit-exit-code.txt
+          node -e '
+            const fs = require("node:fs");
+            const report = JSON.parse(fs.readFileSync("evidence/npm-audit.json", "utf8"));
+            const v = report.metadata && report.metadata.vulnerabilities;
+            if (!v) throw new Error("npm audit report is missing vulnerability metadata");
+            const summary = { low: v.low || 0, moderate: v.moderate || 0, high: v.high || 0, critical: v.critical || 0 };
+            console.log("npm audit evidence:", JSON.stringify(summary), "rawExitCode=" + fs.readFileSync("evidence/npm-audit-exit-code.txt", "utf8").trim());
+            if (summary.high > 0 || summary.critical > 0) process.exit(1);
+          '
           cp docs/RUNTIME_EXECUTION_POLICY.md evidence/runtime-policy.md
           printf "GNW-REP-1.0\\n" > evidence/policy-version.txt
           printf "DeepResearchModel=gpt-5.6-sol\\n" >> evidence/policy-version.txt
