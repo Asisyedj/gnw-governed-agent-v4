@@ -6,8 +6,8 @@ RUN set -eu \
     && apk add --no-cache tini zlib \
     && node --version \
     && npm --version \
-    && apk info -v musl | grep -Fx "musl-1.2.6-r3" \
-    && printf "Verified patched musl package: musl-1.2.6-r3\\n"
+    && awk -F: '$1 == "P" { pkg = $2 } pkg == "musl" && $1 == "V" { if ($2 == "1.2.6-r3") ok = 1 } END { exit !ok }' /lib/apk/db/installed \
+    && printf "Verified patched musl package: 1.2.6-r3\\n"
 
 FROM base AS deps
 COPY package.json package-lock.json ./
