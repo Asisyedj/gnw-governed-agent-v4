@@ -1,8 +1,15 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 FROM node:22.23.4-alpine3.24@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157d5c9956702ffadc AS base
 WORKDIR /app
-RUN apk add --no-cache tini zlib \
-    && npm --version
+RUN set -eu \
+    && apk upgrade --no-cache \
+    && apk add --no-cache tini zlib \
+    && node --version \
+    && npm --version \
+    && musl_version="$(apk info -v musl | sed -n 's/^musl-//p')" \
+    && test -n "$musl_version" \
+    && test "$(apk version -t "$musl_version" "1.2.6-r3")" != "<" \
+    && printf 'Verified patched musl version: %s\\n' "$musl_version"
 
 FROM base AS deps
 COPY package.json package-lock.json ./
