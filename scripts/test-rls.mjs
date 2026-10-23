@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -48,6 +49,18 @@ try {
       'INSERT INTO tasks(tenant_id,created_by_user_id,title) VALUES($1,$2,$3)',
       [t1,u1.id,'tenant-a']
     );
+    const sessionId = 'rls-session-' + suffix;
+    const sessionTokenHash = createHash('sha256').update(sessionId).digest('hex');
+    const otherSessionId = 'rls-session-other-' + suffix;
+    const otherSessionTokenHash = createHash('sha256').update(otherSessionId).digest('hex');
+    await a.query(
+      'INSERT INTO sessions(id,user_id,tenant_id,token_hash,expires_at) VALUES($1,$2,$3,$4,now() + interval \'1 hour\')',
+      [sessionId,u1.id,t1,sessionTokenHash]
+    );
+    await a.query(
+      'INSERT INTO sessions(id,user_id,tenant_id,token_hash,expires_at) VALUES($1,$2,$3,$4,now() + interval \'1 hour\')',
+      [otherSessionId,u1.id,t1,otherSessionTokenHash]
+    );
     await a.query('COMMIT');
 
     await b.query('BEGIN');
@@ -55,6 +68,25 @@ try {
 
     const hidden = await b.query('SELECT id FROM tasks WHERE tenant_id=$1',[t1]);
     if (hidden.rowCount !== 0) throw new Error('cross-tenant SELECT leak');
+
+    const hiddenSession = await b.query('SELECT id FROM sessions WHERE tenant_id=$1',[t1]);
+    if (hiddenSession.rowCount !== 0) throw new Error('cross-tenant session SELECT leak');
+    const unresolvedSession = await b.query('SELECT id FROM sessions WHERE token_hash=$1',[sessionTokenHash]);
+    if (unresolvedSession.rowCount !== 0) throw new Error('session lookup is visible without token-hash context');
+    await b.query('SELECT set_config(\'app.session_token_hash\',$1,true)', [sessionTokenHash]);
+    const resolvedSession = await b.query('SELECT id,tenant_id FROM sessions WHERE token_hash=$1',[sessionTokenHash]);
+    if (resolvedSession.rowCount !== 1 || resolvedSession.rows[0].id !== sessionId || Number(resolvedSession.rows[0].tenant_id) !== t1) {
+      throw new Error('exact token-hash session lookup did not resolve the bound session');
+    }
+    const visibleSessions = await b.query('SELECT id FROM sessions');
+    if (visibleSessions.rowCount !== 1 || visibleSessions.rows[0].id !== sessionId) {
+      throw new Error('session token scope permits cross-session enumeration');
+    }
+    const crossTenantSessionDelete = await b.query('DELETE FROM sessions WHERE id=$1 RETURNING id',[sessionId]);
+    if (crossTenantSessionDelete.rowCount !== 0) throw new Error('session token lookup scope allowed cross-tenant deletion');
+    await b.query('SELECT set_config(\'app.session_token_hash\',\'\',true)');
+    const hiddenAfterTokenClear = await b.query('SELECT id FROM sessions WHERE tenant_id=$1',[t1]);
+    if (hiddenAfterTokenClear.rowCount !== 0) throw new Error('session rows remained visible after token scope cleared');
 
     let updateDenied = false;
     try { await b.query('UPDATE tasks SET title=$1 WHERE tenant_id=$2',['cross-tenant-update',t1]); }
@@ -125,7 +157,7 @@ try {
     b.release();
   }
 
-  const tables = ['users','tasks','task_steps','approvals','budget_reservations','audit_log','capability_leases','artifacts'];
+  const tables = ['users','sessions','tasks','task_steps','approvals','budget_reservations','audit_log','capability_leases','artifacts'];
   const leaseColumns = await q(
     'SELECT column_name FROM information_schema.columns WHERE table_schema=\'public\' AND table_name=\'capability_leases\' AND column_name = ANY($1::text[])',
     [['request_id','action_digest','subject','destination','interlock_generation','issuer','signature','consumed_at']]

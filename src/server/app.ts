@@ -16,6 +16,7 @@ import { healthRoutes } from "./routes/health.js";
 import { summaryRoutes } from "./routes/summary.js";
 import { metricsRoutes } from "./routes/metrics.js";
 import { settingsRoutes } from "./routes/settings.js";
+import { remoteAccessRoutes } from "./routes/remote-access.js";
 import { recordRequest } from "./metrics.js";
 import type { FastifyRequest } from "fastify";
 
@@ -88,6 +89,8 @@ export async function buildApp() {
 
   // ── Browser cross-site request protection ─────────────────────────────────
   app.addHook("preHandler", async (req, reply) => {
+    // These endpoints validate OAuth or device bearer credentials and enforce their own Origin/Host contract.
+    if (req.url === "/mcp" || req.url.startsWith("/oauth/") || req.url.startsWith("/mcp-agent/")) return;
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
       const fetchSite = req.headers["sec-fetch-site"];
       if (fetchSite === "cross-site") {
@@ -119,8 +122,9 @@ export async function buildApp() {
   // ── Kill-switch / circuit-breaker guard ───────────────────────────────────
   app.addHook("preHandler", async (req, reply) => {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
-      const exempt = ["/api/auth", "/api/interlock", "/api/health", "/api/ready"];
-      if (!exempt.some((p) => req.url.startsWith(p))) {
+      const exempt = ["/api/auth", "/api/interlock", "/api/health", "/api/ready", "/oauth/login", "/oauth/revoke", "/mcp-agent/heartbeat", "/mcp-agent/result"];
+      const explicitAgentRevocation = req.method === "DELETE" && req.url.startsWith("/api/remote-agents/");
+      if (!explicitAgentRevocation && !exempt.some((p) => req.url.startsWith(p))) {
         const lock = await getInterlock(db);
         if (lock.killSwitch) {
           await insertAuditLog(db, { eventType: "kill_switch_block", outcome: "denied", detail: { path: req.url, method: req.method }, ipAddress: req.ip });
@@ -164,6 +168,7 @@ export async function buildApp() {
   await app.register(auditRoutes,    { prefix: "/api/audit" });
   await app.register(metricsRoutes,  { prefix: "" });
   await app.register(settingsRoutes, { prefix: "/api/settings" });
+  await app.register(remoteAccessRoutes);
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler(async (error, req, reply) => {

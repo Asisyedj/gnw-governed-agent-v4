@@ -215,4 +215,136 @@ export const artifacts = pgTable("artifacts", {
   stepTenantFk:foreignKey({columns:[t.stepId,t.tenantId],foreignColumns:[taskSteps.id,taskSteps.tenantId],name:"artifacts_step_same_tenant_fk"}),
 }));
 
-export const schema={tenants,users,sessions,tasks,taskSteps,approvals,nonces,interlocks,budgetReservations,auditLog,capabilityLeases,artifacts};
+
+export const oauthClients = pgTable("oauth_clients", {
+  clientId:text("client_id").primaryKey(),
+  clientName:text("client_name").notNull(),
+  redirectUris:jsonb("redirect_uris").$type<string[]>().notNull(),
+  grantTypes:jsonb("grant_types").$type<string[]>().notNull(),
+  responseTypes:jsonb("response_types").$type<string[]>().notNull(),
+  tokenEndpointAuthMethod:text("token_endpoint_auth_method").notNull().default("none"),
+  createdAt:ts("created_at").notNull().defaultNow(),
+  updatedAt:ts("updated_at").notNull().defaultNow(),
+});
+
+export const oauthAuthorizationInteractions = pgTable("oauth_authorization_interactions", {
+  interactionHash:text("interaction_hash").primaryKey(),
+  clientId:text("client_id").notNull().references(()=>oauthClients.clientId,{onDelete:"cascade"}),
+  redirectUri:text("redirect_uri").notNull(),
+  state:text("state").notNull(),
+  codeChallenge:text("code_challenge").notNull(),
+  scope:text("scope").notNull(),
+  resource:text("resource").notNull(),
+  userId:integer("user_id").notNull(),
+  tenantId:integer("tenant_id").notNull(),
+  expiresAt:ts("expires_at").notNull(),
+  createdAt:ts("created_at").notNull().defaultNow(),
+}, t=>({
+  tenantIdx:index("oauth_interactions_tenant_idx").on(t.tenantId),
+  expiresIdx:index("oauth_interactions_expires_idx").on(t.expiresAt),
+  userTenantFk:foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"oauth_interactions_user_tenant_fk"}),
+}));
+
+export const oauthAuthorizationCodes = pgTable("oauth_authorization_codes", {
+  codeHash:text("code_hash").primaryKey(),
+  clientId:text("client_id").notNull().references(()=>oauthClients.clientId,{onDelete:"cascade"}),
+  redirectUri:text("redirect_uri").notNull(),
+  codeChallenge:text("code_challenge").notNull(),
+  scope:text("scope").notNull(),
+  resource:text("resource").notNull(),
+  userId:integer("user_id").notNull(),
+  tenantId:integer("tenant_id").notNull(),
+  expiresAt:ts("expires_at").notNull(),
+  consumedAt:ts("consumed_at"),
+  createdAt:ts("created_at").notNull().defaultNow(),
+}, t=>({
+  tenantIdx:index("oauth_codes_tenant_idx").on(t.tenantId),
+  expiresIdx:index("oauth_codes_expires_idx").on(t.expiresAt),
+  userTenantFk:foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"oauth_codes_user_tenant_fk"}),
+}));
+
+export const oauthAccessTokens = pgTable("oauth_access_tokens", {
+  tokenHash:text("token_hash").primaryKey(),
+  familyId:text("family_id").notNull(),
+  clientId:text("client_id").notNull().references(()=>oauthClients.clientId,{onDelete:"cascade"}),
+  userId:integer("user_id").notNull(),
+  tenantId:integer("tenant_id").notNull(),
+  scope:text("scope").notNull(),
+  resource:text("resource").notNull(),
+  expiresAt:ts("expires_at").notNull(),
+  revokedAt:ts("revoked_at"),
+  createdAt:ts("created_at").notNull().defaultNow(),
+}, t=>({
+  tenantIdx:index("oauth_access_tenant_idx").on(t.tenantId),
+  familyIdx:index("oauth_access_family_idx").on(t.familyId),
+  expiresIdx:index("oauth_access_expires_idx").on(t.expiresAt),
+  userTenantFk:foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"oauth_access_user_tenant_fk"}),
+}));
+
+export const oauthRefreshTokens = pgTable("oauth_refresh_tokens", {
+  tokenHash:text("token_hash").primaryKey(),
+  familyId:text("family_id").notNull(),
+  parentTokenHash:text("parent_token_hash"),
+  clientId:text("client_id").notNull().references(()=>oauthClients.clientId,{onDelete:"cascade"}),
+  userId:integer("user_id").notNull(),
+  tenantId:integer("tenant_id").notNull(),
+  scope:text("scope").notNull(),
+  resource:text("resource").notNull(),
+  expiresAt:ts("expires_at").notNull(),
+  consumedAt:ts("consumed_at"),
+  revokedAt:ts("revoked_at"),
+  createdAt:ts("created_at").notNull().defaultNow(),
+}, t=>({
+  familyIdx:index("oauth_refresh_family_idx").on(t.familyId),
+  tenantIdx:index("oauth_refresh_tenant_idx").on(t.tenantId),
+  expiresIdx:index("oauth_refresh_expires_idx").on(t.expiresAt),
+  userTenantFk:foreignKey({columns:[t.userId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"oauth_refresh_user_tenant_fk"}),
+}));
+
+export const remoteAgents = pgTable("remote_agents", {
+  id:text("id").primaryKey(),
+  tenantId:integer("tenant_id").notNull(),
+  ownerUserId:integer("owner_user_id").notNull(),
+  label:text("label").notNull(),
+  tokenHash:text("token_hash").notNull().unique(),
+  lastSeenAt:ts("last_seen_at"),
+  revokedAt:ts("revoked_at"),
+  createdAt:ts("created_at").notNull().defaultNow(),
+  updatedAt:ts("updated_at").notNull().defaultNow(),
+}, t=>({
+  tenantIdx:index("remote_agents_tenant_idx").on(t.tenantId),
+  idTenantIdx:uniqueIndex("remote_agents_id_tenant_uq").on(t.id,t.tenantId),
+  ownerTenantFk:foreignKey({columns:[t.ownerUserId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"remote_agents_owner_tenant_fk"}),
+}));
+
+export const remoteTasks = pgTable("remote_tasks", {
+  id:text("id").primaryKey(),
+  tenantId:integer("tenant_id").notNull(),
+  taskId:integer("task_id").notNull(),
+  requestedByUserId:integer("requested_by_user_id").notNull(),
+  agentId:text("agent_id").notNull(),
+  kind:text("kind",{enum:["system_status","git_status","git_diff_check","current_commit","list_project_root","typecheck","lint","production_closure","compliance","crypto_closure","build","file_read","file_change"]}).notNull(),
+  argumentsJson:jsonb("arguments_json").$type<Record<string,unknown>>().notNull().default({}),
+  status:text("status",{enum:["queued","pending_approval","running","completed","failed","denied","cancelled","expired"]}).notNull().default("queued"),
+  attempts:integer("attempts").notNull().default(0),
+  approvalId:integer("approval_id"),
+  actionDigest:text("action_digest"),
+  output:jsonb("output").$type<Record<string,unknown>>(),
+  errorSummary:text("error_summary"),
+  leaseExpiresAt:ts("lease_expires_at"),
+  expiresAt:ts("expires_at").notNull(),
+  startedAt:ts("started_at"),
+  completedAt:ts("completed_at"),
+  createdAt:ts("created_at").notNull().defaultNow(),
+  updatedAt:ts("updated_at").notNull().defaultNow(),
+}, t=>({
+  tenantIdx:index("remote_tasks_tenant_idx").on(t.tenantId),
+  agentStatusIdx:index("remote_tasks_agent_status_idx").on(t.agentId,t.status,t.createdAt),
+  taskTenantIdx:uniqueIndex("remote_tasks_task_tenant_uq").on(t.taskId,t.tenantId),
+  requesterTenantFk:foreignKey({columns:[t.requestedByUserId,t.tenantId],foreignColumns:[users.id,users.tenantId],name:"remote_tasks_requester_tenant_fk"}),
+  agentTenantFk:foreignKey({columns:[t.agentId,t.tenantId],foreignColumns:[remoteAgents.id,remoteAgents.tenantId],name:"remote_tasks_agent_tenant_fk"}),
+  taskTenantFk:foreignKey({columns:[t.taskId,t.tenantId],foreignColumns:[tasks.id,tasks.tenantId],name:"remote_tasks_task_tenant_fk"}),
+  approvalTenantFk:foreignKey({columns:[t.approvalId,t.tenantId],foreignColumns:[approvals.id,approvals.tenantId],name:"remote_tasks_approval_tenant_fk"}),
+}));
+
+export const schema={tenants,users,sessions,tasks,taskSteps,approvals,nonces,interlocks,budgetReservations,auditLog,capabilityLeases,artifacts,oauthClients,oauthAuthorizationInteractions,oauthAuthorizationCodes,oauthAccessTokens,oauthRefreshTokens,remoteAgents,remoteTasks};

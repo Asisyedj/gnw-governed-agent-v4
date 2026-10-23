@@ -101,7 +101,7 @@ export const authRoutes:FastifyPluginAsync=async(app)=>{
     const token=(req.cookies as Record<string,string>)["session"];
     if(token){
       const session=await findSessionByTokenHash(app.db,hashToken(token));
-      if(session){await deleteSession(app.db,session.id);await insertAuditLog(app.db,{eventType:"user.logout",actorId:session.userId,tenantId:session.tenantId,outcome:"success",ipAddress:req.ip});}
+      if(session){await deleteSession(app.db,session.id,session.tenantId);await insertAuditLog(app.db,{eventType:"user.logout",actorId:session.userId,tenantId:session.tenantId,outcome:"success",ipAddress:req.ip});}
     }
     reply.clearCookie("session",{path:"/"});
     return reply.send({ok:true});

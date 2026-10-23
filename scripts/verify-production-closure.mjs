@@ -3,9 +3,9 @@ import { execFileSync } from "node:child_process";
 
 const required=[
   "package.json","package-lock.json",
-  "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql",
+  "drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql","drizzle/0006_sessions_rls.sql","drizzle/0007_remote_access.sql",
   "docs/PRODUCTION_CLOSURE.md","docs/CONTINUOUS_SECURITY_PROGRAM.md","docs/TRUST_ANCHOR_AND_PENTEST_PLAN.md",
-  "src/server/db/schema.ts","src/server/db/index.ts",
+  "src/server/db/schema.ts","src/server/db/index.ts","src/server/routes/remote-access.ts","scripts/gnw-remote-agent.mjs","src/tests/integration/remote-access.test.ts","docs/REMOTE_ACCESS_SETUP.md",
   "src/server/governance.ts","src/server/action-envelope.ts","src/server/attestation.ts","src/server/trust-anchor.ts",
   "src/server/execution.ts","src/server/routes/execution.ts","src/server/audit.ts","src/server/invariants.ts",
   "src/server/lib/secretsCheck.ts","src/server/llm.ts","src/server/storage.ts","src/server/verified-data.ts","src/tests/unit/verified-data.test.ts",
@@ -60,6 +60,14 @@ for(const token of ["SESSION_SECRET","EXECUTOR_SECRET","GNW_REQUIRE_SIGNED_GRANT
 const envExample=read(".env.example");
 for(const token of ["GNW_REQUIRE_TEE_ATTESTATION","GNW_TEE_ATTESTATION_ISSUER","GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM","GNW_TEE_ATTESTATION_MEASUREMENT","GNW_REQUIRE_MPC_TRUST_ANCHOR","GNW_MPC_TRUST_ANCHOR_JSON"]){if(!envExample.includes(token)) failures.push(`env:trust-anchor-setting-missing:${token}`);}
 for(const file of ["drizzle/0001_production_rls.sql","drizzle/0002_governance_hardening.sql"]){const sql=read(file);for(const token of ["ENABLE ROW LEVEL SECURITY","FORCE ROW LEVEL SECURITY","current_setting('app.tenant_id'"]){if(!sql.includes(token)) failures.push(`rls:${file}:${token}`);}}
+const sessionRls=read("drizzle/0006_sessions_rls.sql");
+for(const token of ["ALTER TABLE sessions ENABLE ROW LEVEL SECURITY","ALTER TABLE sessions FORCE ROW LEVEL SECURITY","sessions_tenant_isolation","sessions_token_hash_lookup","app.session_token_hash"]){if(!sessionRls.includes(token)) failures.push(`sessions:rls-control-missing:${token}`);}
+const sessionRepo=read("src/server/repo.ts");
+for(const token of ["app.session_token_hash","withTenant(db, tenantId","deleteSession(db: Db, id: string, tenantId: number)"]){if(!sessionRepo.includes(token)) failures.push(`sessions:tenant-scope-missing:${token}`);}
+const rlsSemantic=read("scripts/test-rls.mjs");
+for(const token of ["'users','sessions'","session lookup is visible without token-hash context","session token scope permits cross-session enumeration","session token lookup scope allowed cross-tenant deletion"]){if(!rlsSemantic.includes(token)) failures.push(`sessions:regression-test-missing:${token}`);}
+const rlsPolicySuite=read("scripts/test-rls-policy-suite.mjs");
+if(!rlsPolicySuite.includes("'users','sessions'")) failures.push("sessions:policy-suite-coverage-missing");
 const ci=read(".github/workflows/ci.yml");
 if(/continue-on-error:\s*true/.test(ci)) failures.push("ci:fail-open");
 if(!ci.includes("contents: read")) failures.push("ci:repository-permission-not-readonly");
@@ -117,6 +125,18 @@ const dockerfile=read("Dockerfile");
 if(!dockerfile.includes("COPY scripts/preflight-production.mjs ./scripts/preflight-production.mjs")) failures.push("deploy:runtime-preflight-not-packaged");
 const compose=read("docker-compose.production.yml");
 if(!compose.includes("node scripts/preflight-production.mjs && exec node dist/server/app.js")) failures.push("deploy:compose-preflight-not-enforced");
+const composeAppA=compose.match(/app-a:\n([\s\S]*?)\n  app-b:/)?.[1]??"";
+const composeAppB=compose.match(/app-b:\n([\s\S]*?)\nvolumes:/)?.[1]??"";
+if(!composeAppA.includes("shared-artifacts-data:/data")||!composeAppB.includes("shared-artifacts-data:/data")) failures.push("deploy:local-artifact-storage-not-shared-between-app-replicas");
+if(!compose.includes("  shared-artifacts-data:")) failures.push("deploy:shared-artifact-volume-not-declared");
+const remoteMigration=read("drizzle/0007_remote_access.sql");
+for(const token of ["oauth_authorization_interactions ENABLE ROW LEVEL SECURITY","oauth_authorization_codes ENABLE ROW LEVEL SECURITY","oauth_access_tokens ENABLE ROW LEVEL SECURITY","oauth_refresh_tokens ENABLE ROW LEVEL SECURITY","family_id TEXT NOT NULL","remote_agents ENABLE ROW LEVEL SECURITY","remote_tasks ENABLE ROW LEVEL SECURITY","oauth_code_hash","oauth_access_hash","oauth_refresh_hash","remote_agent_token_hash"]){if(!remoteMigration.includes(token)) failures.push(`remote-access:rls-control-missing:${token}`);}
+const remoteRoute=read("src/server/routes/remote-access.ts");
+for(const token of ["code_challenge_method","S256","token_endpoint_auth_methods_supported","oauth-protected-resource","WWW-Authenticate","gnw:read","gnw:propose","gnw_propose_validation","APPROVABLE_OPERATIONS","familyId: input.familyId","eq(oauthAccessTokens.familyId, record.familyId)"]){if(!remoteRoute.includes(token)) failures.push(`remote-access:oauth-contract-missing:${token}`);}
+const remoteAgent=read("scripts/gnw-remote-agent.mjs");
+for(const token of ["ALLOWED_OPERATIONS","GNW_GATEWAY_URL","GNW_AGENT_TOKEN","git_status","typecheck","file_change","VALIDATION_OPERATIONS","shell: false","backup"]){if(!remoteAgent.includes(token)) failures.push(`remote-access:agent-control-missing:${token}`);}
+const remoteE2e=read("src/tests/integration/remote-access.test.ts");
+for(const token of ["crossSiteConsent","unsupported_remote_operation","revokedFamilyAccessUse","revokedAgentHeartbeat","refresh_token","code_challenge_method"]){if(!remoteE2e.includes(token)) failures.push(`remote-access:e2e-control-missing:${token}`);}
 const deployment=read("k8s/deployment.yaml");
 if(!deployment.includes("initContainers")||!deployment.includes('command: ["node","scripts/preflight-production.mjs"]')) failures.push("deploy:k8s-preflight-not-enforced");
 if(!read("k8s/configmap.yaml").includes("GNW_RELEASE_COMMIT_SHA")) failures.push("deploy:release-commit-binding-missing");

@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import pg from 'pg';
 const { Pool } = pg;
 const outputPath = resolve(process.cwd(), process.env.GNW_RLS_EVIDENCE_PATH || 'rls-policy-suite-results.json');
-const tables = ['users','tasks','task_steps','approvals','budget_reservations','audit_log','capability_leases','artifacts'];
+const tables = ['users','sessions','tasks','task_steps','approvals','budget_reservations','audit_log','capability_leases','artifacts'];
 const constraints = ['sessions_user_same_tenant_fk','tasks_creator_same_tenant_fk','task_steps_task_same_tenant_fk','approvals_task_same_tenant_fk','approvals_requester_same_tenant_fk','approvals_reviewer_same_tenant_fk','budget_task_same_tenant_fk','artifacts_task_same_tenant_fk','artifacts_step_same_tenant_fk','capability_task_same_tenant_fk','capability_actor_same_tenant_fk'];
 const checks = [];
 let failure;
