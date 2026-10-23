@@ -20,7 +20,7 @@ const releaseTeePayload="GNW-TEE-RELEASE-ATTESTATION-V1|${evidence.gitCommitSha}
 if(!releaseVerifier.includes(releaseTeePayload))fail.push("release-tee-signature-contract-mismatch");
 if(!preflight.includes('sslModes.length !== 1 || sslModes[0] !== "verify-full"'))fail.push("production-database-sslmode-contract-missing");
 if(!releaseWorkflow.includes('GNW_REQUIRE_TEE_ATTESTATION: "true"'))fail.push("release-tee-required-flag-missing");
-for(const needle of ["GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}","GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}","GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}","GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}"])if(!releaseWorkflow.includes(needle))fail.push("release-final-verifier-environment-missing:"+needle.split(":")[0]);
+for(const needle of ["GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}","GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}","GNW_REQUIRE_MPC_TRUST_ANCHOR: \"true\"","GNW_MPC_TRUST_ANCHOR_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_JSON }}","GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}"])if(!releaseWorkflow.includes(needle))fail.push("release-final-verifier-environment-missing:"+needle.split(":")[0]);
 if(packageJson.engines?.node!==">=22"||!releaseWorkflow.includes('node-version: "22.x"'))fail.push("node-22-runtime-contract-missing");
 const rk=generateKeyPairSync("ed25519");
 const subject="0".repeat(40);
