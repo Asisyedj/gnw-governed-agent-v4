@@ -37,7 +37,9 @@
     "test:harness": "vitest run src/tests/integration/tool-integration-harness.test.ts",
     "verify:certificate": "node scripts/verify-production-certificate.mjs",
     "preflight:secrets": "node scripts/preflight-secrets.mjs",
-    "verify:audit-chain": "node scripts/verify-audit-chain.mjs"
+    "verify:audit-chain": "node scripts/verify-audit-chain.mjs",
+    "test:trivy-contract": "node scripts/tests/verify-trivy-report.test.mjs",
+    "verify:trivy-report": "node scripts/verify-trivy-report.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
