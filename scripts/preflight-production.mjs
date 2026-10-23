@@ -97,7 +97,7 @@ function verifyReleaseTeeEvidence() {
   if (!/^[0-9a-f]{32,128}$/i.test(nonce)) failures.push("TEE evidence nonce invalid");
   if (!Number.isInteger(issuedAt) || !Number.isInteger(expiresAt) || expiresAt <= issuedAt) failures.push("TEE evidence validity window invalid");
   const now = Date.now();
-  const maxAgeInput = req("GNW_TEE_ATTESTATION_MAX_AGE_MS");
+  const maxAgeInput = (env.GNW_TEE_ATTESTATION_MAX_AGE_MS ?? "").trim();
   const maxAge = maxAgeInput ? Number(maxAgeInput) : 120000;
   if (!Number.isSafeInteger(maxAge) || maxAge <= 0) failures.push("GNW_TEE_ATTESTATION_MAX_AGE_MS must be a positive integer");
   if (now < issuedAt || now >= expiresAt || now - issuedAt > maxAge) failures.push("TEE evidence expired or too old");
