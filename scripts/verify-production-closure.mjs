@@ -140,6 +140,10 @@ if(!dockerfile.includes("COPY scripts/verify-node-version.mjs ./scripts/verify-n
 if(!dockerfile.includes("COPY scripts/lib/tee-release-attestation.mjs ./scripts/lib/tee-release-attestation.mjs")) failures.push("deploy:tee-contract-helper-not-packaged");
 if(!dockerfile.includes("apk upgrade --no-cache")) failures.push("container:alpine-security-packages-not-upgraded");
 if(dockerfile.includes("zlib=1.3.2-r1")) failures.push("container:stale-zlib-package-pin");
+const migration=read("scripts/migrate.mjs");
+if(!migration.includes("exactly one sslmode=verify-full required") || !migration.includes("GNW_POSTGRES_SSL_REQUIRED must be true")) failures.push("migration:production-verify-full-policy-missing");
+const productionCompose=read("docker-compose.production.yml");
+for(const token of ['-c ssl=on','-c ssl_cert_file=/tls/server.crt','sslmode=verify-full','GNW_POSTGRES_SSL_REQUIRED: "true"','NODE_EXTRA_CA_CERTS: /tls/ca.crt','GNW_REQUIRE_TEE_ATTESTATION: "true"','GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"','node scripts/preflight-production.mjs && exec node dist/server/app.js']) if(!productionCompose.includes(token)) failures.push("deploy:production-compose-security-contract-missing:"+token);
 if(!release.includes('GNW_REQUIRE_TEE_ATTESTATION: "true"') || !release.includes('GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"') || !release.includes('GNW_POSTGRES_SSL_REQUIRED: "true"')) failures.push("release:required-trust-and-tls-flags-missing");
 if(!release.includes("GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}") || !release.includes("GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON: ${{ secrets.GNW_MPC_TRUST_ANCHOR_EVIDENCE_JSON }}")) failures.push("release:final-verifier-evidence-env-mapping-missing");
 if(failures.length){console.error("GNW production closure: DENY");for(const failure of failures) console.error(` - ${failure}`);process.exit(1);}
