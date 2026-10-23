@@ -1,9 +1,17 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
+FROM node:22.23.4-alpine3.24@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157d5c9956702ffadc AS node-runtime
+FROM alpine:3.24.3@sha256:c6b073f8e9e58d881f6ffba6ebf3b9ebd60b9e7d6e8337018c0e68bb5c356873 AS base
 WORKDIR /app
-RUN apk add --no-cache tini zlib=1.3.2-r1 \
-    && npm --version
-
+COPY --from=node-runtime /usr/local/ /usr/local/
+RUN set -eu \
+    && test "$(cat /etc/alpine-release)" = "3.24.3" \
+    && apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates libatomic libstdc++ tini zlib \
+    && test "$(node -p 'process.versions.node')" = "22.23.4" \
+    && node --version \
+    && npm --version \
+    && awk -F: '$1 == "P" { pkg = $2 } pkg == "musl" && $1 == "V" { if ($2 == "1.2.6-r3") ok = 1 } END { exit !ok }' /lib/apk/db/installed \
+    && printf "Verified Alpine 3.24.3 and patched musl 1.2.6-r3\\n"
 FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts

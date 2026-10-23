@@ -127,6 +127,15 @@ jobs:
         run: npm run build
       - name: Production container build
         run: docker build --pull -t gnw-production-smoke:${GITHUB_SHA} .
+      - name: Verify source tree remains clean after container build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
+          test -z "$(git status --porcelain)"
       - name: Production container runtime smoke test
         shell: bash
         env:
