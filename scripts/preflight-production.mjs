@@ -46,7 +46,17 @@ for (const name of ["EXECUTOR_URL","LLM_BASE_URL","GNW_DEEP_RESEARCH_BASE_URL","
 }
 
 const databaseUrl = env.DATABASE_URL ?? "";
-if (databaseUrl && !/[?&]sslmode=verify-full(?:&|$)/i.test(databaseUrl)) failures.push("DATABASE_URL must use sslmode=verify-full");
+if (databaseUrl) {
+  try {
+    const parsedDatabaseUrl = new URL(databaseUrl);
+    const sslModes = parsedDatabaseUrl.searchParams.getAll("sslmode");
+    if (sslModes.length !== 1 || sslModes[0] !== "verify-full") {
+      failures.push("DATABASE_URL must use exactly one sslmode=verify-full parameter");
+    }
+  } catch {
+    failures.push("DATABASE_URL must be a valid URL with sslmode=verify-full");
+  }
+}
 if (!env.LLM_BASE_URL) failures.push("LLM_BASE_URL missing");
 if (!env.LLM_API_KEY) failures.push("LLM_API_KEY missing");
 if (!["local","s3"].includes((env.STORAGE_DRIVER ?? "").toLowerCase())) failures.push("STORAGE_DRIVER must be local or s3");
@@ -85,8 +95,9 @@ function verifyReleaseTeeEvidence() {
   if (!/^[0-9a-f]{32,128}$/i.test(nonce)) failures.push("TEE evidence nonce invalid");
   if (!Number.isInteger(issuedAt) || !Number.isInteger(expiresAt) || expiresAt <= issuedAt) failures.push("TEE evidence validity window invalid");
   const now = Date.now();
-  const maxAge = Number.parseInt(env.GNW_TEE_ATTESTATION_MAX_AGE_MS ?? "120000", 10);
-  if (now < issuedAt || now >= expiresAt || now - issuedAt > maxAge) failures.push("TEE evidence expired or too old");
+  const maxAge = Number(env.GNW_TEE_ATTESTATION_MAX_AGE_MS ?? "120000");
+  if (!Number.isSafeInteger(maxAge) || maxAge <= 0) failures.push("TEE attestation maximum age must be a positive integer");
+  if (now < issuedAt || now >= expiresAt || !Number.isSafeInteger(maxAge) || maxAge <= 0 || now - issuedAt > maxAge) failures.push("TEE evidence expired or too old");
   if (!/^[0-9a-f]+$/i.test(signature)) failures.push("TEE evidence signature invalid");
   try {
     const key = createPublicKey(env.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM ?? "");
