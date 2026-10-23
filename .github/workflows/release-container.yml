@@ -57,10 +57,12 @@ jobs:
           push: false
           tags: local/gnw:${{ github.sha }}
       - name: Scan image for HIGH and CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0, official safe release
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0, verified signed upstream tag
         with:
           image-ref: local/gnw:${{ github.sha }}
           version: v0.76.1
+          cache: "false" # force a fresh vulnerability DB; do not restore a stale/malformed cache
+          timeout: 10m
           format: json
           output: trivy-results.json
           vuln-type: os,library
