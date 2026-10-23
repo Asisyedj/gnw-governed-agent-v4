@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
 WORKDIR /app
-RUN apk add --no-cache tini zlib=1.3.2-r1 \
+# Refresh the pinned Alpine branch security packages before building; do not retain a stale musl/zlib pin.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache tini \
+    && apk info -v musl zlib \
     && npm --version
 
 FROM base AS deps
