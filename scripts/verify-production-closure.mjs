@@ -99,6 +99,19 @@ if(!docker.includes("trivy-action")) failures.push("docker:vulnerability-scan-mi
 if(!docker.includes("npm run verify:release:evidence")) failures.push("docker:release-evidence-gate-missing");
 if(!docker.includes("npm run verify:compliance")) failures.push("docker:compliance-matrix-gate-missing");
 if(!docker.includes("npm run verify:crypto")) failures.push("docker:crypto-closure-gate-missing");
+const trivyHelper=read("scripts/lib/trivy-report.mjs");
+const trivyGate=read("scripts/verify-trivy-report.mjs");
+const trivyTests=read("scripts/tests/verify-trivy-report.test.mjs");
+for(const token of ["SchemaVersion","ArtifactName","ArtifactType","HIGH","CRITICAL"]) if(!trivyHelper.includes(token)) failures.push("security:trivy-report-validator-missing:"+token);
+if(!trivyGate.includes("summarizeTrivyReport") || !trivyGate.includes("process.exit(1)")) failures.push("security:trivy-gate-not-fail-closed");
+for(const token of ["CVE-TEST-LOW","CVE-TEST-HIGH","CVE-TEST-CRIT"]) if(!trivyTests.includes(token)) failures.push("security:trivy-regression-case-missing:"+token);
+const containerRelease=read(".github/workflows/release-container.yml");
+for(const [label,workflow] of [["container-release",containerRelease],["docker-publish",docker]]) {
+ if(!workflow.includes("format: json") || !workflow.includes("trivy-results.json") || !workflow.includes("node scripts/verify-trivy-report.mjs trivy-results.json")) failures.push("security:trivy-json-gate-not-wired:"+label);
+ if(workflow.includes("ignore-unfixed: true")) failures.push("security:unfixed-image-vulnerabilities-ignored:"+label);
+}
+if(!containerRelease.includes("node scripts/verify-node-version.mjs")) failures.push("release-container:node22-guard-missing");
+if(!s.includes('"test:trivy-contract"')) failures.push("package:trivy-contract-test-script-missing");
 const workflowDir=".github/workflows";
 if(existsSync(workflowDir)){
  for(const name of readdirSync(workflowDir)){
