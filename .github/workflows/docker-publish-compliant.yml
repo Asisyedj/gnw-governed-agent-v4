@@ -25,12 +25,15 @@ jobs:
           test -z "$(git status --porcelain)"
           git diff --check
           test "$(git describe --exact-match --tags HEAD 2>/dev/null || true)" = "$GITHUB_REF_NAME"
+      - name: Enforce supported Node.js runtime
+        run: node scripts/verify-node-version.mjs
       - name: Install committed lockfile
         run: npm ci
       - name: Verify canonical Git release metadata
         run: npm run verify:git-release-metadata
       - name: Validate compliance, cryptographic closure and production closure
         run: |
+          npm run test:release-contract
           npm run verify:compliance
           npm run verify:crypto
           npm run verify:production
@@ -42,6 +45,7 @@ jobs:
           EXECUTOR_URL: ${{ secrets.EXECUTOR_URL }}
           EXECUTOR_SECRET: ${{ secrets.EXECUTOR_SECRET }}
           GNW_REQUIRE_SIGNED_GRANTS: ${{ secrets.GNW_REQUIRE_SIGNED_GRANTS }}
+          GNW_POSTGRES_SSL_REQUIRED: "true"
           GNW_GRANT_ISSUER: ${{ secrets.GNW_GRANT_ISSUER }}
           GNW_GRANT_PRIVATE_KEY_PEM: ${{ secrets.GNW_GRANT_PRIVATE_KEY_PEM }}
           GNW_GRANT_PUBLIC_KEY_PEM: ${{ secrets.GNW_GRANT_PUBLIC_KEY_PEM }}
@@ -67,6 +71,9 @@ jobs:
         env:
           GNW_RELEASE_EVIDENCE_JSON: ${{ secrets.GNW_RELEASE_EVIDENCE_JSON }}
           GNW_RELEASE_SEAL_PUBLIC_KEY_PEM: ${{ secrets.GNW_RELEASE_SEAL_PUBLIC_KEY_PEM }}
+          GNW_REQUIRE_TEE_ATTESTATION: "true"
+          GNW_REQUIRE_MPC_TRUST_ANCHOR: "true"
+          GNW_TEE_ATTESTATION_EVIDENCE_JSON: ${{ secrets.GNW_TEE_ATTESTATION_EVIDENCE_JSON }}
           GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM: ${{ secrets.GNW_TEE_ATTESTATION_PUBLIC_KEY_PEM }}
           GNW_TEE_ATTESTATION_ISSUER: ${{ secrets.GNW_TEE_ATTESTATION_ISSUER }}
           GNW_TEE_ATTESTATION_MEASUREMENT: ${{ secrets.GNW_TEE_ATTESTATION_MEASUREMENT }}
