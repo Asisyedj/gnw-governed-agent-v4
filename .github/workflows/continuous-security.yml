@@ -85,10 +85,24 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
       - name: Record security evidence
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p security-evidence
           git rev-parse HEAD > security-evidence/commit-sha.txt
+          set +e
           npm audit --json > security-evidence/npm-audit.json
+          audit_exit=$?
+          set -e
+          printf "%s\n" "$audit_exit" > security-evidence/npm-audit-exit-code.txt
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const report = JSON.parse(fs.readFileSync("security-evidence/npm-audit.json", "utf8"));
+            const v = report.metadata?.vulnerabilities;
+            if (!v) throw new Error("npm audit JSON missing vulnerability metadata");
+            console.log(JSON.stringify({low:v.low??0,moderate:v.moderate??0,high:v.high??0,critical:v.critical??0,auditExitCode:Number(fs.readFileSync("security-evidence/npm-audit-exit-code.txt","utf8").trim())}));
+            if ((v.high ?? 0) > 0 || (v.critical ?? 0) > 0) process.exit(1);
+          '
           cp docs/RUNTIME_EXECUTION_POLICY.md security-evidence/runtime-policy.md
           printf "GNW-REP-1.0\n" > security-evidence/policy-version.txt
           printf "continuous-security=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> security-evidence/policy-version.txt
