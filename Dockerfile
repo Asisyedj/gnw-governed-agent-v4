@@ -9,9 +9,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 FROM deps AS builder
+ARG GNW_RELEASE_COMMIT_SHA=unknown
+ENV GNW_RELEASE_COMMIT_SHA=${GNW_RELEASE_COMMIT_SHA}
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY src ./src
-RUN npm run build
+RUN npm run build \
+    && node -e 'const fs=require("node:fs"); const sha=process.env.GNW_RELEASE_COMMIT_SHA||"unknown"; if(sha!=="unknown"&&!/^[0-9a-f]{40}$/i.test(sha)) throw new Error("invalid GNW_RELEASE_COMMIT_SHA build arg"); fs.writeFileSync("dist/release-metadata.json", JSON.stringify({schema:"GNW.RuntimeReleaseMetadata.v1",commitSha:sha,sourceRepository:process.env.GNW_SOURCE_REPOSITORY||"Asisyedj/gnw-governed-agent-v4"},null,2)+"\\n");'
 
 FROM base AS prod-deps
 COPY package.json package-lock.json ./
