@@ -10,7 +10,9 @@ RUN npm ci --ignore-scripts
 
 FROM deps AS builder
 ARG GNW_RELEASE_COMMIT_SHA=unknown
+ARG GNW_SOURCE_REPOSITORY=Asisyedj/gnw-governed-agent-v4
 ENV GNW_RELEASE_COMMIT_SHA=${GNW_RELEASE_COMMIT_SHA}
+ENV GNW_SOURCE_REPOSITORY=${GNW_SOURCE_REPOSITORY}
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY src ./src
 RUN npm run build \
