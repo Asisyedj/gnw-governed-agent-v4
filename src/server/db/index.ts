@@ -2,8 +2,21 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema.js";
+import { ENV } from "../env.js";
+
 if(!process.env.DATABASE_URL) throw new Error("DATABASE_URL environment variable is required.");
-const pool=new Pool({connectionString:process.env.DATABASE_URL,max:20,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.GNW_POSTGRES_SSL_REQUIRED==="true"?{rejectUnauthorized:true}:false});
+const databaseUrl = new URL(process.env.DATABASE_URL);
+const sslMode = databaseUrl.searchParams.get("sslmode");
+if (ENV.isProduction && ENV.postgresSslRequired && sslMode && sslMode !== "verify-full") {
+  throw new Error("production_postgres_sslmode_must_be_verify_full");
+}
+const pool=new Pool({
+  connectionString:process.env.DATABASE_URL,
+  max:20,
+  idleTimeoutMillis:30000,
+  connectionTimeoutMillis:5000,
+  ssl:ENV.postgresSslRequired?{rejectUnauthorized:true}:false
+});
 pool.on("error",err=>console.error("Unexpected pg pool error",err));
 export const db=drizzle(pool,{schema,logger:process.env.NODE_ENV!=="production"});
 export type Db=typeof db;
