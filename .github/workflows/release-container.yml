@@ -53,6 +53,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
+          build-args: |
+            GNW_RELEASE_COMMIT_SHA=${{ github.sha }}
+            GNW_SOURCE_REPOSITORY=${{ github.repository }}
           load: true
           push: false
           tags: local/gnw:${{ github.sha }}
@@ -111,6 +114,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
+          build-args: |
+            GNW_RELEASE_COMMIT_SHA=${{ github.sha }}
+            GNW_SOURCE_REPOSITORY=${{ github.repository }}
           push: true
           tags: |
             ${{ steps.image.outputs.repository }}:sha-${{ github.sha }}
