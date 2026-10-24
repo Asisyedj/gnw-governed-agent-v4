@@ -126,7 +126,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Production container build
-        run: docker build --pull -t gnw-production-smoke:${GITHUB_SHA} .
+        run: docker build --pull --build-arg GNW_RELEASE_COMMIT_SHA=${GITHUB_SHA} -t gnw-production-smoke:${GITHUB_SHA} .
       - name: Production container runtime smoke test
         shell: bash
         env:
