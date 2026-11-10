@@ -129,6 +129,13 @@ export class ImmutableLedger {
     eventType: string,
     payload: Record<string, unknown>
   ): Promise<LedgerEntry> {
+    if (typeof eventType !== 'string' || eventType.trim().length === 0) {
+      throw new TypeError('Ledger event type must be a non-empty string');
+    }
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new TypeError('Ledger payload must be a plain object');
+    }
+
     await this.lock.acquire();
 
     try {
@@ -141,7 +148,7 @@ export class ImmutableLedger {
         id,
         timestamp,
         eventType,
-        payload,
+        payload: structuredClone(payload),
         previousHash,
         version: this.versionCounter,
       };
